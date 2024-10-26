@@ -1,0 +1,5 @@
+#!/home/raceychan/myproject/pyprojects/didi/.pixi/solve-group-envs/default/bin/python3.12
+
+from idlelib.pyshell import main
+if __name__ == '__main__':
+    main()

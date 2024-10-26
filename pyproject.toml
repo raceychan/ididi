@@ -1,0 +1,40 @@
+[project]
+authors = [{name = "raceychan", email = "raceychan@gmail.com"}]
+description = "Add a short description here"
+name = "didi"
+requires-python = ">= 3.12"
+version = "0.1.0"
+
+[tool.setuptools]
+py-modules = ["didi"]
+
+[tool.pixi.project]
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+[tool.pixi.environments]
+default = {solve-group = "default"}
+publish = {features = ["publish"], solve-group = "default"}
+test = {features = ["test"], solve-group = "default"}
+
+[tool.pixi.pypi-dependencies]
+didi = {path = ".", editable = true}
+
+[tool.pixi.dependencies]
+python = ">=3.12"
+
+[tool.pixi.feature.test.dependencies]
+pytest = ">=8.3.3"
+
+[tool.pixi.feature.publish.dependencies]
+
+[tool.pixi.feature.publish.tasks]
+# Build into a wheel using hatch
+build = {cmd = "hatch build", inputs = ["didi/*"], outputs = ["dist/*"]}
+# Upload to custom GCP registry using twine
+publish = {cmd = "twine upload --skip-existing dist/*", depends-on = [
+  "build",
+]}
+
+[tool.pixi.feature.build.tasks]
+publish-pypi = { cmd = "hatch publish --yes --repo main", env = { HATCH_CONFIG = "config/hatch.toml" }, description = "Publish the package to pypi" }
