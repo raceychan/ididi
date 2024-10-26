@@ -37,4 +37,4 @@ publish = {cmd = "twine upload --skip-existing dist/*", depends-on = [
 ]}
 
 [tool.pixi.feature.build.tasks]
-publish-pypi = { cmd = "hatch publish --yes --repo main", env = { HATCH_CONFIG = "config/hatch.toml" }, description = "Publish the package to pypi" }
+publish-pypi = {cmd = "hatch publish --yes --repo master", env = {HATCH_CONFIG = "config/hatch.toml"}, description = "Publish the package to pypi"}
