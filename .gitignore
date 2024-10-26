@@ -1,6 +1,14 @@
 # Byte-compiled / optimized / DLL files
+.pixi/
 *.pixi
-*.__pycache__*
+
+# Python cache files (more comprehensive)
+__pycache__/
+*/__pycache__/
+*/*/__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
 
 __pycache__/
 *.py[cod]

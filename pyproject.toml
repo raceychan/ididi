@@ -1,7 +1,7 @@
 [project]
 authors = [{name = "raceychan", email = "raceychan@gmail.com"}]
 description = "Add a short description here"
-name = "didi"
+name = "ididi"
 requires-python = ">= 3.12"
 version = "0.1.0"
 
@@ -18,7 +18,7 @@ publish = {features = ["publish"], solve-group = "default"}
 test = {features = ["test"], solve-group = "default"}
 
 [tool.pixi.pypi-dependencies]
-didi = {path = ".", editable = true}
+ididi = {path = ".", editable = true}
 
 [tool.pixi.dependencies]
 python = ">=3.12"
@@ -27,14 +27,15 @@ python = ">=3.12"
 pytest = ">=8.3.3"
 
 [tool.pixi.feature.publish.dependencies]
+hatch = ">=1.13.0,<2"
+twine = ">=5.1.1,<6"
 
 [tool.pixi.feature.publish.tasks]
 # Build into a wheel using hatch
 build = {cmd = "hatch build", inputs = ["didi/*"], outputs = ["dist/*"]}
 # Upload to custom GCP registry using twine
+check = {cmd = "twine check"}
 publish = {cmd = "twine upload --skip-existing dist/*", depends-on = [
   "build",
 ]}
-
-[tool.pixi.feature.build.tasks]
-publish-pypi = {cmd = "hatch publish --yes --repo master", env = {HATCH_CONFIG = "config/hatch.toml"}, description = "Publish the package to pypi"}
+test-publish = {cmd = "twine upload --repository testpypi --skip-existing dist/"}
