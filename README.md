@@ -1,5 +1,18 @@
 # ididi
 
+## Introduction
+
+ididi is a dependency injection library for Python. It allows you to define dependencies in a declarative way and resolve them at runtime.
+
+ididi is under active, heavy development. The API is not stable and will change.
+But it will remains simple and minimalistic.
+
+## Install
+
+```bash
+pip install ididi==0.1.0
+```
+
 ## Usage
 
 ```python
