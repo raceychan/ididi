@@ -1,12 +1,15 @@
 [project]
 authors = [{name = "raceychan", email = "raceychan@gmail.com"}]
 description = "Add a short description here"
+dynamic = ["version"]
 name = "ididi"
 requires-python = ">= 3.12"
-version = "0.1.0"
+
+[tool.hatch.version]
+path = "ididi/__init__.py"
 
 [tool.setuptools]
-py-modules = ["didi"]
+py-modules = ["ididi"]
 
 [tool.pixi.project]
 channels = ["conda-forge"]
@@ -25,6 +28,7 @@ python = ">=3.12"
 
 [tool.pixi.feature.test.dependencies]
 pytest = ">=8.3.3"
+pytest-cov = ">=4.1.0"
 
 [tool.pixi.feature.publish.dependencies]
 hatch = ">=1.13.0,<2"
@@ -39,3 +43,5 @@ publish = {cmd = "twine upload --skip-existing dist/*", depends-on = [
   "build",
 ]}
 test-publish = {cmd = "twine upload --repository testpypi --skip-existing dist/"}
+
+patch = {cmd = "hatch version patch"}

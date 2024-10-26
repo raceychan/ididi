@@ -1,4 +1,4 @@
-from didi.graph import DependencyGraph
+from ididi.graph import DependencyGraph
 
 
 def pretty_print(graph: DependencyGraph) -> str:
@@ -35,9 +35,9 @@ def pretty_print(graph: DependencyGraph) -> str:
     # Find root nodes (nodes with no dependents or dependents not in graph)
     roots = {
         t
-        for t in graph.nodes
+        for t in graph._nodes
         if not graph._dependents[t]
-        or all(dep not in graph.nodes for dep in graph._dependents[t])
+        or all(dep not in graph._nodes for dep in graph._dependents[t])
     }
 
     if not roots:

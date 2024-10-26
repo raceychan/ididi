@@ -3,31 +3,53 @@ import typing as ty
 from collections import defaultdict
 from dataclasses import dataclass, field
 
-from didi.errors import CircularDependencyError
-from didi.node import DependencyNode
-from didi.utils.typing_utils import get_full_typed_signature, is_builtin_type
+from ididi.errors import CircularDependencyError
+from ididi.node import DependencyNode
+from ididi.utils.typing_utils import get_full_typed_signature, is_builtin_type
 
 
-@dataclass
 class DependencyGraph[T]:
     """
     A dependency DAG (Directed Acyclic Graph) that manages dependency nodes and their relationships.
     Unlike a tree, a node can have multiple parents (dependents).
     """
 
-    nodes: dict[type, DependencyNode] = field(default_factory=dict)
-    _resolved_instances: dict[type, ty.Any] = field(default_factory=dict)
-    _resolution_stack: set[type] = field(default_factory=set)
-    _type_mappings: dict[type, set[type]] = field(
-        default_factory=lambda: defaultdict(set)
-    )
-    # Track who depends on whom
-    _dependents: defaultdict[type, set[type]] = field(
-        default_factory=lambda: defaultdict(set)
-    )
-    _dependencies: defaultdict[type, set[type]] = field(
-        default_factory=lambda: defaultdict(set)
-    )
+    _nodes: dict[type, DependencyNode]
+
+    _resolved_instances: dict[type, ty.Any]
+    _resolution_stack: set[type]
+    _type_mappings: dict[type, set[type]]
+    _dependents: defaultdict[type, set[type]]
+    _dependencies: defaultdict[type, set[type]]
+
+    def __init__(self):
+        self._nodes = {}
+        self._resolved_instances = {}
+        self._resolution_stack = set()
+        self._type_mappings = defaultdict(set)
+
+        # Track who depends on whom
+        self._dependents = defaultdict(set)
+        self._dependencies = defaultdict(set)
+
+    def __repr__(self) -> str:
+        """
+        Returns a concise representation of the graph showing:
+        - Total number of nodes
+        - Number of resolved instances
+        - Root nodes (nodes with no dependents)
+        - Leaf nodes (nodes with no dependencies)
+        """
+        roots = {t for t in self._nodes if not self._dependents[t]}
+        leaves = {t for t in self._nodes if not self._dependencies[t]}
+
+        return (
+            f"{self.__class__.__name__}("
+            f"nodes={len(self._nodes)}, "
+            f"resolved={len(self._resolved_instances)}, "
+            f"roots=[{', '.join(t.__name__ for t in sorted(roots, key=lambda x: x.__name__))}], "
+            f"leaves=[{', '.join(t.__name__ for t in sorted(leaves, key=lambda x: x.__name__))}])"
+        )
 
     def _try_override_factory[I](self, factory: ty.Callable[..., I] | type[I]) -> bool:
         """
@@ -42,50 +64,26 @@ class DependencyGraph[T]:
             return False
 
         dependent_type = sig.return_annotation
-        if dependent_type not in self.nodes:
+        if dependent_type not in self._nodes:
             return False
 
         # Update existing node with new factory
-        node = self.nodes[dependent_type]
+        node = self._nodes[dependent_type]
         node.factory = factory
         node.signature = sig
         node.dependencies = DependencyNode.from_node(factory).dependencies
         return True
-
-    @ty.overload
-    def node[I](self, factory_or_class: type[I]) -> type[I]: ...
-
-    @ty.overload
-    def node[I](self, factory_or_class: ty.Callable[..., I]) -> ty.Callable[..., I]: ...
-
-    def node[
-        I
-    ](self, factory_or_class: ty.Callable[..., I] | type[I]) -> (
-        ty.Callable[..., I] | type[I]
-    ):
-        """
-        Decorator to register a node in the dependency graph.
-        Can be used with both factory functions and classes.
-        If decorating a factory function that returns an existing type,
-        it will override the factory for that type.
-        """
-        if self._try_override_factory(factory_or_class):
-            return factory_or_class
-
-        node = DependencyNode.from_node(factory_or_class)
-        self.register_node(node)
-        return factory_or_class
 
     def register_node(self, node: "DependencyNode") -> None:
         """
         Register a dependency node and update dependency relationships.
         Automatically registers any unregistered dependencies.
         """
-        if node.dependent in self.nodes:
+        if node.dependent in self._nodes:
             return  # Skip if already registered
 
         # Register main type
-        self.nodes[node.dependent] = node
+        self._nodes[node.dependent] = node
 
         # Update type mappings for dependency resolution
         self._type_mappings[node.dependent].add(node.dependent)
@@ -107,7 +105,7 @@ class DependencyGraph[T]:
         # Verify no cycles were introduced
         if self._has_cycle():
             # Rollback registration
-            self.nodes.pop(node.dependent)
+            self._nodes.pop(node.dependent)
             self._type_mappings[node.dependent].remove(node.dependent)
             self._dependencies.pop(node.dependent)
             for dep_type in self._dependents:
@@ -138,7 +136,7 @@ class DependencyGraph[T]:
             path.remove(node_type)
             return False
 
-        return any(visit(node_type) for node_type in self.nodes)
+        return any(visit(node_type) for node_type in self._nodes)
 
     def get_dependent_types(self, dependency_type: type) -> set[type]:
         """
@@ -178,10 +176,10 @@ class DependencyGraph[T]:
 
         # Find concrete implementation
         concrete_type = self._resolve_concrete_type(dependency_type)
-        if concrete_type not in self.nodes:
+        if concrete_type not in self._nodes:
             raise ValueError(f"No registration found for {dependency_type}")
 
-        node = self.nodes[concrete_type]
+        node = self._nodes[concrete_type]
 
         # Track resolution stack for cycle detection
         self._resolution_stack.add(dependency_type)
@@ -203,7 +201,7 @@ class DependencyGraph[T]:
         Resolve abstract type to concrete implementation.
         """
         # If the type is already concrete and registered, return it
-        if abstract_type in self.nodes:
+        if abstract_type in self._nodes:
             return abstract_type
 
         implementations = self._type_mappings.get(abstract_type, set())
@@ -232,7 +230,7 @@ class DependencyGraph[T]:
 
             order.append(node_type)
 
-        for node_type in self.nodes:
+        for node_type in self._nodes:
             visit(node_type)
 
         return order
@@ -256,24 +254,26 @@ class DependencyGraph[T]:
                 await instance.close()
         self.reset()
 
-    def __repr__(self) -> str:
+    @ty.overload
+    def node[I](self, factory_or_class: type[I]) -> type[I]: ...
+
+    @ty.overload
+    def node[I](self, factory_or_class: ty.Callable[..., I]) -> ty.Callable[..., I]: ...
+
+    def node[
+        I
+    ](self, factory_or_class: ty.Callable[..., I] | type[I]) -> (
+        ty.Callable[..., I] | type[I]
+    ):
         """
-        Returns a concise representation of the graph showing:
-        - Total number of nodes
-        - Number of resolved instances
-        - Root nodes (nodes with no dependents)
-        - Leaf nodes (nodes with no dependencies)
+        Decorator to register a node in the dependency graph.
+        Can be used with both factory functions and classes.
+        If decorating a factory function that returns an existing type,
+        it will override the factory for that type.
         """
-        roots = {t for t in self.nodes if not self._dependents[t]}
-        leaves = {t for t in self.nodes if not self._dependencies[t]}
+        if self._try_override_factory(factory_or_class):
+            return factory_or_class
 
-        return (
-            f"{self.__class__.__name__}("
-            f"nodes={len(self.nodes)}, "
-            f"resolved={len(self._resolved_instances)}, "
-            f"roots=[{', '.join(t.__name__ for t in sorted(roots, key=lambda x: x.__name__))}], "
-            f"leaves=[{', '.join(t.__name__ for t in sorted(leaves, key=lambda x: x.__name__))}])"
-        )
-
-
-dag = DependencyGraph()
+        node = DependencyNode.from_node(factory_or_class)
+        self.register_node(node)
+        return factory_or_class

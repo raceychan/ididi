@@ -2,7 +2,7 @@ import typing as ty
 
 import pytest
 
-from didi.node import DependencyNode
+from ididi.node import DependencyNode
 
 
 def print_dependency_tree(node: DependencyNode[ty.Any], level: int = 0):

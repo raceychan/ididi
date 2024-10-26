@@ -3,9 +3,9 @@ import typing as ty
 from dataclasses import dataclass, field
 from inspect import Parameter
 
-from didi.errors import UnsolvableDependencyError
-from didi.utils.param_utils import NULL, Nullable, is_not_null
-from didi.utils.typing_utils import get_full_typed_signature, is_builtin_type
+from ididi.errors import UnsolvableDependencyError
+from ididi.utils.param_utils import NULL, Nullable, is_not_null
+from ididi.utils.typing_utils import get_full_typed_signature, is_builtin_type
 
 
 def search_factory[

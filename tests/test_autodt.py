@@ -1,4 +1,4 @@
-from didi.node import DependencyNode
+from ididi.node import DependencyNode
 
 
 class Config:

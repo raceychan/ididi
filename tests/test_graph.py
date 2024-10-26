@@ -1,7 +1,7 @@
 import pytest
 
-from didi.graph import DependencyGraph
-from didi.utils.pretty_utils import pretty_print
+from ididi.graph import DependencyGraph
+from ididi.utils.pretty_utils import pretty_print
 
 dag = DependencyGraph()
 
