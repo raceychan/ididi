@@ -33,6 +33,10 @@ class UserService:
         self.auth = auth
 
 
+def _dt_auth_service_factory():
+    return AuthService(db=Database(config=Config()))
+
+
 def test_node_types():
     node = DependencyNode.from_node(UserService)
     # print_dependency_tree(node)

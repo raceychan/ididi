@@ -13,14 +13,9 @@ def search_factory[
 ](dependent: type[I], globalvars: dict[str, ty.Any] | None = None) -> (
     ty.Callable[..., I] | None
 ):
+    raise NotImplementedError
+
     # raise NotImplementedError
-    globalns = getattr(dependent, "__globals__", globalvars) or {}
-    for name, value in globalns.items():
-        if name.startswith("_dt_"):  # and name.endswith("_factory"):
-            sig = get_full_typed_signature(value)
-            if sig.return_annotation == dependent:
-                return value
-    return None
 
 
 def process_param(param: inspect.Parameter) -> "DependencyNode[ty.Any]":
@@ -67,7 +62,7 @@ def process_param(param: inspect.Parameter) -> "DependencyNode[ty.Any]":
         raise ValueError(f"Unsupported annotation type: {annotation}")
 
 
-@dataclass(kw_only=True)
+@dataclass(kw_only=True, slots=True, frozen=True)
 class DependencyNode[T]:
     """
     A DAG node that represents a dependency
@@ -80,8 +75,10 @@ class DependencyNode[T]:
     dependent: type[T]
     default: Nullable[T] = NULL
     factory: ty.Callable[..., T]
-    dependencies: list["DependencyNode[ty.Any]"] = field(default_factory=list)
-    signature: inspect.Signature | None  # builtin types do not have signature
+    dependencies: list["DependencyNode[ty.Any]"] = field(
+        default_factory=list, repr=False
+    )
+    signature: inspect.Signature | None = field(repr=False)
 
     def build(self, *args, **kwargs) -> T:
         """
@@ -164,15 +161,9 @@ class DependencyNode[T]:
 
     @classmethod
     def _from_class[I](cls, dependent: type[I]) -> "DependencyNode[I]":
-        factory = search_factory(dependent)
-        if factory is None:
-            signature = get_full_typed_signature(dependent.__init__)
-            signature = signature.replace(return_annotation=dependent)
-            factory = ty.cast(ty.Callable[..., I], dependent)
-        else:
-            signature = get_full_typed_signature(factory)
-            if signature.return_annotation is inspect.Signature.empty:
-                raise ValueError("Factory must have a return type")
+        signature = get_full_typed_signature(dependent.__init__)
+        signature = signature.replace(return_annotation=dependent)
+        factory = ty.cast(ty.Callable[..., I], dependent)
         return cls._create_node(dependent, factory, signature)
 
     @classmethod
@@ -180,3 +171,6 @@ class DependencyNode[T]:
         if callable(node) and not inspect.isclass(node):
             return cls._from_factory(node)
         return cls._from_class(ty.cast(type[I], node))
+
+    # def __repr__(self) -> str:
+    #     return f"{self.__class__.__name__}(dependent={self.dependent.__name__}, factory={self.factory.__name__})"

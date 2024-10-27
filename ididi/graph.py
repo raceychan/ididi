@@ -1,26 +1,29 @@
 import inspect
 import typing as ty
 from collections import defaultdict
-from dataclasses import dataclass, field
 
-from ididi.errors import CircularDependencyError
+from ididi.errors import CircularDependencyError, TopLevelBulitinTypeError
 from ididi.node import DependencyNode
 from ididi.utils.typing_utils import get_full_typed_signature, is_builtin_type
 
+type GraphNodes[I] = dict[type[I], DependencyNode[I]]
+type ResolvedInstances[I] = dict[type[I], I]
+type TypeMappings[I] = dict[type[I], set[type[I]]]
+type NodeRelations[I] = defaultdict[type[I], set[type[I]]]
 
-class DependencyGraph[T]:
+
+class DependencyGraph:
     """
     A dependency DAG (Directed Acyclic Graph) that manages dependency nodes and their relationships.
     Unlike a tree, a node can have multiple parents (dependents).
     """
 
-    _nodes: dict[type, DependencyNode]
-
-    _resolved_instances: dict[type, ty.Any]
+    _nodes: GraphNodes[ty.Any]
+    _resolved_instances: ResolvedInstances[ty.Any]
     _resolution_stack: set[type]
-    _type_mappings: dict[type, set[type]]
-    _dependents: defaultdict[type, set[type]]
-    _dependencies: defaultdict[type, set[type]]
+    _type_mappings: TypeMappings[ty.Any]
+    _dependents: NodeRelations[ty.Any]
+    _dependencies: NodeRelations[ty.Any]
 
     def __init__(self):
         self._nodes = {}
@@ -50,29 +53,6 @@ class DependencyGraph[T]:
             f"roots=[{', '.join(t.__name__ for t in sorted(roots, key=lambda x: x.__name__))}], "
             f"leaves=[{', '.join(t.__name__ for t in sorted(leaves, key=lambda x: x.__name__))}])"
         )
-
-    def _try_override_factory[I](self, factory: ty.Callable[..., I] | type[I]) -> bool:
-        """
-        Check if factory is for an existing node type and override if found.
-        Returns True if override was performed.
-        """
-        if not callable(factory) or inspect.isclass(factory):
-            return False
-
-        sig = get_full_typed_signature(factory)
-        if sig.return_annotation is inspect.Signature.empty:
-            return False
-
-        dependent_type = sig.return_annotation
-        if dependent_type not in self._nodes:
-            return False
-
-        # Update existing node with new factory
-        node = self._nodes[dependent_type]
-        node.factory = factory
-        node.signature = sig
-        node.dependencies = DependencyNode.from_node(factory).dependencies
-        return True
 
     def register_node(self, node: "DependencyNode") -> None:
         """
@@ -144,7 +124,7 @@ class DependencyGraph[T]:
         """
         return self._dependents[dependency_type]
 
-    def get_dependency_types(self, dependent_type: type) -> set[type]:
+    def get_dependency_types[I](self, dependent_type: type[I]) -> set[type[I]]:
         """
         Get all types that the given type depends on.
         """
@@ -155,24 +135,19 @@ class DependencyGraph[T]:
         Resolve a dependency and its complete dependency graph.
         Supports dependency overrides for testing.
         """
+        if is_builtin_type(dependency_type):
+            raise TopLevelBulitinTypeError(dependency_type)
 
         if dependency_type in self._resolution_stack:
             raise CircularDependencyError(dependency_type, self._resolution_stack)
 
         # Use override if provided
-        if dependency_type in overrides:
-            return overrides[dependency_type]
+        if dependency_type.__name__ in overrides:
+            return overrides[dependency_type.__name__]
 
         # Check if already resolved
         if dependency_type in self._resolved_instances:
             return self._resolved_instances[dependency_type]
-
-        # Handle builtin types
-        if is_builtin_type(dependency_type):
-            # For builtin types, we just return the override if provided or None
-            instance = overrides.get(dependency_type.__name__.lower())
-            self._resolved_instances[dependency_type] = instance
-            return instance
 
         # Find concrete implementation
         concrete_type = self._resolve_concrete_type(dependency_type)
@@ -187,16 +162,16 @@ class DependencyGraph[T]:
             # Resolve dependencies first
             deps = {}
             for dep_type in self._dependencies[concrete_type]:
-                deps[dep_type.__name__.lower()] = self.resolve(dep_type, **overrides)
-
-            # Create instance
+                if is_builtin_type(dep_type):
+                    continue
+                deps[dep_type.__name__] = self.resolve(dep_type, **overrides)
             instance = node.build(**deps, **overrides)
             self._resolved_instances[dependency_type] = instance
             return instance
         finally:
             self._resolution_stack.remove(dependency_type)
 
-    def _resolve_concrete_type(self, abstract_type: type) -> type:
+    def _resolve_concrete_type[I](self, abstract_type: type[I]) -> type[I]:
         """
         Resolve abstract type to concrete implementation.
         """
@@ -250,9 +225,14 @@ class DependencyGraph[T]:
         close_order = reversed(self.get_initialization_order())
         for type_ in close_order:
             instance = self._resolved_instances.get(type_)
-            if instance and hasattr(instance, "close") and callable(instance.close):
+            if not instance:
+                continue
+            if self.is_resource(instance):
                 await instance.close()
         self.reset()
+
+    def is_resource(self, type_: type) -> bool:
+        return hasattr(type_, "close") and callable(type_.close)
 
     @ty.overload
     def node[I](self, factory_or_class: type[I]) -> type[I]: ...
@@ -271,9 +251,18 @@ class DependencyGraph[T]:
         If decorating a factory function that returns an existing type,
         it will override the factory for that type.
         """
-        if self._try_override_factory(factory_or_class):
-            return factory_or_class
+        dependent_type = get_full_typed_signature(factory_or_class).return_annotation
+        is_factory = callable(factory_or_class) and not inspect.isclass(
+            factory_or_class
+        )
+        has_return_type = dependent_type is not inspect.Signature.empty
+        is_registered_node = dependent_type in self._nodes
+        is_factory_override = is_factory and has_return_type and is_registered_node
 
-        node = DependencyNode.from_node(factory_or_class)
-        self.register_node(node)
+        if is_factory_override:
+            node = DependencyNode.from_node(factory_or_class)
+            self._nodes[dependent_type] = node
+        else:
+            node = DependencyNode.from_node(factory_or_class)
+            self.register_node(node)
         return factory_or_class

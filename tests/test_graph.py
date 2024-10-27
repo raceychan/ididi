@@ -1,5 +1,6 @@
 import pytest
 
+from ididi.errors import TopLevelBulitinTypeError
 from ididi.graph import DependencyGraph
 from ididi.utils.pretty_utils import pretty_print
 
@@ -33,8 +34,9 @@ class AuthService:
         self.db = db
 
 
+@dag.node
 class UserService:
-    def __init__(self, repo: UserRepository, auth: AuthService):
+    def __init__(self, repo: UserRepository, auth: AuthService, name: str = "user"):
         self.repo = repo
         self.auth = auth
 
@@ -42,9 +44,6 @@ class UserService:
 @dag.node
 def auth_service_factory(database: Database) -> AuthService:
     return AuthService(db=database)
-
-
-dag.node(UserService)
 
 
 def test_dag_resolve():
@@ -67,8 +66,13 @@ def test_get_dependent_types():
     assert AuthService in database_dependents
 
 
-def test_pretty_print():
-    print("\n" + pretty_print(dag))
+def test_top_level_builtin_dependency():
+    with pytest.raises(TopLevelBulitinTypeError):
+        dag.resolve(int)
+
+
+# def test_pretty_print():
+#     print("\n" + pretty_print(dag))
 
 
 #     return dag, service
