@@ -1,6 +1,6 @@
 import pytest
 
-from ididi.errors import TopLevelBulitinTypeError
+from ididi.errors import CircularDependencyDetectedError, TopLevelBulitinTypeError
 from ididi.graph import DependencyGraph
 from ididi.utils.pretty_utils import pretty_print
 
@@ -70,9 +70,8 @@ def test_top_level_builtin_dependency():
     with pytest.raises(TopLevelBulitinTypeError):
         dag.resolve(int)
 
+    # def test_pretty_print():
+    #     print("\n" + pretty_print(dag))
 
-# def test_pretty_print():
-#     print("\n" + pretty_print(dag))
+    #     return dag, service
 
-
-#     return dag, service

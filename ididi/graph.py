@@ -2,7 +2,13 @@ import inspect
 import typing as ty
 from collections import defaultdict
 
-from ididi.errors import CircularDependencyError, TopLevelBulitinTypeError
+from ididi.errors import (
+    CircularDependencyDetectedError,
+    MissingImplementationError,
+    MultipleImplementationsError,
+    TopLevelBulitinTypeError,
+    UnregisteredTypeError,
+)
 from ididi.node import DependencyNode
 from ididi.utils.typing_utils import get_full_typed_signature, is_builtin_type
 
@@ -54,6 +60,66 @@ class DependencyGraph:
             f"leaves=[{', '.join(t.__name__ for t in sorted(leaves, key=lambda x: x.__name__))}])"
         )
 
+    def _resolve_concrete_type[I](self, abstract_type: type[I]) -> type[I]:
+        """
+        Resolve abstract type to concrete implementation.
+        """
+        # If the type is already concrete and registered, return it
+        if abstract_type in self._nodes:
+            return abstract_type
+
+        implementations = self._type_mappings.get(abstract_type, set())
+        if not implementations:
+            raise MissingImplementationError(abstract_type)
+        if len(implementations) > 1:
+            raise MultipleImplementationsError(abstract_type, implementations)
+
+        return next(iter(implementations))
+
+    def _has_cycle(self) -> bool:
+        """
+        Detect cycles in the dependency graph using DFS.
+        Raises CircularDependencyDetectedError if a cycle is found.
+        """
+        visited = set()
+        path = set()
+        path_list: list[type] = []  # Keep list just for cycle reporting
+
+        def visit(node_type: type) -> None:
+            if node_type in path:  # O(1)
+                # For error reporting only
+                cycle_start = path_list.index(node_type)  # Only called when cycle found
+                cycle_path = path_list[cycle_start:] + [node_type]
+                raise CircularDependencyDetectedError(cycle_path)
+
+            if node_type in visited:
+                return
+
+            path.add(node_type)  # O(1)
+            path_list.append(node_type)  # O(1)
+            visited.add(node_type)  # O(1)
+
+            for dep_type in self._dependencies[node_type]:
+                visit(dep_type)
+
+            path.remove(node_type)  # O(1)
+            path_list.pop()  # O(1)
+
+        for node_type in self._nodes:
+            visit(node_type)
+
+        return False
+
+    def remove_node(self, node: DependencyNode) -> None:
+        """
+        Remove a node from the graph.
+        """
+        self._nodes.pop(node.dependent)
+        self._type_mappings[node.dependent].remove(node.dependent)
+        self._dependencies.pop(node.dependent)
+        for dep_type in self._dependents:
+            dep_type.discard(node.dependent)
+
     def register_node(self, node: "DependencyNode") -> None:
         """
         Register a dependency node and update dependency relationships.
@@ -67,6 +133,7 @@ class DependencyGraph:
 
         # Update type mappings for dependency resolution
         self._type_mappings[node.dependent].add(node.dependent)
+
         for base in inspect.getmro(node.dependent)[1:]:
             if base is not object:
                 self._type_mappings[base].add(node.dependent)
@@ -83,40 +150,10 @@ class DependencyGraph:
             self._dependents[dep_type].add(node.dependent)
 
         # Verify no cycles were introduced
-        if self._has_cycle():
-            # Rollback registration
-            self._nodes.pop(node.dependent)
-            self._type_mappings[node.dependent].remove(node.dependent)
-            self._dependencies.pop(node.dependent)
-            for dep_type in self._dependents:
-                dep_type.discard(node.dependent)
-            raise ValueError("Registration would create a circular dependency")
-
-    def _has_cycle(self) -> bool:
-        """
-        Detect cycles in the dependency graph using DFS.
-        """
-        visited = set()
-        path = set()
-
-        def visit(node_type: type) -> bool:
-            if node_type in path:
-                return True  # Cycle detected
-            if node_type in visited:
-                return False
-
-            path.add(node_type)
-            visited.add(node_type)
-
-            # Check all dependencies
-            for dep_type in self._dependencies[node_type]:
-                if visit(dep_type):
-                    return True
-
-            path.remove(node_type)
-            return False
-
-        return any(visit(node_type) for node_type in self._nodes)
+        try:
+            self._has_cycle()
+        except CircularDependencyDetectedError:
+            self.remove_node(node)
 
     def get_dependent_types(self, dependency_type: type) -> set[type]:
         """
@@ -138,23 +175,22 @@ class DependencyGraph:
         if is_builtin_type(dependency_type):
             raise TopLevelBulitinTypeError(dependency_type)
 
-        if dependency_type in self._resolution_stack:
-            raise CircularDependencyError(dependency_type, self._resolution_stack)
+        # if dependency_type in self._resolution_stack:
+        #     raise CircularDependencyError(dependency_type, self._resolution_stack)
 
         # Use override if provided
         if dependency_type.__name__ in overrides:
             return overrides[dependency_type.__name__]
-
         # Check if already resolved
         if dependency_type in self._resolved_instances:
             return self._resolved_instances[dependency_type]
 
         # Find concrete implementation
         concrete_type = self._resolve_concrete_type(dependency_type)
-        if concrete_type not in self._nodes:
-            raise ValueError(f"No registration found for {dependency_type}")
-
-        node = self._nodes[concrete_type]
+        try:
+            node = self._nodes[concrete_type]
+        except KeyError:
+            raise UnregisteredTypeError(concrete_type)
 
         # Track resolution stack for cycle detection
         self._resolution_stack.add(dependency_type)
@@ -170,23 +206,6 @@ class DependencyGraph:
             return instance
         finally:
             self._resolution_stack.remove(dependency_type)
-
-    def _resolve_concrete_type[I](self, abstract_type: type[I]) -> type[I]:
-        """
-        Resolve abstract type to concrete implementation.
-        """
-        # If the type is already concrete and registered, return it
-        if abstract_type in self._nodes:
-            return abstract_type
-
-        implementations = self._type_mappings.get(abstract_type, set())
-        if not implementations:
-            raise ValueError(f"No implementation found for {abstract_type}")
-        if len(implementations) > 1:
-            raise ValueError(
-                f"Multiple implementations found for {abstract_type}: {implementations}"
-            )
-        return next(iter(implementations))
 
     def get_initialization_order(self) -> list[type]:
         """

@@ -5,7 +5,12 @@ from inspect import Parameter
 
 from ididi.errors import UnsolvableDependencyError
 from ididi.utils.param_utils import NULL, Nullable, is_not_null
-from ididi.utils.typing_utils import get_full_typed_signature, is_builtin_type
+from ididi.utils.typing_utils import (
+    eval_type,
+    get_full_typed_signature,
+    get_typed_annotation,
+    is_builtin_type,
+)
 
 
 def search_factory[
@@ -15,16 +20,24 @@ def search_factory[
 ):
     raise NotImplementedError
 
-    # raise NotImplementedError
 
-
-def process_param(param: inspect.Parameter) -> "DependencyNode[ty.Any]":
-    # shoud use search_factory to find the factory too
-    annotation = param.annotation
+def process_param(
+    param: inspect.Parameter, globalns: dict[str, ty.Any]
+) -> "DependencyNode[ty.Any]":
+    """
+    Process a parameter to create a dependency node.
+    Handles forward references, builtin types, classes, and generic types.
+    """
     param_name = param.name
-
-    # Handle default values
     default = NULL if param.default == inspect.Parameter.empty else param.default
+
+    # Evaluate the annotation if it's a forward reference or string
+    annotation = get_typed_annotation(param.annotation, globalns)
+
+    if annotation is inspect.Parameter.empty:
+        raise ValueError(f"Parameter {param_name} has no type annotation")
+
+    # Handle builtin types
     if is_builtin_type(annotation):
         if default is NULL:
             raise UnsolvableDependencyError(param_name, annotation)
@@ -34,12 +47,20 @@ def process_param(param: inspect.Parameter) -> "DependencyNode[ty.Any]":
             default=default,
             signature=None,
         )
+    # Handle forward references
+    elif isinstance(annotation, ty.ForwardRef):
+        lazy_dependent = ForwardDependent(annotation, globalns)
+        return ForwardDependency(
+            dependent=lazy_dependent,
+            factory=lambda: None,  # temporary placeholder
+            signature=None,
+            default=default,
+        )
+    # Handle class types
     elif inspect.isclass(annotation):
         return DependencyNode.from_node(annotation)
-
-    elif hasattr(annotation, "__origin__"):  # For handling generic types
-        # TODO: rewrite this, list[int] shoud just be list[int], not list, with dependency int
-        # use inspect.isbuiltin to check if the origin is a builtin type
+    # Handle generic types
+    elif hasattr(annotation, "__origin__"):
         origin = ty.get_origin(annotation)
         args = ty.get_args(annotation)
         node = DependencyNode(
@@ -54,12 +75,13 @@ def process_param(param: inspect.Parameter) -> "DependencyNode[ty.Any]":
                     f"{param_name}_arg{i}",
                     inspect.Parameter.POSITIONAL_OR_KEYWORD,
                     annotation=arg,
-                )
+                ),
+                globalns=globalns,
             )
             node.dependencies.append(dependency)
         return node
     else:
-        raise ValueError(f"Unsupported annotation type: {annotation}")
+        raise NotImplementedError(f"Unsupported annotation type: {annotation}")
 
 
 @dataclass(kw_only=True, slots=True, frozen=True)
@@ -67,8 +89,8 @@ class DependencyNode[T]:
     """
     A DAG node that represents a dependency
 
-    name: name of the dependent, e.g cache_factory -> "cache_factory"
-    dependent: the callable that this node represents, e.g cache_factory -> cache_factory, AuthService -> AuthService
+    dependent: the dependent type that this node represents, e.g AuthService -> AuthService
+    factory: the factory function that creates the dependent, e.g cache_factory -> cache_factory, AuthService -> AuthService.__init__
     dependencies: the dependencies of the dependent, e.g cache_factory -> redis, keyspace
     """
 
@@ -79,6 +101,13 @@ class DependencyNode[T]:
         default_factory=list, repr=False
     )
     signature: inspect.Signature | None = field(repr=False)
+
+    def is_type_matched(
+        self, depnode: "DependencyNode[ty.Any] | ForwardDependency", target: type
+    ) -> bool:
+        return isinstance(depnode, ForwardDependency) or issubclass(
+            depnode.dependent, target
+        )
 
     def build(self, *args, **kwargs) -> T:
         """
@@ -107,17 +136,16 @@ class DependencyNode[T]:
             if is_builtin_type(required_type) and param.default == Parameter.empty:
                 raise UnsolvableDependencyError(name, required_type)
 
-            matching_dep = next(
-                (
-                    dep
-                    for dep in self.dependencies
-                    if issubclass(dep.dependent, required_type)
-                ),
-                None,
+            # Find matching dependency using the helper method
+            matched_deps = (
+                dep
+                for dep in self.dependencies
+                if self.is_type_matched(dep, required_type)
             )
+            first_matched = next(matched_deps, None)
 
-            if matching_dep:
-                built_dep = matching_dep.build()
+            if first_matched:
+                built_dep = first_matched.build()
                 bound_args.arguments[name] = built_dep
             elif param.default != Parameter.empty:
                 bound_args.arguments[name] = param.default
@@ -127,10 +155,7 @@ class DependencyNode[T]:
                 raise UnsolvableDependencyError(name, required_type)
 
         bound_args.apply_defaults()
-        try:
-            return self.factory(*bound_args.args, **bound_args.kwargs)
-        except Exception:
-            raise
+        return self.factory(*bound_args.args, **bound_args.kwargs)
 
     @classmethod
     def _create_node[
@@ -148,7 +173,25 @@ class DependencyNode[T]:
             params = params[1:]
 
         for param in params:
-            node.dependencies.append(process_param(param))
+            """
+            it turns out that, when we decorate a class with @dag.node,
+            the class has not yet been created, so we can't find the forward ref class
+            in the __globals__ attribute of the __init__ method
+            """
+            globalns = getattr(dependent.__init__, "__globals__", {})
+            if isinstance(param.annotation, ty.ForwardRef):
+                forward_ref = ty.cast(ty.ForwardRef, param.annotation)
+                lazy_dep = ForwardDependent(forward_ref, globalns)
+                dep_node = ForwardDependency(
+                    dependent=lazy_dep,
+                    factory=lambda: None,
+                    signature=None,
+                )
+                node.dependencies.append(dep_node)
+            # if param is of type ForwardRef, we need to create a lazy evluated node
+            # such as <Parameter "b: ForwardRef('ServiceB')">
+            else:
+                node.dependencies.append(process_param(param, globalns))
         return node
 
     @classmethod
@@ -172,5 +215,57 @@ class DependencyNode[T]:
             return cls._from_factory(node)
         return cls._from_class(ty.cast(type[I], node))
 
-    # def __repr__(self) -> str:
-    #     return f"{self.__class__.__name__}(dependent={self.dependent.__name__}, factory={self.factory.__name__})"
+
+@dataclass(frozen=True, slots=True)
+class ForwardDependent:
+    """
+    A placeholder for a dependent type that hasn't been resolved yet.
+    Holds the forward reference and the namespace needed to resolve it later.
+    """
+
+    forward_ref: ty.ForwardRef
+    globalns: dict[str, ty.Any] = field(repr=False)
+
+    @property
+    def __name__(self) -> str:
+        return self.forward_ref.__forward_arg__
+
+    @property
+    def __mro__(self) -> tuple[type, ...]:
+        return (self.__class__, object)
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, ForwardDependent):
+            return self.forward_ref.__forward_arg__ == other.forward_ref.__forward_arg__
+        return False
+
+    def __hash__(self) -> int:
+        return hash(self.forward_ref.__forward_arg__)
+
+    def resolve(self) -> type:
+        """Resolve the forward reference to its actual type."""
+        try:
+            return eval_type(self.forward_ref, self.globalns, self.globalns)
+        except NameError as e:
+            raise UnsolvableDependencyError(
+                self.forward_ref.__forward_arg__, ty.ForwardRef
+            ) from e
+
+
+@dataclass(kw_only=True, slots=True, frozen=True)
+class ForwardDependency(DependencyNode[ty.Any]):
+    """A special dependency node that lazily resolves forward references."""
+
+    dependent: ForwardDependent
+
+    def build(self, *args, **kwargs) -> ty.Any:
+        # Evaluate the forward reference at build time
+        try:
+            concrete_type = self.dependent.resolve()
+            # Create a proper node now that we can resolve the type
+            real_node = DependencyNode.from_node(concrete_type)
+            return real_node.build(*args, **kwargs)
+        except NameError as e:
+            raise UnsolvableDependencyError(
+                self.dependent.forward_ref.__forward_arg__, ty.ForwardRef
+            ) from e
