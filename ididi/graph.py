@@ -10,7 +10,7 @@ from ididi.errors import (
     TopLevelBulitinTypeError,
     UnregisteredTypeError,
 )
-from ididi.node import DependencyNode
+from ididi.node import DependencyNode, ForwardDependent
 from ididi.utils.typing_utils import (
     first_implementation,
     get_full_typed_signature,
@@ -22,8 +22,8 @@ type GraphNodesView[I] = MappingProxyType[type[I], DependencyNode[I]]
 type ResolvedInstances[I] = dict[type[I], I]
 type TypeMappings[I] = dict[type[I], list[type[I]]]
 type TypeMappingView[I] = MappingProxyType[type[I], list[type[I]]]
-type NodeEdges[I] = defaultdict[type[I], list[type[I]]]
-type NodeEdgesView[I] = MappingProxyType[type[I], list[type[I]]]
+type Neighbors[I] = defaultdict[type[I], list[type[I]]]
+type NeighborsView[I] = MappingProxyType[type[I], list[type[I]]]
 
 
 # NodeEges is of type dict[type, set[type]]
@@ -44,8 +44,8 @@ class DependencyGraph:
     _resolved_instances: ResolvedInstances[ty.Any]
     _resolution_stack: set[type]
     _type_mappings: TypeMappings[ty.Any]
-    _dependents: NodeEdges[ty.Any]
-    _dependencies: NodeEdges[ty.Any]
+    _dependents: Neighbors[ty.Any]
+    _dependencies: Neighbors[ty.Any]
 
     def __init__(self):
         self._nodes = {}
@@ -85,11 +85,11 @@ class DependencyGraph:
         return MappingProxyType(self._type_mappings)
 
     @property
-    def dependents(self) -> NodeEdgesView[ty.Any]:
+    def dependents(self) -> NeighborsView[ty.Any]:
         return MappingProxyType(self._dependents)
 
     @property
-    def dependencies(self) -> NodeEdgesView[ty.Any]:
+    def dependencies(self) -> NeighborsView[ty.Any]:
         return MappingProxyType(self._dependencies)
 
     def _resolve_concrete_type[I](self, abstract_type: type[I]) -> type[I]:
@@ -107,40 +107,6 @@ class DependencyGraph:
             raise MultipleImplementationsError(abstract_type, implementations)
 
         return next(iter(implementations))
-
-    def _has_cycle(self) -> bool:
-        """
-        Detect cycles in the dependency graph using DFS.
-        Raises CircularDependencyDetectedError if a cycle is found.
-        """
-        visited = set[type]()
-        path = set[type]()
-        path_list: list[type] = []  # Keep list just for cycle reporting
-
-        def visit(node_type: type) -> None:
-            if node_type in path:  # O(1)
-                # For error reporting only
-                cycle_start = path_list.index(node_type)  # Only called when cycle found
-                cycle_path = path_list[cycle_start:] + [node_type]
-                raise CircularDependencyDetectedError(cycle_path)
-
-            if node_type in visited:
-                return
-
-            path.add(node_type)  # O(1)
-            path_list.append(node_type)  # O(1)
-            visited.add(node_type)  # O(1)
-
-            for dep_type in self._dependencies[node_type]:
-                visit(dep_type)
-
-            path.remove(node_type)  # O(1)
-            path_list.pop()  # O(1)
-
-        for node_type in self._nodes:
-            visit(node_type)
-
-        return False
 
     def remove_node(self, node: DependencyNode[ty.Any]) -> None:
         """
@@ -195,21 +161,15 @@ class DependencyGraph:
                 self._type_mappings[base].append(node.dependent)
 
         # Recursively register dependencies first
-        for dep_node in node.dependencies:
-            if not is_builtin_type(dep_node.dependent):
-                self.register_node(dep_node)
+        for dep_param in node.dependency_params:
+            if not is_builtin_type(dep_param.dependency.dependent):
+                self.register_node(dep_param.dependency)
 
         # Update dependency relationships
-        for dep_node in node.dependencies:
-            dep_type = dep_node.dependent
+        for dep_param in node.dependency_params:
+            dep_type = dep_param.dependency.dependent
             self._dependencies[node.dependent].append(dep_type)
             self._dependents[dep_type].append(node.dependent)
-
-        # Verify no cycles were introduced
-        try:
-            self._has_cycle()
-        except CircularDependencyDetectedError:
-            self.remove_node(node)
 
     def get_dependent_types(self, dependency_type: type) -> list[type]:
         """
@@ -325,14 +285,52 @@ class DependencyGraph:
 
         return factory_or_class
 
+    def resolve_params(self, node: DependencyNode[ty.Any]) -> dict[str, type]:
+        """
+        Resolve forward dependencies in params.
+        """
+        params: dict[str, type] = {}
+
+        for dep_param in node.dependency_params:
+            if dep_param.dependency.dependent != inspect.Parameter.empty:
+                param_name = dep_param.name
+                param_type = (
+                    dep_param.dependency.dependent.resolve()
+                    if isinstance(dep_param.dependency.dependent, ForwardDependent)
+                    else dep_param.dependency.dependent
+                )
+                try:
+                    param_sig = get_full_typed_signature(param_type)
+                except ValueError:
+                    pass
+                else:
+                    for sub_param in param_sig.parameters.values():
+                        if sub_param.annotation is node.dependent:
+                            raise CircularDependencyDetectedError(
+                                [sub_param.annotation, param_type]
+                            )
+                params[param_name] = param_type
+
+        return params
+
+    def detect_circular_dependencies(self, node: DependencyNode[ty.Any]) -> None:
+        """
+        Detect circular dependencies.
+        """
+        pass
+
     def resolve[I](self, dependency_type: type[I], **overrides: ty.Any) -> I:
         """
         Resolve a dependency and its complete dependency graph.
         Supports dependency overrides for testing.
         Overrides are only applied to the requested type, not its dependencies.
         """
+        # self.resolve_forward_nodes()
+
         if is_builtin_type(dependency_type):
             raise TopLevelBulitinTypeError(dependency_type)
+
+        self._resolution_stack.add(dependency_type)
 
         if dependency_type in self._resolved_instances:
             return self._resolved_instances[dependency_type]
@@ -345,36 +343,26 @@ class DependencyGraph:
             raise UnregisteredTypeError(concrete_type)
 
         # Get the signature to match parameter names
-        signature = node.signature or get_full_typed_signature(node.factory)
-        param_types = {
-            name: param.annotation
-            for name, param in signature.parameters.items()
-            if param.annotation != inspect.Parameter.empty
-        }
+        # signature = node.signature or get_full_typed_signature(node.factory)
+        params = self.resolve_params(node)
 
-        self._resolution_stack.add(dependency_type)
-        try:
-            # Start with overrides as the base
-            resolved_deps = overrides.copy()
+        # Start with overrides as the base
+        resolved_deps = overrides.copy()
 
-            # Only resolve dependencies for parameters not in overrides
-            sub_dependencies = self._dependencies[concrete_type]
-            for param_name, param_type in param_types.items():
-                # Skip if already provided in overrides
-                if param_name in resolved_deps:
-                    continue
+        # Only resolve dependencies for parameters not in overrides
+        sub_dependencies = self._dependencies[concrete_type]
+        for name, type_ in params.items():
+            # Skip if already provided in overrides
+            if name in resolved_deps:
+                continue
 
-                matching_dep = first_implementation(param_type, sub_dependencies)
-                if matching_dep and not is_builtin_type(matching_dep):
-                    if matching_dep not in self._resolved_instances:
-                        self._resolved_instances[matching_dep] = self.resolve(
-                            matching_dep
-                        )
-                    resolved_deps[param_name] = self._resolved_instances[matching_dep]
+            matching_dep = first_implementation(type_, sub_dependencies)
+            if matching_dep and not is_builtin_type(matching_dep):
+                if matching_dep not in self._resolved_instances:
+                    self._resolved_instances[matching_dep] = self.resolve(matching_dep)
+                resolved_deps[name] = self._resolved_instances[matching_dep]
 
-            # Build with merged dependencies
-            instance = node.build(**resolved_deps)
-            self._resolved_instances[dependency_type] = instance
-            return instance
-        finally:
-            self._resolution_stack.remove(dependency_type)
+        # Build with merged dependencies
+        instance = node.build(**resolved_deps)
+        self._resolved_instances[dependency_type] = instance
+        return instance

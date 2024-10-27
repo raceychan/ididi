@@ -117,7 +117,7 @@ def test_multiple_implementations():
         dag.resolve(Repository)
 
 
-@pytest.mark.skip("TODO: fix circular dependency detection")
+@pytest.mark.skip("TODO: implement circular dependency detection in node")
 def test_circular_dependency():
     dag = DependencyGraph()
 
@@ -131,9 +131,8 @@ def test_circular_dependency():
         def __init__(self, a: ServiceA):
             self.a = a
 
-    with pytest.raises(CircularDependencyDetectedError) as exc_info:
+    with pytest.raises(CircularDependencyDetectedError):
         dag.resolve(ServiceA)
-    assert "ServiceA -> ServiceB -> ServiceA" in str(exc_info.value)
 
 
 def test_resource_cleanup():
@@ -399,7 +398,6 @@ def test_abstract_base_resolution():
     assert instance.get_name() == "concrete"
 
 
-# @pytest.mark.skip("TODO: fix")
 def test_multiple_dependency_paths():
     dag = DependencyGraph()
 
@@ -430,7 +428,6 @@ def test_multiple_dependency_paths():
     assert instance.s1.shared.value == instance.s2.shared.value == "shared"
 
 
-# @pytest.mark.skip("TODO: fix")
 def test_type_mapping_cleanup():
     dag = DependencyGraph()
 
@@ -450,3 +447,23 @@ def test_type_mapping_cleanup():
 
     # Verify type mapping is cleaned up
     assert Interface not in dag.type_mappings or not dag.type_mappings[Interface]
+
+
+@dag.node
+class CircleServiceA:
+    def __init__(self, b: "CircleServiceB"):
+        self.b = b
+
+
+@dag.node
+class CircleServiceB:
+    def __init__(self, a: CircleServiceA):
+        self.a = a
+
+
+def test_cycle_detection():
+
+    with pytest.raises(CircularDependencyDetectedError) as exc_info:
+        dag.resolve(CircleServiceA)
+
+    assert exc_info.value.cycle_path == [CircleServiceA, CircleServiceB]

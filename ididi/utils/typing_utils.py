@@ -62,9 +62,11 @@ def get_full_typed_signature[T](call: ty.Callable[..., T]) -> inspect.Signature:
         parameters=typed_params, return_annotation=return_annotation
     )
     return typed_signature
-def first_implementation[
-    I
-](abstract_types: type[I], implementations: list[type],) -> type[I] | None:
+
+
+def first_implementation(
+    abstract_types: type, implementations: list[type]
+) -> type | None:
     """
     Find the first concrete implementation of param_type in the given dependencies.
     Returns None if no matching implementation is found.
@@ -77,4 +79,3 @@ def first_implementation[
         and issubclass(dep, abstract_types)
     )
     return next(matched_deps, None)
-

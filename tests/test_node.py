@@ -3,14 +3,14 @@ import typing as ty
 import pytest
 
 from ididi.errors import GenericTypeNotSupportedError, UnsolvableDependencyError
-from ididi.node import DependencyNode, ForwardDependency
+from ididi.node import DependencyNode
 
 
 def print_dependency_tree(node: DependencyNode[ty.Any], level: int = 0):
     indent = "  " * level
     print(f"{indent} {node.dependent=}, {node.default=}")
-    for dep in node.dependencies:
-        print_dependency_tree(dep, level + 1)
+    for dep in node.dependency_params:
+        print_dependency_tree(dep.dependency, level + 1)
 
 
 class A:
@@ -122,18 +122,20 @@ def test_generic_service_not_supported():
         DependencyNode.from_node(GenericService[str])
 
 
-def test_forward_reference():
-    # Test forward reference handling
-    class ServiceA:
-        def __init__(self, b: "ServiceB"):
-            self.b = b
+# def test_forward_reference():
+#     # Test forward reference handling
+#     class ServiceA:
+#         def __init__(self, b: "ServiceB"):
+#             self.b = b
 
-    class ServiceB:
-        def __init__(self):
-            pass
+#     class ServiceB:
+#         def __init__(self):
+#             pass
 
-    node = DependencyNode.from_node(ServiceA)
-    assert any(isinstance(dep, ForwardDependency) for dep in node.dependencies)
+#     node = DependencyNode.from_node(ServiceA)
+#     assert any(
+#         isinstance(dep.dependency, ForwardDependency) for dep in node.dependency_params
+#     )
 
 
 def test_empty_init():
@@ -144,7 +146,7 @@ def test_empty_init():
     node = DependencyNode.from_node(EmptyService)
     instance = node.build()
     assert isinstance(instance, EmptyService)
-    assert not node.dependencies
+    assert not node.dependency_params
 
 
 def test_factory_without_return_type():

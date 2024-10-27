@@ -1,6 +1,3 @@
-import pytest
-
-from ididi.errors import CircularDependencyDetectedError
 from ididi.graph import DependencyGraph
 
 dag = DependencyGraph()
@@ -34,10 +31,4 @@ def test_forward_reference():
     assert isinstance(instance.b.c, ServiceC)
 
 
-@pytest.mark.skip
-def test_circular_dependency():
-
-    with pytest.raises(CircularDependencyDetectedError) as exc_info:
-        dag.resolve(ServiceA)
-    # Verify the error message shows the cycle
-    assert "ServiceA -> ServiceB -> ServiceC -> ServiceA" in str(exc_info.value)
+# @pytest.mark.skip

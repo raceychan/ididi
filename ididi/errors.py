@@ -7,6 +7,18 @@ class IDIDIError(Exception):
     """
 
 
+# =============== General Errors ===============
+
+
+class NotSupportedError(IDIDIError):
+    """
+    Base class for all not supported exceptions.
+    """
+
+
+# =============== Node Errors ===============
+
+
 class NodeError(IDIDIError):
     """
     Base class for all node related exceptions.
@@ -53,7 +65,12 @@ class CircularDependencyDetectedError(GraphError):
 
     def __init__(self, cycle_path: list[type]):
         cycle_str = " -> ".join(t.__name__ for t in cycle_path)
+        self._cycle_path = cycle_path
         super().__init__(f"Circular dependency detected: {cycle_str}")
+
+    @property
+    def cycle_path(self) -> list[type]:
+        return self._cycle_path
 
 
 class TopLevelBulitinTypeError(GraphError):
