@@ -2,7 +2,8 @@ import typing as ty
 
 import pytest
 
-from ididi.node import DependencyNode
+from ididi.errors import GenericTypeNotSupportedError, UnsolvableDependencyError
+from ididi.node import DependencyNode, ForwardDependency
 
 
 def print_dependency_tree(node: DependencyNode[ty.Any], level: int = 0):
@@ -95,6 +96,11 @@ def basic_nodes():
 #     assert complex_obj.kwargs == {}
 
 
+def test_unsolvable_dependency():
+    with pytest.raises(UnsolvableDependencyError):
+        DependencyNode.from_node(ComplexDependency)
+
+
 def test_factory_function():
     factory_node = DependencyNode.from_node(complex_factory)
 
@@ -109,3 +115,42 @@ def test_factory_function():
     assert isinstance(factory_obj.config, Config)
     assert factory_obj.config.env == "dev"
     assert factory_obj.kwargs == {"extra": "test"}
+
+
+def test_generic_service_not_supported():
+    with pytest.raises(GenericTypeNotSupportedError):
+        DependencyNode.from_node(GenericService[str])
+
+
+def test_forward_reference():
+    # Test forward reference handling
+    class ServiceA:
+        def __init__(self, b: "ServiceB"):
+            self.b = b
+
+    class ServiceB:
+        def __init__(self):
+            pass
+
+    node = DependencyNode.from_node(ServiceA)
+    assert any(isinstance(dep, ForwardDependency) for dep in node.dependencies)
+
+
+def test_empty_init():
+    # Test class with no __init__
+    class EmptyService:
+        pass
+
+    node = DependencyNode.from_node(EmptyService)
+    instance = node.build()
+    assert isinstance(instance, EmptyService)
+    assert not node.dependencies
+
+
+def test_factory_without_return_type():
+    # Test factory without return type annotation
+    def bad_factory():
+        return object()
+
+    with pytest.raises(ValueError, match="Factory must have a return type"):
+        DependencyNode.from_node(bad_factory)

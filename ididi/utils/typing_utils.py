@@ -3,7 +3,7 @@ import typing as ty
 from typing import _eval_type as ty_eval_type  # type: ignore
 
 
-def is_builtin_type(t: type) -> bool:
+def is_builtin_type(t: ty.Any) -> bool:
     return t.__module__ == "builtins" and not issubclass(t, ty.Generic)
 
 
@@ -29,7 +29,7 @@ def eval_type(
         value = ty.ForwardRef(value, is_argument=False, is_class=True)
 
     try:
-        return ty_eval_type(value, globalns, localns)
+        return ty.cast(type[ty.Any], ty_eval_type(value, globalns, localns))
     except NameError:
         if not lenient:
             raise
@@ -62,3 +62,19 @@ def get_full_typed_signature[T](call: ty.Callable[..., T]) -> inspect.Signature:
         parameters=typed_params, return_annotation=return_annotation
     )
     return typed_signature
+def first_implementation[
+    I
+](abstract_types: type[I], implementations: list[type],) -> type[I] | None:
+    """
+    Find the first concrete implementation of param_type in the given dependencies.
+    Returns None if no matching implementation is found.
+    """
+    matched_deps = (
+        dep
+        for dep in implementations
+        if isinstance(dep, type)
+        and isinstance(abstract_types, type)
+        and issubclass(dep, abstract_types)
+    )
+    return next(matched_deps, None)
+

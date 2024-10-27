@@ -7,6 +7,41 @@ class IDIDIError(Exception):
     """
 
 
+class NodeError(IDIDIError):
+    """
+    Base class for all node related exceptions.
+    """
+
+
+class UnsolvableDependencyError(NodeError):
+
+    def __init__(self, param_name: str, required_type: type):
+        self.param_name = param_name
+        self.required_type = required_type
+        super().__init__(
+            f"Unable to resolve dependency for parameter: {param_name}, value of {required_type} must be provided"
+        )
+
+
+class MissingAnnotationError(NodeError):
+
+    def __init__(self, dependent: type, param_name: str):
+        self.dependent = dependent
+        self.param_name = param_name
+        msg = f"Unable to resolve dependency for parameter: {param_name} in {dependent}, annotation for `{param_name}` must be provided"
+        super().__init__(msg)
+
+
+class GenericTypeNotSupportedError(NodeError):
+    """
+    Raised when attempting to use a generic type that is not yet supported.
+    """
+
+    def __init__(self, generic_type: type):
+        super().__init__(f"Generic types are not yet supported: {generic_type}")
+
+
+# =============== Graph Errors ===============
 class GraphError(IDIDIError):
     """
     Base class for all graph related exceptions.
@@ -16,18 +51,9 @@ class GraphError(IDIDIError):
 class CircularDependencyDetectedError(GraphError):
     """Raised when a circular dependency is detected in the dependency graph."""
 
-    def __init__(self, cycle_path: list[type] ):
+    def __init__(self, cycle_path: list[type]):
         cycle_str = " -> ".join(t.__name__ for t in cycle_path)
         super().__init__(f"Circular dependency detected: {cycle_str}")
-
-
-class UnsolvableDependencyError(IDIDIError):
-    def __init__(self, param_name: str, required_type: type):
-        self.param_name = param_name
-        self.required_type = required_type
-        super().__init__(
-            f"Unable to resolve dependency for parameter: {param_name}, value of {required_type} must be provided"
-        )
 
 
 class TopLevelBulitinTypeError(GraphError):

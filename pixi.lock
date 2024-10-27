@@ -780,7 +780,7 @@ packages:
   name: ididi
   version: 0.0.0
   path: .
-  sha256: ed13fa9067217cd2d747fba0523974f0e3649d53f70a051a018056f8f8305275
+  sha256: 764efadba10ee72f645d8b57ea698a450330bda706a91664d28e98a24c6236fc
   requires_python: '>=3.12'
   editable: true
 - kind: conda

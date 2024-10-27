@@ -11,6 +11,27 @@ path = "ididi/__init__.py"
 [tool.setuptools]
 py-modules = ["ididi"]
 
+[tool.pytest.ini_options]
+addopts = "-vx --strict-markers --capture=no"
+markers = [
+  "integration_test: marks tests as slow integration tests (deselect with '-m \"not integration_test\"')",
+]
+testpaths = ["tests"]
+
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.coverage.run]
+omit = [
+  # omit anything in a .local directory anywhere
+  "*/utils/*",
+]
+
+[tool.pyright]
+exclude = ["tests"]
+include = ["ididi/*.py"]
+python_version = "3.12"
+typeCheckingMode = "strict"
+
 [tool.pixi.project]
 channels = ["conda-forge"]
 platforms = ["linux-64"]
