@@ -10,3 +10,8 @@ test:
 .PHONY: cov
 cov:
 	pixi run -e test pytest tests/ --cov=ididi --cov-report term-missing 
+
+
+.PHONY: visualize
+visualize:
+	pixi run -e dev python -m illustrate

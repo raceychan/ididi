@@ -86,6 +86,7 @@ assert instance.inner.value == "overridden"
 ## Features
 
 - Automatically resolve dependencies
+- Circular dependencies detection
 - Support Forward References
 
 ### Resolve Rules

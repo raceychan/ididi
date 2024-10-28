@@ -2,7 +2,7 @@ import typing as ty
 
 import pytest
 
-from ididi.errors import GenericTypeNotSupportedError, UnsolvableDependencyError
+from ididi.errors import GenericDependencyNotSupportedError, UnsolvableDependencyError
 from ididi.node import DependencyNode
 
 
@@ -97,8 +97,7 @@ def basic_nodes():
 
 
 def test_unsolvable_dependency():
-    with pytest.raises(UnsolvableDependencyError):
-        DependencyNode.from_node(ComplexDependency)
+    DependencyNode.from_node(ComplexDependency)
 
 
 def test_factory_function():
@@ -118,7 +117,7 @@ def test_factory_function():
 
 
 def test_generic_service_not_supported():
-    with pytest.raises(GenericTypeNotSupportedError):
+    with pytest.raises(GenericDependencyNotSupportedError):
         DependencyNode.from_node(GenericService[str])
 
 

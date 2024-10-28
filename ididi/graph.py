@@ -3,15 +3,15 @@ import typing as ty
 from collections import defaultdict
 from types import MappingProxyType
 
-from ididi.errors import (
+from .errors import (
     CircularDependencyDetectedError,
     MissingImplementationError,
     MultipleImplementationsError,
     TopLevelBulitinTypeError,
     UnregisteredTypeError,
 )
-from ididi.node import DependencyNode, ForwardDependent
-from ididi.utils.typing_utils import (
+from .node import DependencyNode, ForwardDependent
+from .utils.typing_utils import (
     first_implementation,
     get_full_typed_signature,
     is_builtin_type,
@@ -26,11 +26,6 @@ type Neighbors[I] = defaultdict[type[I], list[type[I]]]
 type NeighborsView[I] = MappingProxyType[type[I], list[type[I]]]
 
 
-# NodeEges is of type dict[type, set[type]]
-# instead of set[type], we should use something more effective
-# and can reflect dependency signature
-
-
 class DependencyGraph:
     """
     A dependency DAG (Directed Acyclic Graph) that manages dependency nodes and their relationships.
@@ -42,7 +37,6 @@ class DependencyGraph:
 
     _nodes: GraphNodes[ty.Any]
     _resolved_instances: ResolvedInstances[ty.Any]
-    _resolution_stack: set[type]
     _type_mappings: TypeMappings[ty.Any]
     _dependents: Neighbors[ty.Any]
     _dependencies: Neighbors[ty.Any]
@@ -50,7 +44,6 @@ class DependencyGraph:
     def __init__(self):
         self._nodes = {}
         self._resolved_instances = {}
-        self._resolution_stack = set()
         self._type_mappings = defaultdict(list)
 
         # Track who depends on whom
@@ -210,7 +203,7 @@ class DependencyGraph:
         Clear all resolved instances while maintaining registrations.
         """
         self._resolved_instances.clear()
-        self._resolution_stack.clear()
+        # self._resolution_stack.clear()
 
     async def aclose(self) -> None:
         """
@@ -288,28 +281,34 @@ class DependencyGraph:
     def resolve_params(self, node: DependencyNode[ty.Any]) -> dict[str, type]:
         """
         Resolve forward dependencies in params.
+        if a param is a ForwardDependent, we resolve it to the actual type.
+        if circular dependency is detected, raise CircularDependencyDetectedError
         """
+        # Can we do this in the node?
+
         params: dict[str, type] = {}
 
         for dep_param in node.dependency_params:
-            if dep_param.dependency.dependent != inspect.Parameter.empty:
-                param_name = dep_param.name
-                param_type = (
-                    dep_param.dependency.dependent.resolve()
-                    if isinstance(dep_param.dependency.dependent, ForwardDependent)
-                    else dep_param.dependency.dependent
-                )
-                try:
-                    param_sig = get_full_typed_signature(param_type)
-                except ValueError:
-                    pass
-                else:
-                    for sub_param in param_sig.parameters.values():
-                        if sub_param.annotation is node.dependent:
-                            raise CircularDependencyDetectedError(
-                                [sub_param.annotation, param_type]
-                            )
-                params[param_name] = param_type
+            if dep_param.dependency.dependent is inspect.Parameter.empty:
+                continue
+
+            param_name = dep_param.name
+            param_type = (
+                dep_param.dependency.dependent.resolve()
+                if isinstance(dep_param.dependency.dependent, ForwardDependent)
+                else dep_param.dependency.dependent
+            )
+            try:
+                param_sig = get_full_typed_signature(param_type)
+            except ValueError:
+                pass
+            else:
+                for sub_param in param_sig.parameters.values():
+                    if sub_param.annotation is node.dependent:
+                        raise CircularDependencyDetectedError(
+                            [sub_param.annotation, param_type]
+                        )
+            params[param_name] = param_type
 
         return params
 
@@ -325,12 +324,30 @@ class DependencyGraph:
         Supports dependency overrides for testing.
         Overrides are only applied to the requested type, not its dependencies.
         """
-        # self.resolve_forward_nodes()
+
+        """
+        # TODO: we need to take speical care with Protocols and ABC
+        # 1. Protocol has to be decorated with @runtime_checkable to be used as a dependency
+        # 2. Protocol and ABC can't be instantiated, so it can never be the first implementation, we must have a facotry with the Protocol/ABC return
+
+
+        @dg.node
+        def database_factory(settings: Settings) -> IEngine:
+            return AsyncDatabase(make_async_engine(settings))
+        File "/graph.py", line 362, in resolve
+        instance = node.build(**resolved_deps)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/node.py", line 192, in build
+            return self.factory()
+           ^^^^^^^^^^^^^^
+        TypeError: Can't instantiate abstract class Cache without an implementation for abstract methods 'close', 'get', 'keyspace', 'lpop', 'remove', 'rpop', 'rpush', 'sadd', 'set', 'sismember'
+
+        TODO: catch this error and raise a more informative error message
+        this is because use did not provide an implementation for the Protocol
+        """
 
         if is_builtin_type(dependency_type):
             raise TopLevelBulitinTypeError(dependency_type)
-
-        self._resolution_stack.add(dependency_type)
 
         if dependency_type in self._resolved_instances:
             return self._resolved_instances[dependency_type]
@@ -342,8 +359,6 @@ class DependencyGraph:
         except KeyError:
             raise UnregisteredTypeError(concrete_type)
 
-        # Get the signature to match parameter names
-        # signature = node.signature or get_full_typed_signature(node.factory)
         params = self.resolve_params(node)
 
         # Start with overrides as the base

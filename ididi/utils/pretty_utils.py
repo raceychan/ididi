@@ -1,4 +1,4 @@
-from ididi.graph import DependencyGraph
+from ..graph import DependencyGraph
 
 
 def pretty_print(graph: DependencyGraph) -> str:
@@ -22,7 +22,7 @@ def pretty_print(graph: DependencyGraph) -> str:
 
         visited.add(node_type)
         result = [f"{prefix}└── {node_type.__name__}"]
-        dependencies = sorted(graph._dependencies[node_type], key=lambda x: x.__name__)
+        dependencies = sorted(graph.dependencies[node_type], key=lambda x: x.__name__)
 
         for i, dep in enumerate(dependencies):
             is_last = i == len(dependencies) - 1
@@ -35,18 +35,18 @@ def pretty_print(graph: DependencyGraph) -> str:
     # Find root nodes (nodes with no dependents or dependents not in graph)
     roots = {
         t
-        for t in graph._nodes
-        if not graph._dependents[t]
-        or all(dep not in graph._nodes for dep in graph._dependents[t])
+        for t in graph.nodes
+        if not graph.dependents[t]
+        or all(dep not in graph.nodes for dep in graph.dependents[t])
     }
 
     if not roots:
         return "(empty graph)"
 
-    result = []
+    result: list[str] = []
     for root in sorted(roots, key=lambda x: x.__name__):
         result.append(f"{root.__name__}")
-        deps = sorted(graph._dependencies[root], key=lambda x: x.__name__)
+        deps = sorted(graph.dependencies[root], key=lambda x: x.__name__)
         for i, dep in enumerate(deps):
             is_last = i == len(deps) - 1
             prefix = "    " if is_last else "│   "

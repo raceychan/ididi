@@ -26,7 +26,6 @@ class NodeError(IDIDIError):
 
 
 class UnsolvableDependencyError(NodeError):
-
     def __init__(self, param_name: str, required_type: type):
         self.param_name = param_name
         self.required_type = required_type
@@ -35,8 +34,17 @@ class UnsolvableDependencyError(NodeError):
         )
 
 
-class MissingAnnotationError(NodeError):
+class ForwardReferenceNotFoundError(NodeError):
+    """
+    Raised when a forward reference can't be found in the global namespace.
+    """
 
+    def __init__(self, forward_ref: ty.ForwardRef):
+        msg = f"Unable to resolve forward reference: {forward_ref}, are you sure it has been defined?"
+        super().__init__(msg)
+
+
+class MissingAnnotationError(NodeError):
     def __init__(self, dependent: type, param_name: str):
         self.dependent = dependent
         self.param_name = param_name
@@ -44,13 +52,24 @@ class MissingAnnotationError(NodeError):
         super().__init__(msg)
 
 
-class GenericTypeNotSupportedError(NodeError):
+class GenericDependencyNotSupportedError(NodeError):
     """
     Raised when attempting to use a generic type that is not yet supported.
     """
 
-    def __init__(self, generic_type: type):
-        super().__init__(f"Generic types are not yet supported: {generic_type}")
+    def __init__(self, generic_type: type | ty.TypeVar):
+        super().__init__(
+            f"Using generic a type as a dependency is not yet supported: {generic_type}"
+        )
+
+
+class ProtocolWithoutFactoryError(NodeError):
+    """
+    Raised when a protocol is used as a dependency without a factory.
+    """
+
+    def __init__(self, protocol: type):
+        super().__init__(f"Protocol {protocol} must have a factory")
 
 
 # =============== Graph Errors ===============

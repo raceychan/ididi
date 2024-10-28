@@ -3,6 +3,7 @@ import typing as ty
 from typing import _eval_type as ty_eval_type  # type: ignore
 
 
+# TODO: write a typeguard to cast builtin types
 def is_builtin_type(t: ty.Any) -> bool:
     return t.__module__ == "builtins" and not issubclass(t, ty.Generic)
 
@@ -65,17 +66,21 @@ def get_full_typed_signature[T](call: ty.Callable[..., T]) -> inspect.Signature:
 
 
 def first_implementation(
-    abstract_types: type, implementations: list[type]
+    abstract_type: type, implementations: list[type]
 ) -> type | None:
     """
     Find the first concrete implementation of param_type in the given dependencies.
     Returns None if no matching implementation is found.
     """
+    if issubclass(abstract_type, ty.Protocol):
+        if not abstract_type._is_runtime_protocol:  # type: ignore
+            abstract_type._is_runtime_protocol = True  # type: ignore
+
     matched_deps = (
         dep
         for dep in implementations
         if isinstance(dep, type)
-        and isinstance(abstract_types, type)
-        and issubclass(dep, abstract_types)
+        and isinstance(abstract_type, type)
+        and issubclass(dep, abstract_type)
     )
     return next(matched_deps, None)
