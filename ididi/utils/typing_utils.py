@@ -5,7 +5,30 @@ from typing import _eval_type as ty_eval_type  # type: ignore
 
 # TODO: write a typeguard to cast builtin types
 def is_builtin_type(t: ty.Any) -> bool:
-    return t.__module__ == "builtins" and not issubclass(t, ty.Generic)
+    builtins_types = {
+        object,
+        int,
+        float,
+        str,
+        bool,
+        complex,
+        list,
+        dict,
+        set,
+        frozenset,
+        tuple,
+        bytes,
+        bytearray,
+        type(None),
+    }
+    if t is None:
+        return True
+    elif not isinstance(t, type):
+        is_builtin = type(t).__module__ == "builtins"
+    else:
+        is_builtin = t in builtins_types and not issubclass(t, ty.Generic)
+
+    return is_builtin
 
 
 def eval_type(

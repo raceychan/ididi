@@ -117,24 +117,6 @@ def test_multiple_implementations():
         dag.resolve(Repository)
 
 
-@pytest.mark.skip("TODO: implement circular dependency detection in node")
-def test_circular_dependency():
-    dag = DependencyGraph()
-
-    @dag.node
-    class ServiceA:
-        def __init__(self, b: "ServiceB"):
-            self.b = b
-
-    @dag.node
-    class ServiceB:
-        def __init__(self, a: ServiceA):
-            self.a = a
-
-    with pytest.raises(CircularDependencyDetectedError):
-        dag.resolve(ServiceA)
-
-
 def test_resource_cleanup():
     dag = DependencyGraph()
     closed_resources: set[str] = set()
@@ -306,7 +288,7 @@ def test_unsupported_annotation():
 
         @dag.node
         class BadService:
-            def __init__(self, bad: object):  # object is not a proper annotation
+            def __init__(self, bad: None):  # object is not a proper annotation
                 self.bad = bad
 
         dag.resolve(BadService)
@@ -381,19 +363,19 @@ def test_nested_dependency_override():
 
 
 def test_abstract_base_resolution():
-    dag = DependencyGraph()
+    dg = DependencyGraph()
 
     class AbstractService(ABC):
         @abstractmethod
         def get_name(self) -> str:
             pass
 
-    @dag.node
+    @dg.node
     class ConcreteService(AbstractService):
         def get_name(self) -> str:
             return "concrete"
 
-    instance = dag.resolve(AbstractService)
+    instance = dg.resolve(AbstractService)
     assert isinstance(instance, ConcreteService)
     assert instance.get_name() == "concrete"
 
@@ -462,7 +444,6 @@ class CircleServiceB:
 
 
 def test_cycle_detection():
-
     with pytest.raises(CircularDependencyDetectedError) as exc_info:
         dag.resolve(CircleServiceA)
 

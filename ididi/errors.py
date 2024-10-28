@@ -40,7 +40,7 @@ class ForwardReferenceNotFoundError(NodeError):
     """
 
     def __init__(self, forward_ref: ty.ForwardRef):
-        msg = f"Unable to resolve forward reference: {forward_ref}, are you sure it has been defined?"
+        msg = f"Unable to resolve forward reference: {forward_ref}, make sure it has been defined in the global namespace"
         super().__init__(msg)
 
 
@@ -63,13 +63,26 @@ class GenericDependencyNotSupportedError(NodeError):
         )
 
 
-class ProtocolWithoutFactoryError(NodeError):
+class ProtocolFacotryNotProvidedError(NodeError):
     """
     Raised when a protocol is used as a dependency without a factory.
     """
 
     def __init__(self, protocol: type):
-        super().__init__(f"Protocol {protocol} must have a factory")
+        super().__init__(
+            f"Protocol {protocol} can't be instantiated, a factory is required to resolve it"
+        )
+
+
+class ABCWithoutImplementationError(NodeError):
+    """
+    Raised when an ABC is used as a dependency without a factory.
+    """
+
+    def __init__(self, abc: type, abstract_methods: frozenset[str]):
+        super().__init__(
+            f"ABC {abc} has no valid implementations, either provide a implementation that implements {abstract_methods} or a factory"
+        )
 
 
 # =============== Graph Errors ===============

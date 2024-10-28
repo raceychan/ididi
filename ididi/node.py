@@ -1,3 +1,4 @@
+import abc
 import inspect
 import types
 import typing as ty
@@ -5,11 +6,12 @@ from dataclasses import dataclass, field
 from inspect import Parameter
 
 from .errors import (
+    ABCWithoutImplementationError,
     ForwardReferenceNotFoundError,
     GenericDependencyNotSupportedError,
     MissingAnnotationError,
     NotSupportedError,
-    ProtocolWithoutFactoryError,
+    ProtocolFacotryNotProvidedError,
     UnsolvableDependencyError,
 )
 from .utils.param_utils import NULL, Nullable, is_not_null
@@ -176,19 +178,39 @@ class DependencyNode[T]:
             parameters=parameters, return_annotation=self.dependent
         )
 
+    def build_type_without_init(self) -> T:
+        """
+        This is mostly for types that can't be directly constrctured,
+        e.g abc.ABC, protocols, builtin types that can't be instantiated without arguments.
+        """
+        if is_not_null(self.default):
+            return self.default
+        elif isinstance(self.factory, type):
+            if is_builtin_type(self.factory):
+                # may be would can do something with container types, e.g list, dict, set, tuple?
+                raise UnsolvableDependencyError(self.dependent.__name__, self.factory)
+            elif getattr(self.factory, "_is_protocol", False):
+                raise ProtocolFacotryNotProvidedError(self.factory)
+            elif issubclass(self.factory, abc.ABC):
+                if abstract_methods := self.factory.__abstractmethods__:
+                    raise ABCWithoutImplementationError(self.factory, abstract_methods)
+                return ty.cast(ty.Callable[..., T], self.factory)()
+            return self.factory()
+        else:
+            try:
+                return self.factory()
+            except Exception as e:
+                raise UnsolvableDependencyError(
+                    str(self.dependent), type(self.factory)
+                ) from e
+
     def build(self, *args: ty.Any, **kwargs: ty.Any) -> T:
         """
         Build the dependent, resolving dependencies and applying defaults.
         kwargs override any dependencies or defaults.
         """
         if not self.dependency_params:
-            if is_not_null(self.default):
-                return self.default
-            elif isinstance(self.factory, type) and is_builtin_type(self.factory):
-                raise UnsolvableDependencyError(self.dependent.__name__, self.factory)
-            elif getattr(self.factory, "_is_protocol", False):
-                raise ProtocolWithoutFactoryError(ty.cast(type, self.factory))
-            return self.factory()
+            return self.build_type_without_init()
 
         bound_args = self.signature.bind_partial()
 
@@ -247,13 +269,6 @@ class DependencyNode[T]:
 
     @classmethod
     def _from_class[I](cls, dependent: type[I]) -> "DependencyNode[I]":
-        """
-        we need to take special care of generic types,
-        as well as ty.Protocol,
-        1. Protocol has to be decorated with @runtime_checkable to be used as a dependency
-        2. Protocol can't be instiantied, it can never be the first implementype
-        """
-
         if hasattr(dependent, "__origin__"):
             if res := ty.get_origin(dependent):
                 dependent = res

@@ -11,33 +11,45 @@ from .errors import (
     UnregisteredTypeError,
 )
 from .node import DependencyNode, ForwardDependent
+from .types import (
+    Dependent,
+    GraphNodes,
+    GraphNodesView,
+    Neighbors,
+    NeighborsView,
+    ResolvedInstances,
+    TypeMappings,
+    TypeMappingView,
+)
 from .utils.typing_utils import (
     first_implementation,
     get_full_typed_signature,
     is_builtin_type,
 )
 
-type GraphNodes[I] = dict[type[I], DependencyNode[I]]
-type GraphNodesView[I] = MappingProxyType[type[I], DependencyNode[I]]
-type ResolvedInstances[I] = dict[type[I], I]
-type TypeMappings[I] = dict[type[I], list[type[I]]]
-type TypeMappingView[I] = MappingProxyType[type[I], list[type[I]]]
-type Neighbors[I] = defaultdict[type[I], list[type[I]]]
-type NeighborsView[I] = MappingProxyType[type[I], list[type[I]]]
-
 
 class DependencyGraph:
     """
+    ### Description:
     A dependency DAG (Directed Acyclic Graph) that manages dependency nodes and their relationships.
-    Unlike a tree, a node can have multiple parents (dependents).
 
+    ### Attributes:
+    #### nodes: dict[type, DependencyNode]
+    mapping a type to its corresponding node
 
-    type_mapping: dict[type, list[type]], mapping abstract type to its implementations
+    #### resolved_instances: dict[type, object]
+    mapping a type to its resolved instance, to be used for caching
+
+    #### type_mapping: dict[type, list[type]]
+    mapping abstract type to its implementations
     """
 
+    # core
     _nodes: GraphNodes[ty.Any]
     _resolved_instances: ResolvedInstances[ty.Any]
     _type_mappings: TypeMappings[ty.Any]
+
+    # required by query methods
     _dependents: Neighbors[ty.Any]
     _dependencies: Neighbors[ty.Any]
 
@@ -47,6 +59,8 @@ class DependencyGraph:
         self._type_mappings = defaultdict(list)
 
         # Track who depends on whom
+        # we might be able to remove them
+        # these are for query methods
         self._dependents = defaultdict(list)
         self._dependencies = defaultdict(list)
 
@@ -98,7 +112,6 @@ class DependencyGraph:
             raise MissingImplementationError(abstract_type)
         if len(implementations) > 1:
             raise MultipleImplementationsError(abstract_type, implementations)
-
         return next(iter(implementations))
 
     def remove_node(self, node: DependencyNode[ty.Any]) -> None:
@@ -164,26 +177,26 @@ class DependencyGraph:
             self._dependencies[node.dependent].append(dep_type)
             self._dependents[dep_type].append(node.dependent)
 
-    def get_dependent_types(self, dependency_type: type) -> list[type]:
+    def get_dependent_types(self, dependency_type: type) -> list[Dependent[ty.Any]]:
         """
         Get all types that depend on the given type.
         """
         return self._dependents[dependency_type]
 
-    def get_dependency_types[I](self, dependent_type: type[I]) -> list[type[I]]:
+    def get_dependency_types[I](self, dependent_type: type[I]) -> list[Dependent[I]]:
         """
         Get all types that the given type depends on.
         """
         return self._dependencies[dependent_type]
 
-    def get_initialization_order(self) -> list[type]:
+    def get_initialization_order(self) -> list[Dependent[ty.Any]]:
         """
         Return types in dependency order (topological sort).
         """
-        order: list[type] = []
-        visited = set[type]()
+        order: list[Dependent[ty.Any]] = []
+        visited = set[Dependent[ty.Any]]()
 
-        def visit(node_type: type):
+        def visit(node_type: Dependent[ty.Any]):
             if node_type in visited:
                 return
 
@@ -284,7 +297,7 @@ class DependencyGraph:
         if a param is a ForwardDependent, we resolve it to the actual type.
         if circular dependency is detected, raise CircularDependencyDetectedError
         """
-        # Can we do this in the node?
+        # TODO: improve this
 
         params: dict[str, type] = {}
 
@@ -298,10 +311,13 @@ class DependencyGraph:
                 if isinstance(dep_param.dependency.dependent, ForwardDependent)
                 else dep_param.dependency.dependent
             )
+            if is_builtin_type(param_type):
+                continue
+
             try:
                 param_sig = get_full_typed_signature(param_type)
             except ValueError:
-                pass
+                continue
             else:
                 for sub_param in param_sig.parameters.values():
                     if sub_param.annotation is node.dependent:
@@ -326,10 +342,6 @@ class DependencyGraph:
         """
 
         """
-        # TODO: we need to take speical care with Protocols and ABC
-        # 1. Protocol has to be decorated with @runtime_checkable to be used as a dependency
-        # 2. Protocol and ABC can't be instantiated, so it can never be the first implementation, we must have a facotry with the Protocol/ABC return
-
 
         @dg.node
         def database_factory(settings: Settings) -> IEngine:
@@ -341,6 +353,7 @@ class DependencyGraph:
             return self.factory()
            ^^^^^^^^^^^^^^
         TypeError: Can't instantiate abstract class Cache without an implementation for abstract methods 'close', 'get', 'keyspace', 'lpop', 'remove', 'rpop', 'rpush', 'sadd', 'set', 'sismember'
+
 
         TODO: catch this error and raise a more informative error message
         this is because use did not provide an implementation for the Protocol
@@ -364,8 +377,10 @@ class DependencyGraph:
         # Start with overrides as the base
         resolved_deps = overrides.copy()
 
-        # Only resolve dependencies for parameters not in overrides
-        sub_dependencies = self._dependencies[concrete_type]
+        # filter out forwarddependent here by isinstance(dep, type) check
+        sub_dependencies = [
+            dep for dep in self._dependencies[concrete_type] if isinstance(dep, type)
+        ]
         for name, type_ in params.items():
             # Skip if already provided in overrides
             if name in resolved_deps:

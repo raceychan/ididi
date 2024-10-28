@@ -2,7 +2,7 @@ import typing as ty
 
 import pytest
 
-from ididi.errors import GenericDependencyNotSupportedError, UnsolvableDependencyError
+from ididi.errors import GenericDependencyNotSupportedError
 from ididi.node import DependencyNode
 
 
