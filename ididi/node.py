@@ -196,6 +196,7 @@ class DependencyParam:
 
     name: str
     param: Parameter
+    is_builtin: bool
     dependency: "DependentNode[ty.Any]"
 
     def build(self, **kwargs: ty.Any) -> ty.Any:
@@ -223,14 +224,21 @@ class DependencyParam:
                 dependent=lazy_dep,
                 factory=lambda: None,
             )
-            return cls(name=param.name, param=param, dependency=dependency)
+            return cls(
+                name=param.name, param=param, dependency=dependency, is_builtin=False
+            )
         else:
             dependency = process_param(
                 dependent=dependent,
                 param=param,
                 globalns=globalns,
             )
-            return cls(name=param.name, param=param, dependency=dependency)
+            return cls(
+                name=param.name,
+                param=param,
+                dependency=dependency,
+                is_builtin=is_builtin_type(param.annotation),
+            )
 
 
 @dataclass(kw_only=True, slots=True, frozen=True)
@@ -268,9 +276,7 @@ class DependentNode[T]:
             parameters=parameters, return_annotation=self.dependent
         )
 
-    def resolve_forward_dependency(
-        self, dep: ForwardDependent, concrete_type: type
-    ) -> type:
+    def resolve_forward_dependency(self, dep: ForwardDependent) -> type:
         """
         Resolve a forward dependency and check for circular dependencies.
         Returns the resolved type and its node.
@@ -280,34 +286,37 @@ class DependentNode[T]:
         # Check for circular dependencies
         sub_params = get_full_typed_signature(resolved_type).parameters.values()
         for sub_param in sub_params:
-            if sub_param.annotation is concrete_type:
-                raise CircularDependencyDetectedError([concrete_type, resolved_type])
+            if sub_param.annotation is self.dependent:
+                raise CircularDependencyDetectedError(
+                    [ty.cast(type, self.dependent), resolved_type]
+                )
 
         return resolved_type
 
-    def get_dependency_resolution_info(
-        self, concrete_type: type
-    ) -> list[tuple[Parameter, "DependentNode[ty.Any]"]]:
+    def update_forward_dependency_params(self) -> None:
         """
-        Get a list of parameters and their resolved dependency types.
+        Update all forward dependency params to their resolved types.
         """
-        resolution_info: list[tuple[Parameter, "DependentNode[ty.Any]"]] = []
-
-        for dep_param in self.dependency_params:
+        for index, dep_param in enumerate(self.dependency_params):
             param = dep_param.param
             dep = dep_param.dependency.dependent
 
-            if is_builtin_type(dep):
+            if dep_param.is_builtin:
                 continue
 
             if isinstance(dep, ForwardDependent):
-                resolved_type = self.resolve_forward_dependency(dep, concrete_type)
+                resolved_type = self.resolve_forward_dependency(dep)
             else:
                 resolved_type = dep
 
             resolved_node = DependentNode.from_node(resolved_type)
-            resolution_info.append((param, resolved_node))
-        return resolution_info
+            new_dep_param = DependencyParam(
+                name=param.name,
+                param=param,
+                dependency=resolved_node,
+                is_builtin=False,
+            )
+            self.dependency_params[index] = new_dep_param
 
     def build_type_without_init(self) -> T:
         """

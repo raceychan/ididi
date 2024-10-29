@@ -241,10 +241,13 @@ class DependencyGraph:
 
         resolved_deps = overrides.copy()
 
+        node.update_forward_dependency_params()
+
         # Get resolution info for all dependencies
-        for param, resolved_node in node.get_dependency_resolution_info(concrete_type):
+        for dep_param in node.dependency_params:
+            resolved_node = dep_param.dependency
             resolved_type = ty.cast(type, resolved_node.dependent)
-            if param.name in resolved_deps:
+            if dep_param.name in resolved_deps or dep_param.is_builtin:
                 continue
 
             # Register forward dependencies if needed
@@ -254,7 +257,7 @@ class DependencyGraph:
             # Resolve dependency if not already resolved
             if resolved_type not in self._resolved_instances:
                 self._resolved_instances[resolved_type] = self.resolve(resolved_type)
-            resolved_deps[param.name] = self._resolved_instances[resolved_type]
+            resolved_deps[dep_param.name] = self._resolved_instances[resolved_type]
 
         instance = node.build(**resolved_deps)
         self._resolved_instances[dependency_type] = instance
