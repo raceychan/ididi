@@ -4,13 +4,12 @@ from collections import defaultdict
 from types import MappingProxyType
 
 from .errors import (
-    CircularDependencyDetectedError,
     MissingImplementationError,
     MultipleImplementationsError,
     TopLevelBulitinTypeError,
     UnregisteredTypeError,
 )
-from .node import DependentNode, ForwardDependent, ForwardDependentNode
+from .node import DependentNode, ForwardDependent
 from .types import (
     GraphNodes,
     GraphNodesView,
@@ -40,8 +39,8 @@ class DependencyGraph:
 
     # core
     _nodes: GraphNodes[ty.Any]
-    _resolved_instances: ResolvedInstances[ty.Any]
-    _type_mappings: TypeMappings[ty.Any]
+    _resolved_instances: ResolvedInstances
+    _type_mappings: TypeMappings
 
     def __init__(self):
         self._nodes = {}
@@ -72,7 +71,7 @@ class DependencyGraph:
         return MappingProxyType(self._nodes)
 
     @property
-    def type_mappings(self) -> TypeMappingView[ty.Any]:
+    def type_mappings(self) -> TypeMappingView:
         return MappingProxyType(self._type_mappings)
 
     def _resolve_concrete_type(self, abstract_type: type) -> type:
@@ -92,14 +91,14 @@ class DependencyGraph:
         if len(implementations) > 1:
             raise MultipleImplementationsError(abstract_type, implementations)
 
-        first_implementation = ty.cast(type, next(iter(implementations)))
-        return first_implementation
+        first_implementation = next(iter(implementations))
+        return ty.cast(type, first_implementation)
 
     def remove_node(self, node: DependentNode[ty.Any]) -> None:
         """
         Remove a node from the graph and clean up all its references.
         """
-        dependent_type = node.dependent
+        dependent_type = ty.cast(type, node.dependent)
 
         # Remove from nodes
         self._nodes.pop(dependent_type)
@@ -118,19 +117,19 @@ class DependencyGraph:
         self._resolved_instances.pop(dependent_type, None)
 
     def get_dependent_types(
-        self, dependency_type: NodeDependent[ty.Any]
-    ) -> list[NodeDependent[ty.Any]]:
+        self, dependency_type: NodeDependent
+    ) -> list[NodeDependent]:
         """
         Get all types that depend on the given type.
         """
-        dependents: list[NodeDependent[ty.Any]] = []
+        dependents: list[NodeDependent] = []
         for node_type, node in self._nodes.items():
             for dep_param in node.dependency_params:
                 if dep_param.dependency.dependent == dependency_type:
                     dependents.append(node_type)
         return dependents
 
-    def get_dependency_types(self, dependent_type: NodeDependent[ty.Any]) -> list[type]:
+    def get_dependency_types(self, dependent_type: NodeDependent) -> list[type]:
         """
         Get all types that the given type depends on.
         """
@@ -144,21 +143,21 @@ class DependencyGraph:
                 deps.append(dependent_type)
         return deps
 
-    def get_initialization_order(self) -> list[NodeDependent[ty.Any]]:
+    def get_initialization_order(self) -> list[type]:
         """
         Return types in dependency order (topological sort).
         """
-        order: list[NodeDependent[ty.Any]] = []
-        visited = set[NodeDependent[ty.Any]]()
+        order: list[type] = []
+        visited = set[type]()
 
-        def visit(node_type: NodeDependent[ty.Any]):
+        def visit(node_type: type):
             if node_type in visited:
                 return
 
             visited.add(node_type)
             node = self._nodes[node_type]
             for dep_param in node.dependency_params:
-                visit(dep_param.dependency.dependent)
+                visit(ty.cast(type, dep_param.dependency.dependent))
 
             order.append(node_type)
 
@@ -187,6 +186,7 @@ class DependencyGraph:
                 await instance.close()
         self.reset()
 
+    # ty.TypeGuard[AsyncClosable]
     def is_resource(self, type_: ty.Any) -> bool:
         # TODO: add more resource types
         return hasattr(type_, "close") and callable(type_.close)
@@ -228,7 +228,6 @@ class DependencyGraph:
         Supports dependency overrides for testing.
         Overrides are only applied to the requested type, not its dependencies.
         """
-
         if is_builtin_type(dependency_type):
             raise TopLevelBulitinTypeError(dependency_type)
 
@@ -244,29 +243,17 @@ class DependencyGraph:
 
         resolved_deps = overrides.copy()
 
-        for dep_param in node.dependency_params:
-            param = dep_param.param
-            dep = dep_param.dependency.dependent
-
-            if isinstance(dep, ForwardDependent):
-                resolved_type: type = dep.resolve()
-                sub_params = get_full_typed_signature(resolved_type).parameters.values()
-                for sub_param in sub_params:
-                    if sub_param.annotation is concrete_type:
-                        raise CircularDependencyDetectedError(
-                            [dependency_type, resolved_type]
-                        )
-
-                resolved_node = DependentNode.from_node(resolved_type)
-
-                if resolved_type not in self._nodes:
-                    self.register_node(resolved_node)
-            else:
-                resolved_type: type = dep
-
+        # Get resolution info for all dependencies
+        for param, resolved_type in node.get_dependency_resolution_info(concrete_type):
             if param.name in resolved_deps or is_builtin_type(resolved_type):
                 continue
 
+            # Register forward dependencies if needed
+            if resolved_type not in self._nodes:
+                resolved_node = DependentNode.from_node(resolved_type)
+                self.register_node(resolved_node)
+
+            # Resolve dependency if not already resolved
             if resolved_type not in self._resolved_instances:
                 self._resolved_instances[resolved_type] = self.resolve(resolved_type)
             resolved_deps[param.name] = self._resolved_instances[resolved_type]
@@ -283,14 +270,18 @@ class DependencyGraph:
         if node.dependent in self._nodes:
             return  # Skip if already registered
 
-        if not isinstance(node.dependent, ForwardDependent):
-            # Register main type
-            self._nodes[node.dependent] = node
-            # Update type mappings for dependency resolution
-            self._type_mappings[node.dependent].append(node.dependent)
-            # __mro__[1:-1] skip dependent itself and object
-            for base in node.dependent.__mro__[1:-1]:
-                self._type_mappings[base].append(node.dependent)
+        if isinstance(node.dependent, ForwardDependent):
+            return
+
+        # Register main type
+        self._nodes[node.dependent] = node
+
+        # Update type mappings for dependency resolution
+        self._type_mappings[node.dependent].append(node.dependent)
+
+        # __mro__[1:-1] skip dependent itself and object
+        for base in node.dependent.__mro__[1:-1]:
+            self._type_mappings[base].append(node.dependent)
 
         # Recursively register dependencies first
         for dep_param in node.dependency_params:
