@@ -2,33 +2,34 @@ import inspect
 import typing as ty
 from typing import _eval_type as ty_eval_type  # type: ignore
 
+type PrimitiveBuiltins = type[int | float | complex | str | bool | bytes | bytearray]
+type ContainerBuiltins[T] = type[
+    list[T] | tuple[T, ...] | dict[ty.Any, T] | set[T] | frozenset[T]
+]
+type BuiltinSingleton = type[None]
+
+
+def is_builtin_primitive(t: ty.Any) -> ty.TypeGuard[PrimitiveBuiltins]:
+    return t in {int, float, complex, str, bool, bytes, bytearray}
+
+
+def is_builtin_container(t: ty.Any) -> ty.TypeGuard[ContainerBuiltins[ty.Any]]:
+    return t in {list, tuple, dict, set, frozenset}
+
+
+def is_builtin_singleton(t: ty.Any) -> ty.TypeGuard[BuiltinSingleton]:
+    return t is None
+
 
 # TODO: write a typeguard to cast builtin types
-def is_builtin_type(t: ty.Any) -> bool:
-    builtins_types = {
-        object,
-        int,
-        float,
-        str,
-        bool,
-        complex,
-        list,
-        dict,
-        set,
-        frozenset,
-        tuple,
-        bytes,
-        bytearray,
-        type(None),
-    }
-    if t is None:
-        return True
-    elif not isinstance(t, type):
-        is_builtin = type(t).__module__ == "builtins"
-    else:
-        is_builtin = t in builtins_types and not issubclass(t, ty.Generic)
+def is_builtin_type(
+    t: ty.Any,
+) -> ty.TypeGuard[PrimitiveBuiltins | ContainerBuiltins[ty.Any] | BuiltinSingleton]:
+    is_primitive = is_builtin_primitive(t)
+    is_container = is_builtin_container(t)
+    is_singleton = is_builtin_singleton(t)
 
-    return is_builtin
+    return is_primitive or is_container or is_singleton
 
 
 def eval_type(

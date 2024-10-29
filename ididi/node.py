@@ -199,7 +199,6 @@ class DependentNode[T]:
             else:
                 return ty.cast(type[T], self.factory)()
 
-        # if callable(self.factory):
         try:
             return self.factory()
         except Exception as e:
