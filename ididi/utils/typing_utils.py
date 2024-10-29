@@ -108,3 +108,22 @@ def first_implementation(
         and issubclass(dep, abstract_type)
     )
     return next(matched_deps, None)
+
+
+@ty.runtime_checkable
+class AsyncClosable(ty.Protocol):
+    async def close(self) -> ty.Coroutine[ty.Any, ty.Any, None]: ...
+
+
+type Resource = ty.AsyncContextManager[ty.Any] | AsyncClosable
+
+
+def is_closable(type_: object) -> ty.TypeGuard[AsyncClosable]:
+    # TODO: add more resource types
+    return isinstance(type_, AsyncClosable)
+
+
+def is_async_context_manager(
+    type_: object,
+) -> ty.TypeGuard[ty.AsyncContextManager[ty.Any]]:
+    return isinstance(type_, ty.AsyncContextManager)

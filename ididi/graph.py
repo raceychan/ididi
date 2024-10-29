@@ -18,7 +18,7 @@ from .types import (
     TypeMappings,
     TypeMappingView,
 )
-from .utils.typing_utils import get_full_typed_signature, is_builtin_type
+from .utils.typing_utils import get_full_typed_signature, is_builtin_type, is_closable
 
 
 class DependencyGraph:
@@ -182,14 +182,9 @@ class DependencyGraph:
             instance = self._resolved_instances.get(type_)
             if not instance:
                 continue
-            if self.is_resource(instance):
+            if is_closable(instance):
                 await instance.close()
         self.reset()
-
-    # ty.TypeGuard[AsyncClosable]
-    def is_resource(self, type_: ty.Any) -> bool:
-        # TODO: add more resource types
-        return hasattr(type_, "close") and callable(type_.close)
 
     def is_factory_override(
         self,
@@ -300,13 +295,32 @@ class DependencyGraph:
         ty.Callable[..., I] | type[I]
     ):
         """
-        Decorator to register a node in the dependency graph.
-        Can be used with both factory functions and classes.
-        If decorating a factory function that returns an existing type,
+        ### Decorator to register a node in the dependency graph.
+
+        - Can be used with both factory functions and classes.
+        - If decorating a factory function that returns an existing type,
         it will override the factory for that type.
+        ----
+        Examples:
+
+        - Register a class:
+
+        ```python
+        dg = DependencyGraph()
+
+        @dg.node
+        class AuthService: ...
+        ```
+
+        - Register a factory function:
+
+        ```python
+        @dg.node
+        def auth_service_factory() -> AuthService: ...
+        ```
         """
+
         return_type = get_full_typed_signature(factory_or_class).return_annotation
-        # Handle factory override
         if self.is_factory_override(return_type, factory_or_class):
             # Create new node with the factory
             node = DependentNode.from_node(factory_or_class)
