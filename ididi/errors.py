@@ -141,7 +141,7 @@ class MultipleImplementationsError(GraphError):
     Raised when a type has multiple implementations.
     """
 
-    def __init__(self, dependency_type: type, implementations: ty.Iterable[type]):
+    def __init__(self, dependency_type: type, implementations: ty.Iterable[ty.Any]):
         implementations_str = ", ".join(t.__name__ for t in implementations)
         super().__init__(
             f"Multiple implementations found for {dependency_type}: {implementations_str}"

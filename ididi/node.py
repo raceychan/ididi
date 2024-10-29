@@ -7,6 +7,7 @@ from inspect import Parameter
 
 from .errors import (
     ABCWithoutImplementationError,
+    CircularDependencyDetectedError,
     ForwardReferenceNotFoundError,
     GenericDependencyNotSupportedError,
     MissingAnnotationError,
@@ -103,11 +104,49 @@ def process_param[
 
 
 @dataclass(frozen=True, slots=True)
-class ForwardDependent[T]:
-    """
-    A placeholder for a dependent type that hasn't been resolved yet.
-    Holds the forward reference and the namespace needed to resolve it later.
-    """
+class AbstractDependent[T]:
+    """Base class for all dependent types."""
+
+    @property
+    def __name__(self) -> str:
+        """Return the name of the dependent type."""
+        raise NotImplementedError
+
+    @property
+    def __mro__(self) -> tuple[type, ...]:
+        """Return the method resolution order."""
+        raise NotImplementedError
+
+    def resolve(self) -> type[T]:
+        """Resolve to concrete type."""
+        raise NotImplementedError
+
+
+@dataclass(frozen=True, slots=True)
+class Dependent[T](AbstractDependent[T]):
+    """Represents a concrete (non-forward-reference) dependent type."""
+
+    type_: type[T]
+
+    @property
+    def __name__(self) -> str:
+        return self.type_.__name__
+
+    def resolve(self) -> type[T]:
+        return self.type_
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Dependent):
+            return False
+        return self.type_ == ty.cast(Dependent[ty.Any], other).type_
+
+    def __hash__(self) -> int:
+        return hash(self.type_)
+
+
+@dataclass(frozen=True, slots=True)
+class ForwardDependent(AbstractDependent[ty.Any]):
+    """A placeholder for a dependent type that hasn't been resolved yet."""
 
     forward_ref: ty.ForwardRef
     globalns: dict[str, ty.Any] = field(repr=False)
@@ -120,6 +159,12 @@ class ForwardDependent[T]:
     def __mro__(self) -> tuple[type, ...]:
         return (self.__class__, object)
 
+    def resolve(self) -> type:
+        try:
+            return eval_type(self.forward_ref, self.globalns, self.globalns)
+        except NameError as e:
+            raise ForwardReferenceNotFoundError(self.forward_ref) from e
+
     def __eq__(self, other: object) -> bool:
         if isinstance(other, ForwardDependent):
             return self.forward_ref.__forward_arg__ == other.forward_ref.__forward_arg__
@@ -127,13 +172,6 @@ class ForwardDependent[T]:
 
     def __hash__(self) -> int:
         return hash(self.forward_ref.__forward_arg__)
-
-    def resolve(self) -> type[T]:
-        """Resolve the forward reference to its actual type."""
-        try:
-            return eval_type(self.forward_ref, self.globalns, self.globalns)
-        except NameError as e:
-            raise ForwardReferenceNotFoundError(self.forward_ref) from e
 
 
 @dataclass(kw_only=True, slots=True, frozen=True)
@@ -146,7 +184,7 @@ class DependencyParam[T]:
 
     name: str
     param: Parameter
-    dependency: "DependentNode[T] | ForwardDependentNode[T]"
+    dependency: "DependentNode[T]"
 
     def build(self, **kwargs: ty.Any) -> ty.Any:
         """Build the dependency if needed, handling defaults and overrides."""
@@ -168,9 +206,7 @@ class DependencyParam[T]:
         cls, dependent: type[I], param: inspect.Parameter, globalns: dict[str, ty.Any]
     ) -> "DependencyParam[ty.Any]":
         if isinstance(param.annotation, ty.ForwardRef):
-            lazy_dep = ty.cast(
-                ForwardDependent[I], ForwardDependent(param.annotation, globalns)
-            )
+            lazy_dep = ForwardDependent(param.annotation, globalns)
             dependency = ForwardDependentNode(
                 dependent=lazy_dep,
                 factory=lambda: None,
@@ -195,7 +231,7 @@ class DependentNode[T]:
     dependencies: the dependencies of the dependent, e.g cache_factory -> redis, keyspace
     """
 
-    dependent: "type[T] | ForwardDependent[T]"
+    dependent: "type[T] | ForwardDependent"
     default: Nullable[T] = NULL
     factory: ty.Callable[..., T]
     dependency_params: list[DependencyParam[ty.Any]] = field(
@@ -212,6 +248,38 @@ class DependentNode[T]:
             parameters=parameters, return_annotation=self.dependent
         )
 
+    # def resolve_params(self) -> dict[str, type]:
+    #     """Resolve forward dependencies in params."""
+
+    #     """
+    #     return dependency_params
+    #     """
+
+    #     dependent_params: dict[str, type] = {}
+
+    #     for dep_param in self.dependency_params:
+    #         param_dependent = dep_param.dependency.dependent
+
+    #         param_name = dep_param.name
+    #         param_type = (
+    #             param_dependent.resolve()
+    #             if isinstance(param_dependent, ForwardDependent)
+    #             else param_dependent
+    #         )
+
+    #         if is_builtin_type(param_type):
+    #             continue
+
+    #         param_sig = get_full_typed_signature(param_type)
+
+    #         for sub_param in param_sig.parameters.values():
+    #             if sub_param.annotation is self.dependent:
+    #                 raise CircularDependencyDetectedError(
+    #                     [sub_param.annotation, param_type]
+    #                 )
+    #         dependent_params[param_name] = param_type
+    #     return dependent_params
+
     def build_type_without_init(self) -> T:
         """
         This is mostly for types that can't be directly constrctured,
@@ -222,7 +290,6 @@ class DependentNode[T]:
 
         if isinstance(self.factory, type):
             if is_builtin_type(self.factory):
-                # may be would can do something with container types, e.g list, dict, set, tuple?
                 raise UnsolvableDependencyError(self.dependent.__name__, self.factory)
             elif getattr(self.factory, "_is_protocol", False):
                 raise ProtocolFacotryNotProvidedError(self.factory)
@@ -343,7 +410,7 @@ class ForwardDependentNode[T](DependentNode[T]):
     we would not be able to find the forward ref class in the __globals__ attribute of the __init__ method, before the forward ref class is defined.
     """
 
-    dependent: ForwardDependent[T]
+    dependent: ForwardDependent
 
     def build(self, *args: ty.Any, **kwargs: ty.Any) -> T:
         concrete_type = self.dependent.resolve()

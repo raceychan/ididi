@@ -1,32 +1,36 @@
+# import typing as ty
 from types import MappingProxyType
 
-from .node import DependentNode, ForwardDependent
+from .node import AbstractDependent, DependentNode, ForwardDependent
 
-type Dependent[I] = type[I] | ForwardDependent[I]
+type NodeDependent[I] = type[I] | ForwardDependent[I]
 """
 ### A dependent can be a concrete type or a forward reference
 """
 
-type GraphNodes[I] = dict[Dependent[I], DependentNode[I]]
+type GraphNodes[I: type] = dict[NodeDependent[I], DependentNode[I]]
 """
 ### mapping a type to its corresponding node
 """
-type GraphNodesView[I] = MappingProxyType[Dependent[I], DependentNode[I]]
+
+type GraphNodesView[I: type] = MappingProxyType[NodeDependent[I], DependentNode[I]]
 """
 ### a readonly view of GraphNodes
 """
 
-type ResolvedInstances[I] = dict[Dependent[I], I]
+type ResolvedInstances[I] = dict[NodeDependent[I], I]
 """
 mapping a type to its resolved instance
 """
 
-type TypeMappings[I] = dict[type[I], list[type[I]]]
+type TypeMappings[I] = dict[NodeDependent[I], list[NodeDependent[I]]]
 """
 ### mapping a type to its dependencies
 """
 
-type TypeMappingView[I] = MappingProxyType[type[I], list[type[I]]]
+type TypeMappingView[I: type] = MappingProxyType[
+    NodeDependent[I], list[NodeDependent[I]]
+]
 """
 ### a readonly view of TypeMappings
 """
