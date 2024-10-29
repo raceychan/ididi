@@ -174,8 +174,20 @@ class ForwardDependent(AbstractDependent[ty.Any]):
         return hash(self.forward_ref.__forward_arg__)
 
 
+"""
+class LazyDependent(AbstractDependent[ty.Any]):
+    def __getattr__(self, name: str) -> ty.Any:
+        '''
+        dynamically build the dependent type on the fly
+        '''
+
+    def resolve(self) -> ty.Self:
+        return self
+"""
+
+
 @dataclass(kw_only=True, slots=True, frozen=True)
-class DependencyParam[T]:
+class DependencyParam:
     """Represents a parameter and its corresponding dependency node.
 
     This class encapsulates the relationship between a parameter and its
@@ -184,7 +196,7 @@ class DependencyParam[T]:
 
     name: str
     param: Parameter
-    dependency: "DependentNode[T]"
+    dependency: "DependentNode[ty.Any]"
 
     def build(self, **kwargs: ty.Any) -> ty.Any:
         """Build the dependency if needed, handling defaults and overrides."""
@@ -204,14 +216,14 @@ class DependencyParam[T]:
         I
     ](
         cls, dependent: type[I], param: inspect.Parameter, globalns: dict[str, ty.Any]
-    ) -> "DependencyParam[ty.Any]":
+    ) -> "DependencyParam":
         if isinstance(param.annotation, ty.ForwardRef):
             lazy_dep = ForwardDependent(param.annotation, globalns)
             dependency = ForwardDependentNode(
                 dependent=lazy_dep,
                 factory=lambda: None,
             )
-            return DependencyParam(name=param.name, param=param, dependency=dependency)
+            return cls(name=param.name, param=param, dependency=dependency)
         else:
             dependency = process_param(
                 dependent=dependent,
@@ -226,17 +238,25 @@ class DependentNode[T]:
     """
     A DAG node that represents a dependency
 
-    dependent: the dependent type that this node represents, e.g AuthService -> AuthService
-    factory: the factory function that creates the dependent, e.g cache_factory -> cache_factory, AuthService -> AuthService.__init__
-    dependencies: the dependencies of the dependent, e.g cache_factory -> redis, keyspace
+    Examples:
+    -----
+    ```python
+    @dag.node
+    class AuthService:
+        def __init__(self, redis: Redis, keyspace: str):
+            pass
+    ```
+
+    in this case:
+    - dependent: the dependent type that this node represents, e.g AuthService
+    - factory: the factory function that creates the dependent, e.g AuthService.__init__, auth_service_factory
+    - dependencies: the dependencies of the dependent, e.g redis: Redis, keyspace: str
     """
 
     dependent: "type[T] | ForwardDependent"
     default: Nullable[T] = NULL
     factory: ty.Callable[..., T]
-    dependency_params: list[DependencyParam[ty.Any]] = field(
-        default_factory=list, repr=False
-    )
+    dependency_params: list[DependencyParam] = field(default_factory=list, repr=False)
 
     @property
     def signature(self) -> inspect.Signature:
@@ -247,6 +267,47 @@ class DependentNode[T]:
         return inspect.Signature(
             parameters=parameters, return_annotation=self.dependent
         )
+
+    def resolve_forward_dependency(
+        self, dep: ForwardDependent, concrete_type: type
+    ) -> type:
+        """
+        Resolve a forward dependency and check for circular dependencies.
+        Returns the resolved type and its node.
+        """
+        resolved_type = dep.resolve()
+
+        # Check for circular dependencies
+        sub_params = get_full_typed_signature(resolved_type).parameters.values()
+        for sub_param in sub_params:
+            if sub_param.annotation is concrete_type:
+                raise CircularDependencyDetectedError([concrete_type, resolved_type])
+
+        return resolved_type
+
+    def get_dependency_resolution_info(
+        self, concrete_type: type
+    ) -> list[tuple[Parameter, "DependentNode[ty.Any]"]]:
+        """
+        Get a list of parameters and their resolved dependency types.
+        """
+        resolution_info: list[tuple[Parameter, "DependentNode[ty.Any]"]] = []
+
+        for dep_param in self.dependency_params:
+            param = dep_param.param
+            dep = dep_param.dependency.dependent
+
+            if is_builtin_type(dep):
+                continue
+
+            if isinstance(dep, ForwardDependent):
+                resolved_type = self.resolve_forward_dependency(dep, concrete_type)
+            else:
+                resolved_type = dep
+
+            resolved_node = DependentNode.from_node(resolved_type)
+            resolution_info.append((param, resolved_node))
+        return resolution_info
 
     def build_type_without_init(self) -> T:
         """
@@ -366,43 +427,6 @@ class DependentNode[T]:
         else:
             raise NotSupportedError(f"Unsupported node type: {type(node)}")
 
-    def resolve_forward_dependency(
-        self, dep: ForwardDependent, concrete_type: type
-    ) -> type:
-        """
-        Resolve a forward dependency and check for circular dependencies.
-        Returns the resolved type and its node.
-        """
-        resolved_type = dep.resolve()
-
-        # Check for circular dependencies
-        sub_params = get_full_typed_signature(resolved_type).parameters.values()
-        for sub_param in sub_params:
-            if sub_param.annotation is concrete_type:
-                raise CircularDependencyDetectedError([concrete_type, resolved_type])
-
-        return resolved_type
-
-    def get_dependency_resolution_info(
-        self, concrete_type: type
-    ) -> list[tuple[Parameter, type]]:
-        """
-        Get a list of parameters and their resolved dependency types.
-        """
-        resolution_info: list[tuple[Parameter, type]] = []
-
-        for dep_param in self.dependency_params:
-            param = dep_param.param
-            dep = dep_param.dependency.dependent
-
-            resolved_type: type = (
-                self.resolve_forward_dependency(dep, concrete_type)
-                if isinstance(dep, ForwardDependent)
-                else dep
-            )
-            resolution_info.append((param, resolved_type))
-        return resolution_info
-
 
 @dataclass(kw_only=True, slots=True, frozen=True)
 class ForwardDependentNode[T](DependentNode[T]):
@@ -421,3 +445,10 @@ class ForwardDependentNode[T](DependentNode[T]):
         concrete_type = self.dependent.resolve()
         real_node = DependentNode.from_node(concrete_type)
         return real_node.build(*args, **kwargs)
+
+
+"""
+
+class LazyDependentNode(AbstractDependent[ty.Any]):
+    dependent: LazyDependent
+"""

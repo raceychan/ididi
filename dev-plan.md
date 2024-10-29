@@ -6,3 +6,8 @@
 - [x] Forward references are not supported yet
 - [x] Circular dependencies detection are not implemented yet
 - [ ] Lazy dependencies are not implemented yet
+
+## version 0.1.2
+
+- [ ] reuse scopes
+- [ ] support more resource types

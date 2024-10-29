@@ -21,14 +21,12 @@ def is_builtin_singleton(t: ty.Any) -> ty.TypeGuard[BuiltinSingleton]:
     return t is None
 
 
-# TODO: write a typeguard to cast builtin types
 def is_builtin_type(
     t: ty.Any,
 ) -> ty.TypeGuard[PrimitiveBuiltins | ContainerBuiltins[ty.Any] | BuiltinSingleton]:
     is_primitive = is_builtin_primitive(t)
     is_container = is_builtin_container(t)
     is_singleton = is_builtin_singleton(t)
-
     return is_primitive or is_container or is_singleton
 
 
@@ -119,7 +117,6 @@ type Resource = ty.AsyncContextManager[ty.Any] | AsyncClosable
 
 
 def is_closable(type_: object) -> ty.TypeGuard[AsyncClosable]:
-    # TODO: add more resource types
     return isinstance(type_, AsyncClosable)
 
 

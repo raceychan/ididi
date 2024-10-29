@@ -186,6 +186,9 @@ class DependencyGraph:
                 await instance.close()
         self.reset()
 
+    def is_resource(self, instance: ty.Any) -> bool:
+        return is_closable(instance)
+
     def is_factory_override(
         self,
         factory_return_type: type[ty.Any],
@@ -239,13 +242,13 @@ class DependencyGraph:
         resolved_deps = overrides.copy()
 
         # Get resolution info for all dependencies
-        for param, resolved_type in node.get_dependency_resolution_info(concrete_type):
-            if param.name in resolved_deps or is_builtin_type(resolved_type):
+        for param, resolved_node in node.get_dependency_resolution_info(concrete_type):
+            resolved_type = ty.cast(type, resolved_node.dependent)
+            if param.name in resolved_deps:
                 continue
 
             # Register forward dependencies if needed
             if resolved_type not in self._nodes:
-                resolved_node = DependentNode.from_node(resolved_type)
                 self.register_node(resolved_node)
 
             # Resolve dependency if not already resolved
