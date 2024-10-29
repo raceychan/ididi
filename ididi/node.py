@@ -102,6 +102,40 @@ def process_param[
         raise NotSupportedError(f"Unsupported annotation type: {annotation}")
 
 
+@dataclass(frozen=True, slots=True)
+class ForwardDependent[T]:
+    """
+    A placeholder for a dependent type that hasn't been resolved yet.
+    Holds the forward reference and the namespace needed to resolve it later.
+    """
+
+    forward_ref: ty.ForwardRef
+    globalns: dict[str, ty.Any] = field(repr=False)
+
+    @property
+    def __name__(self) -> str:
+        return self.forward_ref.__forward_arg__
+
+    @property
+    def __mro__(self) -> tuple[type, ...]:
+        return (self.__class__, object)
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, ForwardDependent):
+            return self.forward_ref.__forward_arg__ == other.forward_ref.__forward_arg__
+        return False
+
+    def __hash__(self) -> int:
+        return hash(self.forward_ref.__forward_arg__)
+
+    def resolve(self) -> type[T]:
+        """Resolve the forward reference to its actual type."""
+        try:
+            return eval_type(self.forward_ref, self.globalns, self.globalns)
+        except NameError as e:
+            raise ForwardReferenceNotFoundError(self.forward_ref) from e
+
+
 @dataclass(kw_only=True, slots=True, frozen=True)
 class DependencyParam[T]:
     """Represents a parameter and its corresponding dependency node.
@@ -296,40 +330,6 @@ class DependentNode[T]:
             return cls._from_factory(node)
         else:
             raise NotSupportedError(f"Unsupported node type: {type(node)}")
-
-
-@dataclass(frozen=True, slots=True)
-class ForwardDependent[T]:
-    """
-    A placeholder for a dependent type that hasn't been resolved yet.
-    Holds the forward reference and the namespace needed to resolve it later.
-    """
-
-    forward_ref: ty.ForwardRef
-    globalns: dict[str, ty.Any] = field(repr=False)
-
-    @property
-    def __name__(self) -> str:
-        return self.forward_ref.__forward_arg__
-
-    @property
-    def __mro__(self) -> tuple[type, ...]:
-        return (self.__class__, object)
-
-    def __eq__(self, other: object) -> bool:
-        if isinstance(other, ForwardDependent):
-            return self.forward_ref.__forward_arg__ == other.forward_ref.__forward_arg__
-        return False
-
-    def __hash__(self) -> int:
-        return hash(self.forward_ref.__forward_arg__)
-
-    def resolve(self) -> type[T]:
-        """Resolve the forward reference to its actual type."""
-        try:
-            return eval_type(self.forward_ref, self.globalns, self.globalns)
-        except NameError as e:
-            raise ForwardReferenceNotFoundError(self.forward_ref) from e
 
 
 @dataclass(kw_only=True, slots=True, frozen=True)

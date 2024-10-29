@@ -1,6 +1,6 @@
 from graphviz import Digraph
 
-from ididi.graph import DependencyGraph
+from .ididi.graph import DependencyGraph
 
 
 def visualize_dependency_graph(
@@ -24,9 +24,9 @@ def visualize_dependency_graph(
         dot.node(str(id(node)), node_name)
 
     # Add edges
-    for node in graph.nodes:
-        for dependency in graph._dependencies[node]:
-            dot.edge(str(id(node)), str(id(dependency)))
+    for node in graph.nodes.values():
+        for dependency in node.dependency_params:
+            dot.edge(str(id(node)), str(id(dependency.dependency.dependent)))
 
     # Render the graph
     dot.render(output_path, format=format, cleanup=True)

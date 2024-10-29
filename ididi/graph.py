@@ -15,17 +15,11 @@ from .types import (
     Dependent,
     GraphNodes,
     GraphNodesView,
-    Neighbors,
-    NeighborsView,
     ResolvedInstances,
     TypeMappings,
     TypeMappingView,
 )
-from .utils.typing_utils import (
-    first_implementation,
-    get_full_typed_signature,
-    is_builtin_type,
-)
+from .utils.typing_utils import get_full_typed_signature, is_builtin_type
 
 
 class DependencyGraph:
@@ -49,20 +43,10 @@ class DependencyGraph:
     _resolved_instances: ResolvedInstances[ty.Any]
     _type_mappings: TypeMappings[ty.Any]
 
-    # required by query methods
-    _dependents: Neighbors[ty.Any]
-    _dependencies: Neighbors[ty.Any]
-
     def __init__(self):
         self._nodes = {}
         self._resolved_instances = {}
         self._type_mappings = defaultdict(list)
-
-        # Track who depends on whom
-        # we might be able to remove them
-        # these are for query methods
-        self._dependents = defaultdict(list)
-        self._dependencies = defaultdict(list)
 
     def __repr__(self) -> str:
         """
@@ -72,8 +56,8 @@ class DependencyGraph:
         - Root nodes (nodes with no dependents)
         - Leaf nodes (nodes with no dependencies)
         """
-        roots = {t for t in self._nodes if not self._dependents[t]}
-        leaves = {t for t in self._nodes if not self._dependencies[t]}
+        roots = {t for t in self._nodes if not self.get_dependent_types(t)}
+        leaves = {t for t in self._nodes if not self.get_dependency_types(t)}
 
         return (
             f"{self.__class__.__name__}("
@@ -90,14 +74,6 @@ class DependencyGraph:
     @property
     def type_mappings(self) -> TypeMappingView[ty.Any]:
         return MappingProxyType(self._type_mappings)
-
-    @property
-    def dependents(self) -> NeighborsView[ty.Any]:
-        return MappingProxyType(self._dependents)
-
-    @property
-    def dependencies(self) -> NeighborsView[ty.Any]:
-        return MappingProxyType(self._dependencies)
 
     def _resolve_concrete_type[I](self, abstract_type: type[I]) -> type[I]:
         """
@@ -133,16 +109,6 @@ class DependencyGraph:
             except ValueError:
                 continue
 
-        # Remove from dependencies
-        self._dependencies.pop(dependent_type, None)
-
-        # Remove from dependents
-        for deps in self._dependents.values():
-            try:
-                deps.remove(dependent_type)
-            except ValueError:
-                continue
-
         # Remove from resolved instances
         self._resolved_instances.pop(dependent_type, None)
 
@@ -160,8 +126,7 @@ class DependencyGraph:
         # Update type mappings for dependency resolution
         self._type_mappings[node.dependent].append(node.dependent)
 
-        # TODO: special hook for ForwardDependent
-
+        # TODO: special hook for ForwardDependent, as we can't register its mro here
         for base in node.dependent.__mro__[1:]:
             if base is not object:
                 self._type_mappings[base].append(node.dependent)
@@ -171,23 +136,32 @@ class DependencyGraph:
             if not is_builtin_type(dep_param.dependency.dependent):
                 self.register_node(dep_param.dependency)
 
-        # Update dependency relationships
-        for dep_param in node.dependency_params:
-            dep_type = dep_param.dependency.dependent
-            self._dependencies[node.dependent].append(dep_type)
-            self._dependents[dep_type].append(node.dependent)
-
-    def get_dependent_types(self, dependency_type: type) -> list[Dependent[ty.Any]]:
+    def get_dependent_types(
+        self, dependency_type: Dependent[ty.Any]
+    ) -> list[Dependent[ty.Any]]:
         """
         Get all types that depend on the given type.
         """
-        return self._dependents[dependency_type]
+        dependents: list[Dependent[ty.Any]] = []
+        for node_type, node in self._nodes.items():
+            for dep_param in node.dependency_params:
+                if dep_param.dependency.dependent == dependency_type:
+                    dependents.append(node_type)
+        return dependents
 
-    def get_dependency_types[I](self, dependent_type: type[I]) -> list[Dependent[I]]:
+    def get_dependency_types[I](self, dependent_type: Dependent[I]) -> list[type[I]]:
         """
         Get all types that the given type depends on.
         """
-        return self._dependencies[dependent_type]
+        node = self._nodes[dependent_type]
+        deps: list[type[I]] = []
+        for param in node.dependency_params:
+            dependent_type = param.dependency.dependent
+            if isinstance(dependent_type, ForwardDependent):
+                deps.append(dependent_type.resolve())
+            else:
+                deps.append(dependent_type)
+        return deps
 
     def get_initialization_order(self) -> list[Dependent[ty.Any]]:
         """
@@ -201,8 +175,9 @@ class DependencyGraph:
                 return
 
             visited.add(node_type)
-            for dep_type in self._dependencies[node_type]:
-                visit(dep_type)
+            node = self._nodes[node_type]
+            for dep_param in node.dependency_params:
+                visit(dep_param.dependency.dependent)
 
             order.append(node_type)
 
@@ -216,7 +191,6 @@ class DependencyGraph:
         Clear all resolved instances while maintaining registrations.
         """
         self._resolved_instances.clear()
-        # self._resolution_stack.clear()
 
     async def aclose(self) -> None:
         """
@@ -243,7 +217,7 @@ class DependencyGraph:
     ) -> bool:
         """
         Check if a factory or class is overriding an existing node.
-        if a we receive a factory with a return type X, we check if X is already registered in the graph.
+        If a we receive a factory with a return type X, we check if X is already registered in the graph.
         """
         is_factory = callable(factory_or_class) and not inspect.isclass(
             factory_or_class
@@ -288,7 +262,6 @@ class DependencyGraph:
         else:
             node = DependentNode.from_node(factory_or_class)
             self.register_node(node)
-
         return factory_or_class
 
     def resolve_params(self, node: DependentNode[ty.Any]) -> dict[str, type]:
@@ -299,7 +272,8 @@ class DependencyGraph:
         """
         # TODO: improve this
 
-        params: dict[str, type] = {}
+        node_dependent = node.dependent
+        dependent_params: dict[str, type] = {}
 
         for dep_param in node.dependency_params:
             if dep_param.dependency.dependent is inspect.Parameter.empty:
@@ -311,22 +285,19 @@ class DependencyGraph:
                 if isinstance(dep_param.dependency.dependent, ForwardDependent)
                 else dep_param.dependency.dependent
             )
+
             if is_builtin_type(param_type):
                 continue
 
-            try:
-                param_sig = get_full_typed_signature(param_type)
-            except ValueError:
-                continue
-            else:
-                for sub_param in param_sig.parameters.values():
-                    if sub_param.annotation is node.dependent:
-                        raise CircularDependencyDetectedError(
-                            [sub_param.annotation, param_type]
-                        )
-            params[param_name] = param_type
+            param_sig = get_full_typed_signature(param_type)
 
-        return params
+            for sub_param in param_sig.parameters.values():
+                if sub_param.annotation is node_dependent:
+                    raise CircularDependencyDetectedError(
+                        [sub_param.annotation, param_type]
+                    )
+            dependent_params[param_name] = param_type
+        return dependent_params
 
     def detect_circular_dependencies(self, node: DependentNode[ty.Any]) -> None:
         """
@@ -339,24 +310,6 @@ class DependencyGraph:
         Resolve a dependency and its complete dependency graph.
         Supports dependency overrides for testing.
         Overrides are only applied to the requested type, not its dependencies.
-        """
-
-        """
-
-        @dg.node
-        def database_factory(settings: Settings) -> IEngine:
-            return AsyncDatabase(make_async_engine(settings))
-        File "/graph.py", line 362, in resolve
-        instance = node.build(**resolved_deps)
-                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        File "/node.py", line 192, in build
-            return self.factory()
-           ^^^^^^^^^^^^^^
-        TypeError: Can't instantiate abstract class Cache without an implementation for abstract methods 'close', 'get', 'keyspace', 'lpop', 'remove', 'rpop', 'rpush', 'sadd', 'set', 'sismember'
-
-
-        TODO: catch this error and raise a more informative error message
-        this is because use did not provide an implementation for the Protocol
         """
 
         if is_builtin_type(dependency_type):
@@ -377,20 +330,14 @@ class DependencyGraph:
         # Start with overrides as the base
         resolved_deps = overrides.copy()
 
-        # filter out forwarddependent here by isinstance(dep, type) check
-        sub_dependencies = [
-            dep for dep in self._dependencies[concrete_type] if isinstance(dep, type)
-        ]
         for name, type_ in params.items():
-            # Skip if already provided in overrides
-            if name in resolved_deps:
+            # skip solved or unsolvable types
+            if name in resolved_deps or is_builtin_type(type_):
                 continue
 
-            matching_dep = first_implementation(type_, sub_dependencies)
-            if matching_dep and not is_builtin_type(matching_dep):
-                if matching_dep not in self._resolved_instances:
-                    self._resolved_instances[matching_dep] = self.resolve(matching_dep)
-                resolved_deps[name] = self._resolved_instances[matching_dep]
+            if type_ not in self._resolved_instances:
+                self._resolved_instances[type_] = self.resolve(type_)
+            resolved_deps[name] = self._resolved_instances[type_]
 
         # Build with merged dependencies
         instance = node.build(**resolved_deps)

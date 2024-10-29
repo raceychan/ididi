@@ -1,4 +1,3 @@
-from collections import defaultdict
 from types import MappingProxyType
 
 from .node import DependentNode, ForwardDependent
@@ -32,12 +31,12 @@ type TypeMappingView[I] = MappingProxyType[type[I], list[type[I]]]
 ### a readonly view of TypeMappings
 """
 
-type Neighbors[I] = defaultdict[Dependent[I], list[Dependent[I]]]
-"""
-### mapping a dependent to its neighbors, could be used to represent its dependents or its dependencies
-"""
+# type Neighbors[I] = defaultdict[Dependent[I], list[Dependent[I]]]
+# """
+# ### mapping a dependent to its neighbors, could be used to represent its dependents or its dependencies
+# """
 
-type NeighborsView[I] = MappingProxyType[type[I], list[Dependent[I]]]
-"""
-### a readonly view of Neighbors
-"""
+# type NeighborsView[I] = MappingProxyType[type[I], list[Dependent[I]]]
+# """
+# ### a readonly view of Neighbors
+# """

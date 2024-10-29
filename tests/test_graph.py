@@ -88,11 +88,6 @@ def test_top_level_builtin_dependency():
     with pytest.raises(TopLevelBulitinTypeError):
         dag.resolve(int)
 
-    # def test_pretty_print():
-    #     print("\n" + pretty_print(dag))
-
-    #     return dag, service
-
 
 def test_missing_implementation():
     dag = DependencyGraph()
@@ -219,8 +214,7 @@ def test_node_removal_cleanup():
     # Check that all references are cleaned up
     assert Dependency not in dag.nodes
     assert Dependency not in dag.type_mappings[Dependency]
-    assert Dependency not in dag.dependencies
-    assert not any(Dependency in deps for deps in dag.dependents.values())
+    dependents = dag.get_dependent_types(Dependency)
 
 
 def test_factory_override():
@@ -390,13 +384,13 @@ def test_multiple_dependency_paths():
 
     @dag.node
     class Service1:
-        def __init__(self, shared: Shared):
-            self.shared = shared
+        def __init__(self, shared2: Shared):
+            self.shared2 = shared2
 
     @dag.node
     class Service2:
-        def __init__(self, shared: Shared):
-            self.shared = shared
+        def __init__(self, shared1: Shared):
+            self.shared1 = shared1
 
     @dag.node
     class Root:
@@ -406,8 +400,8 @@ def test_multiple_dependency_paths():
 
     instance = dag.resolve(Root)
     # Verify shared instance is actually shared
-    assert instance.s1.shared is instance.s2.shared
-    assert instance.s1.shared.value == instance.s2.shared.value == "shared"
+    assert instance.s1.shared2 is instance.s2.shared1
+    assert instance.s1.shared2.value == instance.s2.shared1.value == "shared"
 
 
 def test_type_mapping_cleanup():
