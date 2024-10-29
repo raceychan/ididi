@@ -1,6 +1,6 @@
 from graphviz import Digraph
 
-from .ididi.graph import DependencyGraph
+from ididi.graph import DependencyGraph
 
 
 def visualize_dependency_graph(

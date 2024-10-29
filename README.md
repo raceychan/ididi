@@ -10,7 +10,7 @@ But it will remains simple and minimalistic.
 ## Install
 
 ```bash
-pip install ididi==0.1.0
+pip install ididi
 ```
 
 ## Usage
@@ -47,17 +47,17 @@ class AuthService:
     def __init__(self, db: Database):
         self.db = db
 
-@dag.node
+@dg.node
 class UserService:
     def __init__(self, repo: UserRepository, auth: AuthService):
         self.repo = repo
         self.auth = auth
 
-@dag.node
+@dg.node
 def auth_service_factory(database: Database) -> AuthService:
     return AuthService(db=database)
 
-service = dag.resolve(UserService)
+service = dg.resolve(UserService)
 assert isinstance(service.repo.db, Database)
 assert isinstance(service.repo.cache, Cache)
 assert isinstance(service.auth.db, Database)
@@ -67,19 +67,19 @@ assert service.auth.db is service.repo.db
 ### Runtime override is also supported
 
 ```python
-dag = DependencyGraph()
+dg = DependencyGraph()
 
 class Inner:
     def __init__(self, value: str = "inner"):
         self.value = value
 
-@dag.node
+@dg.node
 class Outer:
     def __init__(self, inner: Inner):
         self.inner = inner
 
 # Override nested dependency
-instance = dag.resolve(Outer, inner=Inner(value="overridden"))
+instance = dg.resolve(Outer, inner=Inner(value="overridden"))
 assert instance.inner.value == "overridden"
 ```
 
@@ -94,5 +94,5 @@ assert instance.inner.value == "overridden"
 - If a node has a factory, it will be used to create the instance.
 - Otherwise, the node will be created using the `__init__` method.
   - Parent's `__init__` will be called if no `__init__` is defined in the node.
-- bulitin types are not resolvable by nature, and it requires default value to be provided.
-- runtime override with `dag.resolve`
+- bulitin types are not resolvable by nature, it requires default value to be provided.
+- runtime override with `dg.resolve`

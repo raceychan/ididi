@@ -1202,7 +1202,9 @@ packages:
   name: ididi
   version: 0.1.1
   path: .
-  sha256: 584ee0357c1682fa007f892f6e44edc9c452da77cc5a08a55a78ff14c1d9bac5
+  sha256: 1f4cb965acfb6c19a5fa9203f33fa1db598c898254afd9db7b4672a6644e5755
+  requires_dist:
+  - python-graphviz<0.21,>=0.20.3 ; extra == 'graphviz'
   requires_python: '>=3.12'
   editable: true
 - kind: conda
