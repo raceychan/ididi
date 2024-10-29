@@ -97,6 +97,3 @@ assert instance.inner.value == "overridden"
 - bulitin types are not resolvable by nature, and it requires default value to be provided.
 - runtime override with `dag.resolve`
 
-## Development
-
-- [ ] Generic types are not supported yet
