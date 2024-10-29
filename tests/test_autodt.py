@@ -1,4 +1,4 @@
-from ididi.node import DependencyNode
+from ididi.node import DependentNode
 
 
 class Config:
@@ -38,7 +38,7 @@ def _dt_auth_service_factory():
 
 
 def test_node_types():
-    node = DependencyNode.from_node(UserService)
+    node = DependentNode.from_node(UserService)
     # print_dependency_tree(node)
     service = node.build()
     assert isinstance(service, UserService)

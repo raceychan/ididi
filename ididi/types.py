@@ -1,18 +1,18 @@
 from collections import defaultdict
 from types import MappingProxyType
 
-from .node import DependencyNode, ForwardDependent
+from .node import DependentNode, ForwardDependent
 
 type Dependent[I] = type[I] | ForwardDependent[I]
 """
 ### A dependent can be a concrete type or a forward reference
 """
 
-type GraphNodes[I] = dict[Dependent[I], DependencyNode[I]]
+type GraphNodes[I] = dict[Dependent[I], DependentNode[I]]
 """
 ### mapping a type to its corresponding node
 """
-type GraphNodesView[I] = MappingProxyType[Dependent[I], DependencyNode[I]]
+type GraphNodesView[I] = MappingProxyType[Dependent[I], DependentNode[I]]
 """
 ### a readonly view of GraphNodes
 """

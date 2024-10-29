@@ -96,4 +96,3 @@ assert instance.inner.value == "overridden"
   - Parent's `__init__` will be called if no `__init__` is defined in the node.
 - bulitin types are not resolvable by nature, and it requires default value to be provided.
 - runtime override with `dag.resolve`
-

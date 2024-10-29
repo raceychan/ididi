@@ -10,7 +10,7 @@ from .errors import (
     TopLevelBulitinTypeError,
     UnregisteredTypeError,
 )
-from .node import DependencyNode, ForwardDependent
+from .node import DependentNode, ForwardDependent
 from .types import (
     Dependent,
     GraphNodes,
@@ -34,7 +34,7 @@ class DependencyGraph:
     A dependency DAG (Directed Acyclic Graph) that manages dependency nodes and their relationships.
 
     ### Attributes:
-    #### nodes: dict[type, DependencyNode]
+    #### nodes: dict[type, DependentNode]
     mapping a type to its corresponding node
 
     #### resolved_instances: dict[type, object]
@@ -114,7 +114,7 @@ class DependencyGraph:
             raise MultipleImplementationsError(abstract_type, implementations)
         return next(iter(implementations))
 
-    def remove_node(self, node: DependencyNode[ty.Any]) -> None:
+    def remove_node(self, node: DependentNode[ty.Any]) -> None:
         """
         Remove a node from the graph and clean up all its references.
         """
@@ -146,7 +146,7 @@ class DependencyGraph:
         # Remove from resolved instances
         self._resolved_instances.pop(dependent_type, None)
 
-    def register_node(self, node: DependencyNode[ty.Any]) -> None:
+    def register_node(self, node: DependentNode[ty.Any]) -> None:
         """
         Register a dependency node and update dependency relationships.
         Automatically registers any unregistered dependencies.
@@ -253,7 +253,7 @@ class DependencyGraph:
         return is_factory and has_return_type and is_registered_node
 
     def replace_node(
-        self, old_node: DependencyNode[ty.Any], new_node: DependencyNode[ty.Any]
+        self, old_node: DependentNode[ty.Any], new_node: DependentNode[ty.Any]
     ) -> None:
         """
         Replace an existing node with a new node.
@@ -282,16 +282,16 @@ class DependencyGraph:
         # Handle factory override
         if self.is_factory_override(return_type, factory_or_class):
             # Create new node with the factory
-            node = DependencyNode.from_node(factory_or_class)
+            node = DependentNode.from_node(factory_or_class)
             old_node = self._nodes[return_type]
             self.replace_node(old_node, node)
         else:
-            node = DependencyNode.from_node(factory_or_class)
+            node = DependentNode.from_node(factory_or_class)
             self.register_node(node)
 
         return factory_or_class
 
-    def resolve_params(self, node: DependencyNode[ty.Any]) -> dict[str, type]:
+    def resolve_params(self, node: DependentNode[ty.Any]) -> dict[str, type]:
         """
         Resolve forward dependencies in params.
         if a param is a ForwardDependent, we resolve it to the actual type.
@@ -328,7 +328,7 @@ class DependencyGraph:
 
         return params
 
-    def detect_circular_dependencies(self, node: DependencyNode[ty.Any]) -> None:
+    def detect_circular_dependencies(self, node: DependentNode[ty.Any]) -> None:
         """
         Detect circular dependencies.
         """

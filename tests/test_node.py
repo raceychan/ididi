@@ -3,10 +3,10 @@ import typing as ty
 import pytest
 
 from ididi.errors import GenericDependencyNotSupportedError
-from ididi.node import DependencyNode
+from ididi.node import DependentNode
 
 
-def print_dependency_tree(node: DependencyNode[ty.Any], level: int = 0):
+def print_dependency_tree(node: DependentNode[ty.Any], level: int = 0):
     indent = "  " * level
     print(f"{indent} {node.dependent=}, {node.default=}")
     for dep in node.dependency_params:
@@ -59,17 +59,17 @@ class GenericService[T]:
 @pytest.fixture
 def basic_nodes():
     return {
-        "A": DependencyNode.from_node(A),
-        "B": DependencyNode.from_node(B),
-        "Config": DependencyNode.from_node(Config),
+        "A": DependentNode.from_node(A),
+        "B": DependentNode.from_node(B),
+        "Config": DependentNode.from_node(Config),
     }
 
 
 # def test_nested_dependencies():
-#     config_node = DependencyNode.from_node(Config)
-#     db_node = DependencyNode.from_node(Database)
+#     config_node = DependentNode.from_node(Config)
+#     db_node = DependentNode.from_node(Database)
 #     db_node.dependencies = [config_node]
-#     service_node = DependencyNode.from_node(Service)
+#     service_node = DependentNode.from_node(Service)
 #     service_node.dependencies = [db_node]
 
 #     service = service_node.build()
@@ -81,7 +81,7 @@ def basic_nodes():
 
 
 # def test_complex_dependency_injection():
-#     complex_node = DependencyNode.from_node(ComplexDependency)
+#     complex_node = DependentNode.from_node(ComplexDependency)
 
 #     complex_obj = complex_node.build()
 
@@ -97,11 +97,11 @@ def basic_nodes():
 
 
 def test_unsolvable_dependency():
-    DependencyNode.from_node(ComplexDependency)
+    DependentNode.from_node(ComplexDependency)
 
 
 def test_factory_function():
-    factory_node = DependencyNode.from_node(complex_factory)
+    factory_node = DependentNode.from_node(complex_factory)
 
     factory_obj = factory_node.build()
 
@@ -118,7 +118,7 @@ def test_factory_function():
 
 def test_generic_service_not_supported():
     with pytest.raises(GenericDependencyNotSupportedError):
-        DependencyNode.from_node(GenericService[str])
+        DependentNode.from_node(GenericService[str])
 
 
 # def test_forward_reference():
@@ -131,7 +131,7 @@ def test_generic_service_not_supported():
 #         def __init__(self):
 #             pass
 
-#     node = DependencyNode.from_node(ServiceA)
+#     node = DependentNode.from_node(ServiceA)
 #     assert any(
 #         isinstance(dep.dependency, ForwardDependency) for dep in node.dependency_params
 #     )
@@ -142,7 +142,7 @@ def test_empty_init():
     class EmptyService:
         pass
 
-    node = DependencyNode.from_node(EmptyService)
+    node = DependentNode.from_node(EmptyService)
     instance = node.build()
     assert isinstance(instance, EmptyService)
     assert not node.dependency_params
@@ -154,4 +154,4 @@ def test_factory_without_return_type():
         return object()
 
     with pytest.raises(ValueError, match="Factory must have a return type"):
-        DependencyNode.from_node(bad_factory)
+        DependentNode.from_node(bad_factory)
