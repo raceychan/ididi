@@ -1,9 +1,9 @@
 import typing as ty
 from types import MappingProxyType
 
-from .node import DependentNode, ForwardDependent
+from .node import DependentNode
 
-type NodeDependent = type | ForwardDependent
+type NodeDependent = type
 """
 ### A dependent can be a concrete type or a forward reference
 """

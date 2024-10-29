@@ -7,6 +7,7 @@ from ididi import DependencyGraph
 from ididi.errors import (
     ABCWithoutImplementationError,
     ForwardReferenceNotFoundError,
+    MissingImplementationError,
     ProtocolFacotryNotProvidedError,
 )
 

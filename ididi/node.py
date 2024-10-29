@@ -43,16 +43,6 @@ def is_class_with_empty_init(cls: type) -> bool:
     return is_undefined_init or is_protocol
 
 
-def is_implm_node(
-    depnode: "DependentNode[ty.Any] | ForwardDependentNode[ty.Any]", abstract_type: type
-) -> bool:
-    """
-    Check if the dependent type of the dependency node is a valid implementation of the abstract type.
-    """
-    dep_type = depnode.dependent
-    return isinstance(dep_type, ForwardDependent) or issubclass(dep_type, abstract_type)
-
-
 def search_factory[
     I
 ](dependent: type[I], globalvars: dict[str, ty.Any] | None = None) -> (
@@ -93,7 +83,7 @@ def process_param[
     # Handle builtin types
     if is_builtin_type(annotation):
         return DependentNode(
-            dependent=ty.cast(type[ty.Any], annotation),
+            dependent=Dependent(annotation),
             factory=annotation,
             default=default,
         )
@@ -121,27 +111,35 @@ class AbstractDependent[T]:
         """Resolve to concrete type."""
         raise NotImplementedError
 
+    @property
+    def dependent_type(self) -> type[T]:
+        raise NotImplementedError
+
 
 @dataclass(frozen=True, slots=True)
 class Dependent[T](AbstractDependent[T]):
     """Represents a concrete (non-forward-reference) dependent type."""
 
-    type_: type[T]
+    _dependent_type: type[T]
 
     @property
     def __name__(self) -> str:
-        return self.type_.__name__
+        return self._dependent_type.__name__
+
+    @property
+    def dependent_type(self) -> type[T]:
+        return self._dependent_type
 
     def resolve(self) -> type[T]:
-        return self.type_
+        return self._dependent_type
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Dependent):
             return False
-        return self.type_ == ty.cast(Dependent[ty.Any], other).type_
+        return self._dependent_type == ty.cast(Dependent[ty.Any], other)._dependent_type
 
     def __hash__(self) -> int:
-        return hash(self.type_)
+        return hash(self._dependent_type)
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,6 +156,10 @@ class ForwardDependent(AbstractDependent[ty.Any]):
     @property
     def __mro__(self) -> tuple[type, ...]:
         return (self.__class__, object)
+
+    @property
+    def dependent_type(self) -> type[ty.Any]:
+        return self.resolve()
 
     def resolve(self) -> type:
         try:
@@ -198,6 +200,10 @@ class DependencyParam:
     param: Parameter
     is_builtin: bool
     dependency: "DependentNode[ty.Any]"
+
+    @property
+    def dependent_type(self) -> type[ty.Any]:
+        return self.dependency.dependent_type
 
     def build(self, **kwargs: ty.Any) -> ty.Any:
         """Build the dependency if needed, handling defaults and overrides."""
@@ -261,10 +267,14 @@ class DependentNode[T]:
     - dependencies: the dependencies of the dependent, e.g redis: Redis, keyspace: str
     """
 
-    dependent: "type[T] | ForwardDependent"
+    dependent: AbstractDependent[T]
     default: Nullable[T] = NULL
     factory: ty.Callable[..., T]
     dependency_params: list[DependencyParam] = field(default_factory=list, repr=False)
+
+    @property
+    def dependent_type(self) -> type[T]:
+        return self.dependent.dependent_type
 
     @property
     def signature(self) -> inspect.Signature:
@@ -286,9 +296,9 @@ class DependentNode[T]:
         # Check for circular dependencies
         sub_params = get_full_typed_signature(resolved_type).parameters.values()
         for sub_param in sub_params:
-            if sub_param.annotation is self.dependent:
+            if sub_param.annotation is self.dependent.dependent_type:
                 raise CircularDependencyDetectedError(
-                    [ty.cast(type, self.dependent), resolved_type]
+                    [self.dependent.dependent_type, resolved_type]
                 )
 
         return resolved_type
@@ -307,9 +317,10 @@ class DependentNode[T]:
             if isinstance(dep, ForwardDependent):
                 resolved_type = self.resolve_forward_dependency(dep)
             else:
-                resolved_type = dep
+                resolved_type = dep.dependent_type
 
             resolved_node = DependentNode.from_node(resolved_type)
+
             new_dep_param = DependencyParam(
                 name=param.name,
                 param=param,
@@ -391,19 +402,20 @@ class DependentNode[T]:
         )
 
         node = DependentNode(
-            dependent=dependent,
+            dependent=Dependent(dependent),
             factory=factory,
             dependency_params=dependency_params,
         )
-
         return node
 
     @classmethod
     def _from_factory[I](cls, factory: ty.Callable[..., I]) -> "DependentNode[I]":
+
         signature = get_full_typed_signature(factory)
         if signature.return_annotation is inspect.Signature.empty:
             raise ValueError("Factory must have a return type")
         dependent = ty.cast(type[I], signature.return_annotation)
+
         return cls._create_node(
             dependent=dependent, factory=factory, signature=signature
         )
@@ -429,6 +441,7 @@ class DependentNode[T]:
 
     @classmethod
     def from_node[I](cls, node: type[I] | ty.Callable[..., I]) -> "DependentNode[I]":
+
         if is_class(node):
             return cls._from_class(ty.cast(type[I], node))
         elif callable(node):
