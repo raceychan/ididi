@@ -1200,9 +1200,9 @@ packages:
   timestamp: 1720853576813
 - kind: pypi
   name: ididi
-  version: 0.0.0
+  version: 0.1.1
   path: .
-  sha256: 7929f68af1a3e1f89e1f279fced2a6208f2418393ad65b2adffd06f4ec288340
+  sha256: 584ee0357c1682fa007f892f6e44edc9c452da77cc5a08a55a78ff14c1d9bac5
   requires_python: '>=3.12'
   editable: true
 - kind: conda

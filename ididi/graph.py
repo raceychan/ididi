@@ -269,7 +269,10 @@ class DependencyGraph:
         if isinstance(node.dependent, ForwardDependent):
             return
 
-        dependent_type = node.dependent.dependent_type
+        dependent_type: type = (
+            ty.get_origin(node.dependent.dependent_type)
+            or node.dependent.dependent_type
+        )
 
         if dependent_type in self._nodes:
             return  # Skip if already registered

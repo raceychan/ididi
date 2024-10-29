@@ -1,9 +1,16 @@
 [project]
 authors = [{name = "raceychan", email = "raceychan@gmail.com"}]
-description = "Add a short description here"
+description = "A dependency injection library for Python, Optimized for serverless applications"
 dynamic = ["version"]
 name = "ididi"
+readme = "README.md"
 requires-python = ">= 3.12"
+license = "MIT"
+documentation = "https://ididi.readthedocs.io"
+
+[build-system]
+build-backend = "hatchling.build"
+requires = ["hatchling"]
 
 [tool.hatch.version]
 path = "ididi/__init__.py"
