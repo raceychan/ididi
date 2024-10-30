@@ -77,10 +77,9 @@ def process_param[
         annotation = ty.get_origin(annotation)
 
     if annotation is inspect.Parameter.empty:
+        if param.kind in (Parameter.VAR_POSITIONAL, Parameter.KEYWORD_ONLY):
+            raise NotSupportedError(f"Unsupported parameter kind: {param.kind}")
         raise MissingAnnotationError(dependent, param_name)
-
-    if isinstance(annotation, ty.ForwardRef):
-        raise NotSupportedError("ForwardDependency should not be handled here")
 
     if isinstance(annotation, ty.TypeVar):
         raise GenericDependencyNotSupportedError(annotation)
@@ -102,14 +101,12 @@ def process_param[
 class AbstractDependent[T]:
     """Base class for all dependent types."""
 
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({self.__name__})"
+
     @property
     def __name__(self) -> str:
         """Return the name of the dependent type."""
-        raise NotImplementedError
-
-    @property
-    def __mro__(self) -> tuple[type, ...]:
-        """Return the method resolution order."""
         raise NotImplementedError
 
     def resolve(self) -> type[T]:
@@ -138,11 +135,6 @@ class Dependent[T](AbstractDependent[T]):
     def resolve(self) -> type[T]:
         return self._dependent_type
 
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, Dependent):
-            return False
-        return self._dependent_type == ty.cast(Dependent[ty.Any], other)._dependent_type
-
     def __hash__(self) -> int:
         return hash(self._dependent_type)
 
@@ -154,28 +146,11 @@ class ForwardDependent(AbstractDependent[ty.Any]):
     forward_ref: ty.ForwardRef
     globalns: dict[str, ty.Any] = field(repr=False)
 
-    @property
-    def __name__(self) -> str:
-        return self.forward_ref.__forward_arg__
-
-    @property
-    def __mro__(self) -> tuple[type, ...]:
-        return (self.__class__, object)
-
-    @property
-    def dependent_type(self) -> type[ty.Any]:
-        return self.resolve()
-
     def resolve(self) -> type:
         try:
             return eval_type(self.forward_ref, self.globalns, self.globalns)
         except NameError as e:
             raise ForwardReferenceNotFoundError(self.forward_ref) from e
-
-    def __eq__(self, other: object) -> bool:
-        if isinstance(other, ForwardDependent):
-            return self.forward_ref.__forward_arg__ == other.forward_ref.__forward_arg__
-        return False
 
     def __hash__(self) -> int:
         return hash(self.forward_ref.__forward_arg__)
@@ -232,7 +207,7 @@ class DependencyParam:
     ) -> "DependencyParam":
         if isinstance(param.annotation, ty.ForwardRef):
             lazy_dep = ForwardDependent(param.annotation, globalns)
-            dependency = ForwardDependentNode(
+            dependency = DependentNode(
                 dependent=lazy_dep,
                 factory=lambda: None,
             )
@@ -253,7 +228,7 @@ class DependencyParam:
             )
 
 
-@dataclass(kw_only=True, slots=True, frozen=True)
+@dataclass(kw_only=True, slots=True)
 class DependentNode[T]:
     """
     A DAG node that represents a dependency
@@ -278,9 +253,11 @@ class DependentNode[T]:
     factory: ty.Callable[..., T]
     dependency_params: list[DependencyParam] = field(default_factory=list, repr=False)
 
+    def __hash__(self) -> int:
+        return hash(self.dependent)
 
     def __repr__(self) -> str:
-        return f"{self.dependent.__name__}"
+        return f"{self.__class__.__name__}({self.dependent.__name__})"
 
     @property
     def dependent_type(self) -> type[T]:
@@ -314,11 +291,12 @@ class DependentNode[T]:
 
         return resolved_type
 
-    def update_forward_dependency_params(self) -> None:
+    def resolve_forward_dependent_nodes(
+        self,
+    ) -> ty.Generator["DependentNode[ty.Any]", None, None]:
         """
         Update all forward dependency params to their resolved types.
         """
-
         for index, dep_param in enumerate(self.dependency_params):
             param = dep_param.param
             dep = dep_param.dependency.dependent
@@ -326,11 +304,10 @@ class DependentNode[T]:
             if dep_param.is_builtin:
                 continue
 
-            if isinstance(dep, ForwardDependent):
-                resolved_type = self.resolve_forward_dependency(dep)
-            else:
-                resolved_type = dep.dependent_type
+            if not isinstance(dep, ForwardDependent):
+                continue
 
+            resolved_type = self.resolve_forward_dependency(dep)
             resolved_node = DependentNode.from_node(resolved_type)
             new_dep_param = DependencyParam(
                 name=param.name,
@@ -339,27 +316,26 @@ class DependentNode[T]:
                 is_builtin=False,
             )
             self.dependency_params[index] = new_dep_param
-            # self.is_resolved = True
+            yield resolved_node
 
     def build_type_without_dependencies(self) -> T:
         """
         This is mostly for types that can't be directly constrctured,
         e.g abc.ABC, protocols, builtin types that can't be instantiated without arguments.
         """
-        if is_not_null(self.default):
-            return self.default
-
         if isinstance(self.factory, type):
             if is_builtin_type(self.factory):
                 raise UnsolvableDependencyError(self.dependent.__name__, self.factory)
-            elif getattr(self.factory, "_is_protocol", False):
+
+            if getattr(self.factory, "_is_protocol", False):
                 raise ProtocolFacotryNotProvidedError(self.factory)
-            elif issubclass(self.factory, abc.ABC):
+
+            if issubclass(self.factory, abc.ABC):
                 if abstract_methods := self.factory.__abstractmethods__:
                     raise ABCWithoutImplementationError(self.factory, abstract_methods)
                 return ty.cast(ty.Callable[..., T], self.factory)()
-            else:
-                return ty.cast(type[T], self.factory)()
+
+            return ty.cast(type[T], self.factory)()
 
         try:
             return self.factory()
@@ -456,31 +432,5 @@ class DependentNode[T]:
             return cls._from_class(ty.cast(type[I], node))
         elif callable(node):
             return cls._from_factory(node)
-        else:
-            raise NotSupportedError(f"Unsupported node type: {type(node)}")
-
-
-@dataclass(kw_only=True, slots=True, frozen=True)
-class ForwardDependentNode[T](DependentNode[T]):
-    """
-    ### Description:
-    A special dependency node that lazily resolves forward references.
-
-    ### Why:
-    when we decorate a class that requires a forward reference with @dag.node,
-    we would not be able to find the forward ref class in the __globals__ attribute of the __init__ method, before the forward ref class is defined.
-    """
-
-    dependent: ForwardDependent
-
-    def build(self, *args: ty.Any, **kwargs: ty.Any) -> T:
-        concrete_type = self.dependent.resolve()
-        real_node = DependentNode.from_node(concrete_type)
-        return real_node.build(*args, **kwargs)
-
-
-"""
-
-class LazyDependentNode(AbstractDependent[ty.Any]):
-    dependent: LazyDependent
-"""
+        # else:
+        #     raise NotSupportedError(f"Unsupported node type: {type(node)}")

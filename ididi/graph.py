@@ -40,6 +40,7 @@ class DependencyGraph:
         self._nodes: GraphNodes[ty.Any] = {}
         self._resolved_instances: ResolvedInstances = {}
         self._type_mappings: TypeMappings = defaultdict(list)
+        self._resolved_nodes: set[DependentNode[ty.Any]] = set()
 
     def __repr__(self) -> str:
         """
@@ -67,25 +68,6 @@ class DependencyGraph:
     @property
     def type_mappings(self) -> TypeMappingView:
         return MappingProxyType(self._type_mappings)
-
-    def _resolve_concrete_type(self, abstract_type: type) -> type:
-        """
-        Resolve abstract type to concrete implementation.
-        """
-        # If the type is already concrete and registered, return it
-        if abstract_type in self._nodes:
-            return abstract_type
-
-        implementations: list[type] = self._type_mappings.get(abstract_type, [])
-
-        if not implementations:
-            raise MissingImplementationError(abstract_type)
-
-        if len(implementations) > 1:
-            raise MultipleImplementationsError(abstract_type, implementations)
-
-        first_implementations = implementations[0]
-        return first_implementations
 
     def remove_node(self, node: DependentNode[ty.Any]) -> None:
         """
@@ -216,7 +198,44 @@ class DependencyGraph:
     #     """
     #     node.update_forward_dependency_params()
     #     """
-    
+
+    def _resolve_concrete_type(self, abstract_type: type) -> type:
+        """
+        Resolve abstract type to concrete implementation.
+        """
+        # If the type is already concrete and registered, return it
+        if abstract_type in self._nodes:
+            return abstract_type
+
+        implementations: list[type] | None = self._type_mappings.get(abstract_type)
+
+        if not implementations:
+            raise MissingImplementationError(abstract_type)
+
+        if len(implementations) > 1:
+            raise MultipleImplementationsError(abstract_type, implementations)
+
+        first_implementations = implementations[0]
+        return first_implementations
+
+    def resolve_type(self, dependency_type: type) -> DependentNode[ty.Any]:
+        """
+        figure out when we can just skip this part
+        """
+        try:
+            concrete_type = self._resolve_concrete_type(dependency_type)
+        except MissingImplementationError:
+            # is compatible with direct dg.resolve(type) calls
+            node = DependentNode.from_node(dependency_type)
+            self.register_node(node)
+        else:
+            node = self._nodes[concrete_type]
+
+        if node not in self._resolved_nodes:
+            for resolved_node in node.resolve_forward_dependent_nodes():
+                self.register_node(resolved_node)
+            self._resolved_nodes.add(node)
+        return node
 
     def resolve(self, dependency_type: NodeDependent, /, **overrides: ty.Any) -> ty.Any:
         """
@@ -224,37 +243,23 @@ class DependencyGraph:
         Supports dependency overrides for testing.
         Overrides are only applied to the requested type, not its dependencies.
         """
-
         if is_builtin_type(dependency_type):
             raise TopLevelBulitinTypeError(dependency_type)
 
         if dependency_type in self._resolved_instances:
             return self._resolved_instances[dependency_type]
 
-        try:
-            concrete_type = self._resolve_concrete_type(dependency_type)
-        except MissingImplementationError:
-            # compatible with direct dg.resolve(type) call
-            node = DependentNode.from_node(dependency_type)
-            self.register_node(node)
-        else:
-            node = self._nodes[concrete_type]
+        node = self.resolve_type(dependency_type)
 
         resolved_deps = overrides.copy()
-
-        # we detect circular dependencies here
-        node.update_forward_dependency_params()
 
         # Get resolution info for all dependencies
         for dep_param in node.dependency_params:
             resolved_node = dep_param.dependency
             resolved_type = resolved_node.dependent.dependent_type
+
             if dep_param.name in resolved_deps or dep_param.is_builtin:
                 continue
-
-            # Register forward dependencies if needed
-            if resolved_type not in self._nodes:
-                self.register_node(resolved_node)
 
             # Resolve dependency if not already resolved
             if resolved_type not in self._resolved_instances:
