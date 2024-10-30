@@ -2,10 +2,9 @@
 
 ## Introduction
 
-ididi is a dependency injection library for Python. It allows you to define dependencies in a declarative way and resolve them at runtime.
+ididi is a zero-configuration, minimal-code-intrusiveness dependency injection library for Python that works out of the box.
 
-ididi is under active, heavy development. The API is not stable and will change.
-But it will remains simple and minimalistic.
+It allows you to define dependencies in a declarative way without any boilerplate code.
 
 ## Install
 

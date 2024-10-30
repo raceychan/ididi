@@ -2,7 +2,7 @@ import typing as ty
 
 import pytest
 
-from ididi.errors import GenericDependencyNotSupportedError
+from ididi.errors import GenericDependencyNotSupportedError, MissingAnnotationError
 from ididi.node import DependentNode
 
 
@@ -155,3 +155,15 @@ def test_factory_without_return_type():
 
     with pytest.raises(ValueError, match="Factory must have a return type"):
         DependentNode.from_node(bad_factory)
+
+
+
+def test_node_without_annotation():
+    
+    class Service:
+        def __init__(self, a):
+            self.a = a
+
+    with pytest.raises(MissingAnnotationError):
+        DependentNode.from_node(Service)
+

@@ -7,7 +7,6 @@ from .errors import (
     MissingImplementationError,
     MultipleImplementationsError,
     TopLevelBulitinTypeError,
-    UnregisteredTypeError,
 )
 from .node import AbstractDependent, DependentNode, ForwardDependent
 from .types import (
@@ -37,15 +36,10 @@ class DependencyGraph:
     mapping abstract type to its implementations
     """
 
-    # core
-    _nodes: GraphNodes[ty.Any]
-    _resolved_instances: ResolvedInstances
-    _type_mappings: TypeMappings
-
     def __init__(self):
-        self._nodes = {}
-        self._resolved_instances = {}
-        self._type_mappings = defaultdict(list)
+        self._nodes: GraphNodes[ty.Any] = {}
+        self._resolved_instances: ResolvedInstances = {}
+        self._type_mappings: TypeMappings = defaultdict(list)
 
     def __repr__(self) -> str:
         """
@@ -67,7 +61,7 @@ class DependencyGraph:
         )
 
     @property
-    def nodes(self) -> GraphNodesView[type]:
+    def nodes(self) -> GraphNodesView[ty.Any]:
         return MappingProxyType(self._nodes)
 
     @property
@@ -86,11 +80,12 @@ class DependencyGraph:
 
         if not implementations:
             raise MissingImplementationError(abstract_type)
+
         if len(implementations) > 1:
             raise MultipleImplementationsError(abstract_type, implementations)
 
-        first_implementation = next(iter(implementations))
-        return first_implementation
+        first_implementations = implementations[0]
+        return first_implementations
 
     def remove_node(self, node: DependentNode[ty.Any]) -> None:
         """
@@ -211,13 +206,19 @@ class DependencyGraph:
         self.remove_node(old_node)
         self.register_node(new_node)
 
-    def detect_circular_dependencies(self, node: DependentNode[ty.Any]) -> None:
-        """
-        Detect circular dependencies.
-        """
-        raise NotImplementedError
+    # def detect_circular_dependencies(self, node: DependentNode[ty.Any]) -> None:
+    #     """
+    #     Detect circular dependencies.
+    #     """
+    #     raise NotImplementedError
 
-    def resolve(self, dependency_type: NodeDependent, **overrides: ty.Any) -> ty.Any:
+    # def actualize_forward_nodes(self):
+    #     """
+    #     node.update_forward_dependency_params()
+    #     """
+    
+
+    def resolve(self, dependency_type: NodeDependent, /, **overrides: ty.Any) -> ty.Any:
         """
         Resolve a dependency and its complete dependency graph.
         Supports dependency overrides for testing.
@@ -230,15 +231,18 @@ class DependencyGraph:
         if dependency_type in self._resolved_instances:
             return self._resolved_instances[dependency_type]
 
-        concrete_type = self._resolve_concrete_type(dependency_type)
-
         try:
+            concrete_type = self._resolve_concrete_type(dependency_type)
+        except MissingImplementationError:
+            # compatible with direct dg.resolve(type) call
+            node = DependentNode.from_node(dependency_type)
+            self.register_node(node)
+        else:
             node = self._nodes[concrete_type]
-        except KeyError:
-            raise UnregisteredTypeError(concrete_type)
 
         resolved_deps = overrides.copy()
 
+        # we detect circular dependencies here
         node.update_forward_dependency_params()
 
         # Get resolution info for all dependencies

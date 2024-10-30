@@ -240,6 +240,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/packaging-24.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pluggy-1.5.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pytest-8.3.3-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/pytest-asyncio-0.24.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pytest-cov-5.0.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/python-3.12.0-hab00c5b_0_cpython.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/python_abi-3.12-5_cp312.conda
@@ -1202,7 +1203,7 @@ packages:
   name: ididi
   version: 0.1.1
   path: .
-  sha256: 1f4cb965acfb6c19a5fa9203f33fa1db598c898254afd9db7b4672a6644e5755
+  sha256: 1d27e1656fb8bd31b1b8d15be2581af4b4f18a5fb7a7dbc333e69c85942ae171
   requires_dist:
   - python-graphviz<0.21,>=0.20.3 ; extra == 'graphviz'
   requires_python: '>=3.12'
@@ -2190,6 +2191,24 @@ packages:
   - pkg:pypi/pytest?source=hash-mapping
   size: 258293
   timestamp: 1725977334143
+- kind: conda
+  name: pytest-asyncio
+  version: 0.24.0
+  build: pyhd8ed1ab_0
+  subdir: noarch
+  noarch: python
+  url: https://conda.anaconda.org/conda-forge/noarch/pytest-asyncio-0.24.0-pyhd8ed1ab_0.conda
+  sha256: 1ef38da98de2845c3c223814d509db2e107283a1d4ade3b83d3dab9fd3bb1f1d
+  md5: 885c2b716a56ecc117fd0471dd457f73
+  depends:
+  - pytest >=8.2,<9
+  - python >=3.8
+  license: Apache-2.0
+  license_family: APACHE
+  purls:
+  - pkg:pypi/pytest-asyncio?source=hash-mapping
+  size: 34504
+  timestamp: 1724334145017
 - kind: conda
   name: pytest-cov
   version: 5.0.0

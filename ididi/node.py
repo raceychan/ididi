@@ -43,12 +43,17 @@ def is_class_with_empty_init(cls: type) -> bool:
     return is_undefined_init or is_protocol
 
 
+"""
+TODO: search in global for factory,
+we might search for prefix '_di_'
+we can have _di_service_factory in the global namespace
 def search_factory[
     I
 ](dependent: type[I], globalvars: dict[str, ty.Any] | None = None) -> (
     ty.Callable[..., I] | None
 ):
     raise NotSupportedError("searching to be implemented")
+"""
 
 
 def process_param[
@@ -200,6 +205,7 @@ class DependencyParam:
     param: Parameter
     is_builtin: bool
     dependency: "DependentNode[ty.Any]"
+    # is_actualized: bool
 
     @property
     def dependent_type(self) -> type[ty.Any]:
@@ -272,6 +278,10 @@ class DependentNode[T]:
     factory: ty.Callable[..., T]
     dependency_params: list[DependencyParam] = field(default_factory=list, repr=False)
 
+
+    def __repr__(self) -> str:
+        return f"{self.dependent.__name__}"
+
     @property
     def dependent_type(self) -> type[T]:
         return self.dependent.dependent_type
@@ -291,6 +301,7 @@ class DependentNode[T]:
         Resolve a forward dependency and check for circular dependencies.
         Returns the resolved type and its node.
         """
+
         resolved_type = dep.resolve()
 
         # Check for circular dependencies
@@ -307,6 +318,7 @@ class DependentNode[T]:
         """
         Update all forward dependency params to their resolved types.
         """
+
         for index, dep_param in enumerate(self.dependency_params):
             param = dep_param.param
             dep = dep_param.dependency.dependent
@@ -320,7 +332,6 @@ class DependentNode[T]:
                 resolved_type = dep.dependent_type
 
             resolved_node = DependentNode.from_node(resolved_type)
-
             new_dep_param = DependencyParam(
                 name=param.name,
                 param=param,
@@ -328,8 +339,9 @@ class DependentNode[T]:
                 is_builtin=False,
             )
             self.dependency_params[index] = new_dep_param
+            # self.is_resolved = True
 
-    def build_type_without_init(self) -> T:
+    def build_type_without_dependencies(self) -> T:
         """
         This is mostly for types that can't be directly constrctured,
         e.g abc.ABC, protocols, builtin types that can't be instantiated without arguments.
@@ -362,7 +374,7 @@ class DependentNode[T]:
         kwargs override any dependencies or defaults.
         """
         if not self.dependency_params:
-            return self.build_type_without_init()
+            return self.build_type_without_dependencies()
 
         bound_args = self.signature.bind_partial()
 
@@ -427,7 +439,6 @@ class DependentNode[T]:
                 dependent = res
 
         if is_class_with_empty_init(dependent):
-            # a class without __init__
             return cls._create_node(
                 dependent=dependent,
                 factory=ty.cast(ty.Callable[..., I], dependent),
@@ -441,7 +452,6 @@ class DependentNode[T]:
 
     @classmethod
     def from_node[I](cls, node: type[I] | ty.Callable[..., I]) -> "DependentNode[I]":
-
         if is_class(node):
             return cls._from_class(ty.cast(type[I], node))
         elif callable(node):

@@ -118,13 +118,13 @@ class TopLevelBulitinTypeError(GraphError):
         )
 
 
-class UnregisteredTypeError(GraphError):
-    """
-    Raised when a type is not registered in the graph.
-    """
+# class UnregisteredTypeError(GraphError):
+#     """
+#     Raised when a type is not registered in the graph.
+#     """
 
-    def __init__(self, dependency_type: type):
-        super().__init__(f"No registration found for {dependency_type}")
+#     def __init__(self, dependency_type: type):
+#         super().__init__(f"Node {dependency_type} has not been registered")
 
 
 class MissingImplementationError(GraphError):

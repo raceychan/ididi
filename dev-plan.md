@@ -9,5 +9,7 @@
 
 ## version 0.1.2
 
+- [ ] Lazy dependencies
 - [ ] reuse scopes
 - [ ] support more resource types
+- [ ] improve circular dependency detection
