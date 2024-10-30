@@ -26,7 +26,7 @@ class NodeError(IDIDIError):
 
 
 class UnsolvableDependencyError(NodeError):
-    def __init__(self, param_name: str, required_type: type):
+    def __init__(self, param_name: str, required_type: ty.Any):
         self.param_name = param_name
         self.required_type = required_type
         super().__init__(
@@ -116,15 +116,6 @@ class TopLevelBulitinTypeError(GraphError):
         super().__init__(
             f"Using builtin type {dependency_type} as a top level dependency is not supported"
         )
-
-
-# class UnregisteredTypeError(GraphError):
-#     """
-#     Raised when a type is not registered in the graph.
-#     """
-
-#     def __init__(self, dependency_type: type):
-#         super().__init__(f"Node {dependency_type} has not been registered")
 
 
 class MissingImplementationError(GraphError):

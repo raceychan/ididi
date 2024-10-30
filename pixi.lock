@@ -1203,7 +1203,7 @@ packages:
   name: ididi
   version: 0.1.1
   path: .
-  sha256: 1d27e1656fb8bd31b1b8d15be2581af4b4f18a5fb7a7dbc333e69c85942ae171
+  sha256: 30dbcbad5d25264e999d2dcb6de2638b1f69132db974c5bb339c203e1be3bd16
   requires_dist:
   - python-graphviz<0.21,>=0.20.3 ; extra == 'graphviz'
   requires_python: '>=3.12'

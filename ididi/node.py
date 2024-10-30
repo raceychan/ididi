@@ -15,7 +15,7 @@ from .errors import (
     ProtocolFacotryNotProvidedError,
     UnsolvableDependencyError,
 )
-from .utils.param_utils import NULL, Nullable, is_not_null
+from .utils.param_utils import NULL, Nullable
 from .utils.typing_utils import (
     eval_type,
     get_full_typed_signature,
@@ -66,15 +66,18 @@ def process_param[
 ) -> "DependentNode[ty.Any]":
     """
     Process a parameter to create a dependency node.
-    Handles forward references, builtin types, classes, and generic types.
+    we might use a fancier way to implement this, such as Chain of Responsibility,
+    as we will have more and more cases to handle.
+    Handles forward references, builtin types, classes, and generic types, etc.
     """
     param_name = param.name
     default = param.default if param.default != inspect.Parameter.empty else NULL
 
     annotation = get_typed_annotation(param.annotation, globalns)
 
-    if hasattr(annotation, "__origin__"):
-        annotation = ty.get_origin(annotation)
+    # if hasattr(annotation, "__origin__"):
+    # annotation = ty.get_origin(annotation)
+    annotation = ty.get_origin(annotation) or annotation
 
     if annotation is inspect.Parameter.empty:
         if param.kind in (Parameter.VAR_POSITIONAL, Parameter.KEYWORD_ONLY):
@@ -84,6 +87,13 @@ def process_param[
     if isinstance(annotation, ty.TypeVar):
         raise GenericDependencyNotSupportedError(annotation)
 
+    # Solvable dependency, NOTE: order matters!
+    if annotation is types.UnionType:
+        union_types = ty.get_args(param.annotation)
+        # we do care which type is correct, it would be provided by the factory
+        if union_types:
+            return DependentNode.from_node(union_types[0])
+
     # Handle builtin types
     if is_builtin_type(annotation):
         return DependentNode(
@@ -91,10 +101,13 @@ def process_param[
             factory=annotation,
             default=default,
         )
-    elif isinstance(annotation, type):
+
+    # we might want to remove this, this is bug prone
+    # since any classes are instance of type
+    if isinstance(annotation, type):
         return DependentNode.from_node(annotation)
-    else:
-        raise NotSupportedError(f"Unsupported annotation type: {annotation}")
+
+    raise NotSupportedError(f"Unsupported annotation type: {annotation}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,7 +193,9 @@ class DependencyParam:
     param: Parameter
     is_builtin: bool
     dependency: "DependentNode[ty.Any]"
-    # is_actualized: bool
+
+    def __repr__(self) -> str:
+        return f"{self.param.name}: {self.dependency}"
 
     @property
     def dependent_type(self) -> type[ty.Any]:
@@ -220,11 +235,13 @@ class DependencyParam:
                 param=param,
                 globalns=globalns,
             )
+            is_builtin = is_builtin_type(dependency.dependent_type)
+
             return cls(
                 name=param.name,
                 param=param,
                 dependency=dependency,
-                is_builtin=is_builtin_type(param.annotation),
+                is_builtin=is_builtin,
             )
 
 
@@ -335,13 +352,11 @@ class DependentNode[T]:
                     raise ABCWithoutImplementationError(self.factory, abstract_methods)
                 return ty.cast(ty.Callable[..., T], self.factory)()
 
-            return ty.cast(type[T], self.factory)()
-
         try:
             return self.factory()
-        except Exception as e:
+        except TypeError as e:
             raise UnsolvableDependencyError(
-                str(self.dependent), type(self.factory)
+                str(self.dependent_type), self.factory
             ) from e
 
     def build(self, *args: ty.Any, **kwargs: ty.Any) -> T:
@@ -394,6 +409,7 @@ class DependentNode[T]:
             factory=factory,
             dependency_params=dependency_params,
         )
+
         return node
 
     @classmethod
@@ -432,5 +448,3 @@ class DependentNode[T]:
             return cls._from_class(ty.cast(type[I], node))
         elif callable(node):
             return cls._from_factory(node)
-        # else:
-        #     raise NotSupportedError(f"Unsupported node type: {type(node)}")

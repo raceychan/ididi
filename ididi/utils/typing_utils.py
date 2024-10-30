@@ -24,10 +24,15 @@ def is_builtin_singleton(t: ty.Any) -> ty.TypeGuard[BuiltinSingleton]:
 def is_builtin_type(
     t: ty.Any,
 ) -> ty.TypeGuard[PrimitiveBuiltins | ContainerBuiltins[ty.Any] | BuiltinSingleton]:
+    """
+    graph would ignore builtin type at resolve type
+    if we have something that has to be provided by default value
+    we should put it here
+    """
     is_primitive = is_builtin_primitive(t)
     is_container = is_builtin_container(t)
     is_singleton = is_builtin_singleton(t)
-    return is_primitive or is_container or is_singleton
+    return is_primitive or is_container or is_singleton or t is ty.Any
 
 
 def eval_type(

@@ -180,8 +180,15 @@ def test_weird_annotation():
         def __init__(self, a: int | str):
             self.a = a
 
-    with pytest.raises(NotSupportedError):
-        DependentNode.from_node(Weird)
+    f = DependentNode.from_node(Weird)
+    with pytest.raises(UnsolvableDependencyError):
+        f.build()
+
+    def weird_factory(a: int | str = 3) -> Weird:
+        return Weird(a)
+
+    f = DependentNode.from_node(weird_factory)
+    f.build()
 
 
 def test_not_implemented_abstract_methods():
