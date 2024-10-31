@@ -117,7 +117,6 @@ def test_multiple_implementations():
 
 def test_multiple_implementations_with_factory():
     dag = DependencyGraph()
-    dag = DependencyGraph()
 
     @dag.node
     class Repo1(Repository):  # type: ignore

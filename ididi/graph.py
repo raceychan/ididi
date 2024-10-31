@@ -91,8 +91,8 @@ class ResolutionRegistry:
     def clear(self) -> None:
         self._mappings.clear()
 
-    def get(self, dependent_type: type, /, default: ty.Any = None) -> ty.Any:
-        return self._mappings.get(dependent_type, default)
+    # def get(self, dependent_type: type, /, default: ty.Any = None) -> ty.Any:
+    #     return self._mappings.get(dependent_type, default)
 
     def register(self, dependent_type: type, instance: ty.Any) -> None:
         self._mappings[dependent_type] = instance

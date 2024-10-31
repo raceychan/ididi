@@ -66,6 +66,7 @@ python-graphviz = ">=0.20.3,<0.21"
 pytest = ">=8.3.3"
 pytest-cov = ">=4.1.0"
 pytest-asyncio = ">=0.24.0,<0.25"
+python-graphviz = ">=0.20.3,<0.21"
 
 [tool.pixi.feature.publish.dependencies]
 hatch = ">=1.13.0,<2"
