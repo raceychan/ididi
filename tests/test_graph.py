@@ -9,7 +9,7 @@ from ididi.errors import (
     TopLevelBulitinTypeError,
     UnsolvableDependencyError,
 )
-from ididi.graph import DependencyGraph
+from ididi.graph import DependencyGraph, is_closable
 
 dag = DependencyGraph()
 
@@ -212,11 +212,13 @@ def test_graph_repr():
         def __init__(self, leaf: LeafService):
             self.leaf = leaf
 
-    repr_str = str(dag)
+    repr_str = dag.__stats__()
     assert "nodes=2" in repr_str
     assert "resolved=0" in repr_str
     assert "RootService" in repr_str
     assert "LeafService" in repr_str
+
+    str(dag)
 
 
 def test_node_removal_cleanup():
@@ -324,8 +326,8 @@ def test_resource_type_check():
         async def close(self):
             pass
 
-    assert not dag.is_resource(NonResource())
-    assert dag.is_resource(Resource())
+    assert not is_closable(NonResource())
+    assert is_closable(Resource())
 
 
 def test_initialization_order():
@@ -430,6 +432,7 @@ def test_multiple_dependency_paths():
     assert instance.s1.shared2.value == instance.s2.shared1.value == "shared"
 
 
+@pytest.mark.debug
 def test_type_mapping_cleanup():
     dag = DependencyGraph()
 
@@ -449,4 +452,3 @@ def test_type_mapping_cleanup():
 
     # Verify type mapping is cleaned up
     assert Interface not in dag.type_mappings or not dag.type_mappings[Interface]
-

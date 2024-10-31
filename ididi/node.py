@@ -56,55 +56,6 @@ def search_factory[
 """
 
 
-def process_param[
-    I
-](
-    *,
-    dependent: type[I],
-    param: inspect.Parameter,
-    globalns: dict[str, ty.Any],
-) -> "DependentNode[ty.Any]":
-    """
-    Process a parameter to create a dependency node.
-    we might use a fancier way to implement this, such as Chain of Responsibility,
-    as we will have more and more cases to handle.
-    Handles forward references, builtin types, classes, and generic types, etc.
-    """
-    param_name = param.name
-    default = param.default if param.default != inspect.Parameter.empty else NULL
-
-    annotation = get_typed_annotation(param.annotation, globalns)
-    annotation = ty.get_origin(annotation) or annotation
-
-    if annotation is inspect.Parameter.empty:
-        if param.kind in (Parameter.VAR_POSITIONAL, Parameter.KEYWORD_ONLY):
-            raise NotSupportedError(f"Unsupported parameter kind: {param.kind}")
-        raise MissingAnnotationError(dependent, param_name)
-
-    if isinstance(annotation, ty.TypeVar):
-        raise GenericDependencyNotSupportedError(annotation)
-
-    # Solvable dependency, NOTE: order matters!
-    if annotation is types.UnionType:
-        union_types = ty.get_args(param.annotation)
-        # we do care which type is correct, it would be provided by the factory
-        if union_types:
-            return DependentNode.from_node(union_types[0])
-
-    # Handle builtin types
-    if is_builtin_type(annotation):
-        return DependentNode(
-            dependent=Dependent(annotation),
-            factory=annotation,
-            default=default,
-        )
-
-    if isinstance(annotation, type):
-        return DependentNode.from_node(annotation)
-
-    raise NotSupportedError(f"Unsupported annotation type: {annotation}")
-
-
 @dataclass(frozen=True, slots=True)
 class AbstractDependent[T]:
     """Base class for all dependent types."""
@@ -225,7 +176,7 @@ class DependencyParam:
                 name=param.name, param=param, dependency=dependency, is_builtin=False
             )
         else:
-            dependency = process_param(
+            dependency = DependentNode.from_param(
                 dependent=dependent,
                 param=param,
                 globalns=globalns,
@@ -343,7 +294,9 @@ class DependentNode[T]:
                 raise ProtocolFacotryNotProvidedError(self.factory)
 
             if issubclass(self.factory, abc.ABC):
-                if abstract_methods := self.factory.__abstractmethods__:
+                if abstract_methods := getattr(
+                    self.factory, "__abstractmethods__", None
+                ):
                     raise ABCWithoutImplementationError(self.factory, abstract_methods)
                 return ty.cast(ty.Callable[..., T], self.factory)()
 
@@ -443,3 +396,51 @@ class DependentNode[T]:
             return cls._from_class(ty.cast(type[I], node))
         elif callable(node):
             return cls._from_factory(node)
+
+    @classmethod
+    def from_param(
+        cls,
+        *,
+        dependent: type[ty.Any],
+        param: inspect.Parameter,
+        globalns: dict[str, ty.Any],
+    ) -> "DependentNode[ty.Any]":
+        """
+        Process a parameter to create a dependency node.
+        we might use a fancier way to implement this, such as Chain of Responsibility,
+        as we will have more and more cases to handle.
+        Handles forward references, builtin types, classes, and generic types, etc.
+        """
+        param_name = param.name
+        default = param.default if param.default != inspect.Parameter.empty else NULL
+
+        annotation = get_typed_annotation(param.annotation, globalns)
+        annotation = ty.get_origin(annotation) or annotation
+
+        if annotation is inspect.Parameter.empty:
+            if param.kind in (Parameter.VAR_POSITIONAL, Parameter.KEYWORD_ONLY):
+                raise NotSupportedError(f"Unsupported parameter kind: {param.kind}")
+            raise MissingAnnotationError(dependent, param_name)
+
+        if isinstance(annotation, ty.TypeVar):
+            raise GenericDependencyNotSupportedError(annotation)
+
+        # Solvable dependency, NOTE: order matters!
+        if annotation is types.UnionType:
+            union_types = ty.get_args(param.annotation)
+            # we do care which type is correct, it would be provided by the factory
+            if union_types:
+                return cls.from_node(union_types[0])
+
+        # Handle builtin types
+        if is_builtin_type(annotation):
+            return DependentNode(
+                dependent=Dependent(annotation),
+                factory=annotation,
+                default=default,
+            )
+
+        if isinstance(annotation, type):
+            return cls.from_node(annotation)
+
+        raise NotSupportedError(f"Unsupported annotation type: {annotation}")

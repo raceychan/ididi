@@ -25,14 +25,34 @@ def is_builtin_type(
     t: ty.Any,
 ) -> ty.TypeGuard[PrimitiveBuiltins | ContainerBuiltins[ty.Any] | BuiltinSingleton]:
     """
-    graph would ignore builtin type at resolve type
-    if we have something that has to be provided by default value
-    we should put it here
+    Builtin types are ignored at type resolving.
+    It must be provided by default value, or use a factory to override it.
+    typing.Any is also ignored at type resolving.
     """
+
+    # TODO: we might name this as unresolved_type as corner cases increase.
     is_primitive = is_builtin_primitive(t)
     is_container = is_builtin_container(t)
     is_singleton = is_builtin_singleton(t)
-    return is_primitive or is_container or is_singleton or t is ty.Any
+    return is_primitive or is_container or is_singleton or (t is ty.Any)
+
+
+def is_unresolved_type(t: ty.Any) -> ty.TypeGuard[ty.Any]:
+    """
+    Types that are not resolved at type resolving.
+    Builtin types are unresolvable, but we might have other cases.
+
+    Every unsolved type is a leaf node in the dependency graph.
+    they don't have any dependencies, and can't be built with direct call to factory.
+
+    Examples:
+    - builtin types
+    - `typing.Any`
+    - `typing.Union[typing.Any, int]`
+    - `typing.Optional[typing.Any]`
+    - `typing.Callable[[], int]`
+    """
+    raise NotImplementedError
 
 
 def eval_type(
@@ -114,6 +134,11 @@ def first_implementation(
 
 
 @ty.runtime_checkable
+class Closable(ty.Protocol):
+    def close(self) -> None: ...
+
+
+@ty.runtime_checkable
 class AsyncClosable(ty.Protocol):
     async def close(self) -> ty.Coroutine[ty.Any, ty.Any, None]: ...
 
@@ -129,3 +154,7 @@ def is_async_context_manager(
     type_: object,
 ) -> ty.TypeGuard[ty.AsyncContextManager[ty.Any]]:
     return isinstance(type_, ty.AsyncContextManager)
+
+
+# def is_resource(instance: ty.Any) -> ty.TypeGuard[Resource]:
+#     return is_closable(instance)
