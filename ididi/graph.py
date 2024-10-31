@@ -194,11 +194,6 @@ class DependencyGraph:
     #     """
     #     raise NotImplementedError
 
-    # def actualize_forward_nodes(self):
-    #     """
-    #     node.update_forward_dependency_params()
-    #     """
-
     def _resolve_concrete_type(self, abstract_type: type) -> type:
         """
         Resolve abstract type to concrete implementation.
@@ -218,9 +213,9 @@ class DependencyGraph:
         first_implementations = implementations[0]
         return first_implementations
 
-    def resolve_type(self, dependency_type: type) -> DependentNode[ty.Any]:
+    def resolve_node(self, dependency_type: type) -> DependentNode[ty.Any]:
         """
-        figure out when we can just skip this part
+        Resolve which node should be used for the given type.
         """
         try:
             concrete_type = self._resolve_concrete_type(dependency_type)
@@ -232,8 +227,8 @@ class DependencyGraph:
             node = self._nodes[concrete_type]
 
         if node not in self._resolved_nodes:
-            for resolved_node in node.resolve_forward_dependent_nodes():
-                self.register_node(resolved_node)
+            for actulized_node in node.actualize_forward_deps():
+                self.register_node(actulized_node)
             self._resolved_nodes.add(node)
         return node
 
@@ -249,7 +244,7 @@ class DependencyGraph:
         if dependency_type in self._resolved_instances:
             return self._resolved_instances[dependency_type]
 
-        node = self.resolve_type(dependency_type)
+        node = self.resolve_node(dependency_type)
 
         resolved_deps = overrides.copy()
 

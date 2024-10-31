@@ -74,9 +74,6 @@ def process_param[
     default = param.default if param.default != inspect.Parameter.empty else NULL
 
     annotation = get_typed_annotation(param.annotation, globalns)
-
-    # if hasattr(annotation, "__origin__"):
-    # annotation = ty.get_origin(annotation)
     annotation = ty.get_origin(annotation) or annotation
 
     if annotation is inspect.Parameter.empty:
@@ -102,8 +99,6 @@ def process_param[
             default=default,
         )
 
-    # we might want to remove this, this is bug prone
-    # since any classes are instance of type
     if isinstance(annotation, type):
         return DependentNode.from_node(annotation)
 
@@ -308,7 +303,7 @@ class DependentNode[T]:
 
         return resolved_type
 
-    def resolve_forward_dependent_nodes(
+    def actualize_forward_deps(
         self,
     ) -> ty.Generator["DependentNode[ty.Any]", None, None]:
         """
