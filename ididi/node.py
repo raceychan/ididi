@@ -292,9 +292,23 @@ class DependentNode[T]:
             self.dependency_params[index] = new_dep_param
             yield resolved_node
 
-    # def __iter__(self) -> ty.Generator["DependentNode[ty.Any]", None, None]:
-    #     for dep_param in self.dependency_params:
-    #         yield dep_param.dependency
+    def iter_dependencies(self) -> ty.Generator["DependentNode[ty.Any]", None, None]:
+        for index, dep_param in enumerate(self.dependency_params):
+            param_name = dep_param.param.name
+            dep = dep_param.dependency.dependent
+            if isinstance(dep, ForwardDependent):
+                resolved_type = self.resolve_forward_dependency(dep)
+                resolved_node = DependentNode.from_node(resolved_type, self.config)
+                new_dep_param = DependencyParam(
+                    name=param_name,
+                    param=dep_param.param,
+                    dependency=resolved_node,
+                    is_builtin=False,
+                )
+                self.dependency_params[index] = new_dep_param
+                yield resolved_node
+            else:
+                yield dep_param.dependency
 
     def build_type_without_dependencies(self) -> T:
         """

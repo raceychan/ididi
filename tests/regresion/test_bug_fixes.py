@@ -64,7 +64,6 @@ def test_abc_with_implementation():
     dg.resolve(AbstractEngine)
 
 
-@pytest.mark.skip("TODO: implement abstract dependency")
 def test_abc_dependency_with_implementation():
     class AbstractEngine(abc.ABC):
         @abc.abstractmethod

@@ -47,8 +47,9 @@ class D:
     def __init__(self, a: A):
         self.a = a
 
+
 @pytest.mark.skip(reason="not implemented")
-def test_cycle_detection_2():
+def test_advanced_cycle_detection():
     """
     DependentNode.resolve_forward_dependency
 
