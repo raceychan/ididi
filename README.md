@@ -62,26 +62,6 @@ assert isinstance(service.repo.cache, Cache)
 assert isinstance(service.auth.db, Database)
 assert service.auth.db is service.repo.db
 ```
-
-### Runtime override is also supported
-
-```python
-dg = DependencyGraph()
-
-class Inner:
-    def __init__(self, value: str = "inner"):
-        self.value = value
-
-@dg.node
-class Outer:
-    def __init__(self, inner: Inner):
-        self.inner = inner
-
-# Override nested dependency
-instance = dg.resolve(Outer, inner=Inner(value="overridden"))
-assert instance.inner.value == "overridden"
-```
-
 ### Visualize the dependency graph(beta)
 
 ```python
@@ -134,6 +114,27 @@ class EmailService:
 dg.resolve(EmailService)
 vs.view
 ```
+![idid_visual](https://github.com/user-attachments/assets/e0d1b587-ebec-439c-816f-f2e08d298da4)
+
+### Runtime override is also supported
+
+```python
+dg = DependencyGraph()
+
+class Inner:
+    def __init__(self, value: str = "inner"):
+        self.value = value
+
+@dg.node
+class Outer:
+    def __init__(self, inner: Inner):
+        self.inner = inner
+
+# Override nested dependency
+instance = dg.resolve(Outer, inner=Inner(value="overridden"))
+assert instance.inner.value == "overridden"
+```
+
 
 ## Features
 
