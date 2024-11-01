@@ -1,3 +1,4 @@
+import functools
 import inspect
 import typing as ty
 from collections import defaultdict
@@ -11,14 +12,33 @@ from .errors import (
     TopLevelBulitinTypeError,
 )
 from .node import AbstractDependent, DependentNode, ForwardDependent
-from .types import (
-    GraphNodes,
-    GraphNodesView,
-    NodeDependent,
-    ResolvedInstances,
-    TypeMappings,
-)
+from .types import INodeConfig, NodeConfig, T_Factory, TDecor
 from .utils.typing_utils import get_full_typed_signature, is_builtin_type, is_closable
+
+type NodeDependent[T] = type[T]
+"""
+### A dependent can be a concrete type or a forward reference
+"""
+
+type GraphNodes[I] = dict[type[I], DependentNode[I]]
+"""
+### mapping a type to its corresponding node
+"""
+
+type GraphNodesView[I] = MappingProxyType[type[I], DependentNode[I]]
+"""
+### a readonly view of GraphNodes
+"""
+
+type ResolvedInstances[T] = dict[type[T], T]
+"""
+mapping a type to its resolved instance
+"""
+
+type TypeMappings[T] = dict[NodeDependent[T], list[NodeDependent[T]]]
+"""
+### mapping a type to its dependencies
+"""
 
 
 class ImplemntationRegistry:
@@ -87,9 +107,6 @@ class ResolutionRegistry:
 
     def clear(self) -> None:
         self._mappings.clear()
-
-    # def get(self, dependent_type: type, /, default: ty.Any = None) -> ty.Any:
-    #     return self._mappings.get(dependent_type, default)
 
     def register(self, dependent_type: type, instance: ty.Any) -> None:
         self._mappings[dependent_type] = instance
@@ -254,10 +271,12 @@ class DependencyGraph:
         await self._resolution_registry.close_all(close_order)
         self.reset()
 
-    def is_factory_override(
+    def is_factory_override[
+        **P
+    ](
         self,
         factory_return_type: type[ty.Any],
-        factory_or_class: ty.Callable[..., ty.Any] | type[ty.Any],
+        factory_or_class: T_Factory[ty.Any, P],
     ) -> bool:
         """
         Check if a factory or class is overriding an existing node.
@@ -298,7 +317,7 @@ class DependencyGraph:
         first_implementations = implementations[0]
         return first_implementations
 
-    def resolve_node[T](self, dependency_type: NodeDependent[T]) -> DependentNode[T]:
+    def resolve_node[T](self, dependency_type: type[T]) -> DependentNode[T]:
         """
         Resolve which node should be used for the given type and its dependencies.
         Returns the resolved node and a mapping of parameter names to their dependency types.
@@ -310,7 +329,7 @@ class DependencyGraph:
         try:
             concrete_type = self._resolve_concrete_type(dependency_type)
         except MissingImplementationError:
-            node = DependentNode.from_node(dependency_type)
+            node = DependentNode.from_node(dependency_type, NodeConfig())
             self.register_node(node)
         else:
             node = self._nodes[concrete_type]
@@ -322,33 +341,45 @@ class DependencyGraph:
             self._resolved_nodes.add(node)
         return node
 
+    # def build[
+    #     T, **P
+    # ](
+    #     self, dependency_type: T_Factory[T, P], /, *args: P.args, **kwargs: P.kwargs
+    # ) -> T:
+    #     node_dep_type = ty.cast(type[T], dependency_type)
+    #     node: DependentNode[T] = self.resolve_node(node_dep_type)
+    #     return node.build(*args, **kwargs)
+
     def resolve[
-        T
-    ](self, dependency_type: NodeDependent[T], /, **overrides: ty.Any) -> T:
+        T, **P
+    ](self, dependency_type: T_Factory[T, P], /, **overrides: ty.Any) -> T:
         """
-        Resolve a dependency and build its complete dependency graph.
+        Resolve a dependency and bild its complete dependency graph.
         Supports dependency overrides for testing.
         Overrides are only applied to the requested type, not its dependencies.
         """
-        if dependency_type in self._resolution_registry:
-            return self._resolution_registry[dependency_type]
+        node_dep_type = ty.cast(type[T], dependency_type)
 
-        node = self.resolve_node(dependency_type)
+        if node_dep_type in self._resolution_registry:
+            return self._resolution_registry[node_dep_type]
+
+        node: DependentNode[T] = self.resolve_node(node_dep_type)
         resolved_deps = overrides.copy()
 
         # Resolve and build all dependencies
         for dep_param in node.dependency_params:
+            sub_node = dep_param.dependency
             param_name = dep_param.name
-            dep_type = dep_param.dependent_type
+            dep_type = sub_node.dependent_type
             if param_name in resolved_deps or dep_param.is_builtin:
                 continue
 
-            if dep_type not in self._resolution_registry:
-                self._resolution_registry.register(dep_type, self.resolve(dep_type))
-            resolved_deps[param_name] = self._resolution_registry[dep_type]
+            resolved_dep = self.resolve(dep_type)
+            resolved_deps[param_name] = resolved_dep
 
         instance = node.build(**resolved_deps)
-        self._resolution_registry.register(dependency_type, instance)
+        if node.config.reuse:
+            self._resolution_registry.register(node_dep_type, instance)
         return instance
 
     def register_node(self, node: DependentNode[ty.Any]) -> None:
@@ -376,16 +407,31 @@ class DependencyGraph:
         self._type_registry.register(dependent_type)
 
     @ty.overload
-    def node[I](self, factory_or_class: type[I]) -> type[I]: ...
-
-    @ty.overload
-    def node[I](self, factory_or_class: ty.Callable[..., I]) -> ty.Callable[..., I]: ...
-
     def node[
         I
-    ](self, factory_or_class: ty.Callable[..., I] | type[I]) -> (
-        ty.Callable[..., I] | type[I]
-    ):
+    ](self, factory_or_class: type[I], /, **config: ty.Unpack[INodeConfig]) -> type[
+        I
+    ]: ...
+
+    @ty.overload
+    def node[
+        I, **P
+    ](
+        self, factory_or_class: ty.Callable[P, I], /, **config: ty.Unpack[INodeConfig]
+    ) -> ty.Callable[P, I]: ...
+
+    @ty.overload
+    def node[
+        I, **P
+    ](self, **config: ty.Unpack[INodeConfig]) -> TDecor[T_Factory[I, P]]: ...
+
+    def node[
+        I, **P
+    ](
+        self,
+        factory_or_class: T_Factory[I, P] | None = None,
+        **config: ty.Unpack[INodeConfig],
+    ) -> (T_Factory[I, P] | TDecor[T_Factory[I, P]]):
         """
         ### Decorator to register a node in the dependency graph.
 
@@ -411,13 +457,20 @@ class DependencyGraph:
         def auth_service_factory() -> AuthService: ...
         ```
         """
+        if not factory_or_class:
+            return ty.cast(
+                TDecor[T_Factory[I, P]],
+                functools.partial(self.node, **config),
+            )
+
+        node_config = NodeConfig(**config)
 
         return_type = get_full_typed_signature(factory_or_class).return_annotation
         if self.is_factory_override(return_type, factory_or_class):
-            new_node = DependentNode.from_node(factory_or_class)
+            new_node = DependentNode.from_node(factory_or_class, node_config)
             old_node = self._nodes[return_type]
             self.replace_node(old_node, new_node)
         else:
-            node = DependentNode.from_node(factory_or_class)
+            node = DependentNode.from_node(factory_or_class, node_config)
             self.register_node(node)
         return factory_or_class

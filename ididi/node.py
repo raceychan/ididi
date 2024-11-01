@@ -15,6 +15,7 @@ from .errors import (
     ProtocolFacotryNotProvidedError,
     UnsolvableDependencyError,
 )
+from .types import NodeConfig, T_Factory
 from .utils.param_utils import NULL, Nullable
 from .utils.typing_utils import (
     eval_type,
@@ -167,13 +168,18 @@ class DependencyParam:
     def from_param[
         I
     ](
-        cls, dependent: type[I], param: inspect.Parameter, globalns: dict[str, ty.Any]
+        cls,
+        dependent: type[I],
+        param: inspect.Parameter,
+        globalns: dict[str, ty.Any],
+        config: NodeConfig,
     ) -> "DependencyParam":
         if isinstance(param.annotation, ty.ForwardRef):
             lazy_dep = ForwardDependent(param.annotation, globalns)
             dependency = DependentNode(
                 dependent=lazy_dep,
                 factory=lambda: None,
+                config=config,
             )
             return cls(
                 name=param.name, param=param, dependency=dependency, is_builtin=False
@@ -183,6 +189,7 @@ class DependencyParam:
                 dependent=dependent,
                 param=param,
                 globalns=globalns,
+                config=config,
             )
             is_builtin = is_builtin_type(dependency.dependent_type)
 
@@ -218,6 +225,7 @@ class DependentNode[T]:
     default: Nullable[T] = NULL
     factory: ty.Callable[..., T]
     dependency_params: list[DependencyParam] = field(default_factory=list, repr=False)
+    config: NodeConfig
 
     def __hash__(self) -> int:
         return hash(self.dependent)
@@ -274,7 +282,7 @@ class DependentNode[T]:
                 continue
 
             resolved_type = self.resolve_forward_dependency(dep)
-            resolved_node = DependentNode.from_node(resolved_type)
+            resolved_node = DependentNode.from_node(resolved_type, self.config)
             new_dep_param = DependencyParam(
                 name=param.name,
                 param=param,
@@ -342,6 +350,7 @@ class DependentNode[T]:
         dependent: type[N],
         factory: ty.Callable[..., N],
         signature: inspect.Signature,
+        config: NodeConfig,
     ) -> "DependentNode[N]":
         """Create a new dependency node with the specified type."""
 
@@ -356,19 +365,23 @@ class DependentNode[T]:
             params = params[1:]
 
         dependency_params = list(
-            DependencyParam.from_param(dependent, param, globalns) for param in params
+            DependencyParam.from_param(dependent, param, globalns, config)
+            for param in params
         )
 
         node = DependentNode(
             dependent=Dependent(dependent),
             factory=factory,
             dependency_params=dependency_params,
+            config=config,
         )
 
         return node
 
     @classmethod
-    def _from_factory[I](cls, factory: ty.Callable[..., I]) -> "DependentNode[I]":
+    def _from_factory[
+        I, **P
+    ](cls, factory: T_Factory[I, P], config: NodeConfig) -> "DependentNode[I]":
 
         signature = get_full_typed_signature(factory)
         if signature.return_annotation is inspect.Signature.empty:
@@ -376,11 +389,13 @@ class DependentNode[T]:
         dependent = ty.cast(type[I], signature.return_annotation)
 
         return cls._create_node(
-            dependent=dependent, factory=factory, signature=signature
+            dependent=dependent, factory=factory, signature=signature, config=config
         )
 
     @classmethod
-    def _from_class[I](cls, dependent: type[I]) -> "DependentNode[I]":
+    def _from_class[
+        I
+    ](cls, dependent: type[I], config: NodeConfig) -> "DependentNode[I]":
         if hasattr(dependent, "__origin__"):
             if res := ty.get_origin(dependent):
                 dependent = res
@@ -390,19 +405,25 @@ class DependentNode[T]:
                 dependent=dependent,
                 factory=ty.cast(ty.Callable[..., I], dependent),
                 signature=EMPTY_SIGNATURE,
+                config=config,
             )
         signature = get_full_typed_signature(dependent.__init__)
         signature = signature.replace(return_annotation=dependent)
         return cls._create_node(
-            dependent=dependent, factory=dependent, signature=signature
+            dependent=dependent, factory=dependent, signature=signature, config=config
         )
 
     @classmethod
-    def from_node[I](cls, node: type[I] | ty.Callable[..., I]) -> "DependentNode[I]":
+    def from_node[
+        I, **P
+    ](
+        cls, node: T_Factory[I, P], config: NodeConfig | None = None
+    ) -> "DependentNode[I]":
+        config = config or NodeConfig()
         if is_class(node):
-            return cls._from_class(ty.cast(type[I], node))
+            return cls._from_class(ty.cast(type[I], node), config)
         elif callable(node):
-            return cls._from_factory(node)
+            return cls._from_factory(node, config)
 
     @classmethod
     def from_param(
@@ -411,6 +432,7 @@ class DependentNode[T]:
         dependent: type[ty.Any],
         param: inspect.Parameter,
         globalns: dict[str, ty.Any],
+        config: NodeConfig,
     ) -> "DependentNode[ty.Any]":
         """
         Process a parameter to create a dependency node.
@@ -437,7 +459,7 @@ class DependentNode[T]:
             union_types = ty.get_args(param.annotation)
             # we do care which type is correct, it would be provided by the factory
             if union_types:
-                return cls.from_node(union_types[0])
+                return cls.from_node(union_types[0], config)
 
         # Handle builtin types
         if is_builtin_type(annotation):
@@ -445,9 +467,10 @@ class DependentNode[T]:
                 dependent=Dependent(annotation),
                 factory=annotation,
                 default=default,
+                config=config,
             )
 
         if isinstance(annotation, type):
-            return cls.from_node(annotation)
+            return cls.from_node(annotation, config)
 
         raise NotSupportedError(f"Unsupported annotation type: {annotation}")

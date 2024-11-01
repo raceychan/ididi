@@ -1,4 +1,4 @@
-from ididi.node import DependentNode
+from ididi.node import DependentNode, NodeConfig
 
 
 class Config:

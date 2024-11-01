@@ -41,14 +41,14 @@ class AuthService:
         self.db = db
 
 
-@dag.node
+@dag.node(reuse=False)
 class UserService:
     def __init__(self, repo: UserRepository, auth: AuthService, name: str = "user"):
         self.repo = repo
         self.auth = auth
 
 
-@dag.node
+@dag.node(reuse=False)
 def auth_service_factory(database: Database) -> AuthService:
     return AuthService(db=database)
 
