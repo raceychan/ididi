@@ -12,7 +12,7 @@ from .errors import (
     TopLevelBulitinTypeError,
 )
 from .node import AbstractDependent, DependentNode, ForwardDependent
-from .types import INodeConfig, NodeConfig, T_Factory, TDecor
+from .types import IFactory, INodeConfig, NodeConfig, TDecor
 from .utils.typing_utils import get_full_typed_signature, is_builtin_type, is_closable
 
 type NodeDependent[T] = type[T]
@@ -272,12 +272,12 @@ class DependencyGraph:
         self.reset()
 
     def is_factory_override[
-        **P
+        I, **P
     ](
         self,
-        factory_return_type: type[ty.Any],
-        factory_or_class: T_Factory[ty.Any, P],
-    ) -> bool:
+        factory_return_type: type[I],
+        factory_or_class: IFactory[I, P] | type[I],
+    ) -> ty.TypeGuard[IFactory[I, P]]:
         """
         Check if a factory or class is overriding an existing node.
         If a we receive a factory with a return type X, we check if X is already registered in the graph.
@@ -343,7 +343,7 @@ class DependencyGraph:
 
     def resolve[
         T, **P
-    ](self, dependency_type: T_Factory[T, P], /, **overrides: ty.Any) -> T:
+    ](self, dependency_type: IFactory[T, P], /, **overrides: ty.Any) -> T:
         """
         Resolve a dependency and bild its complete dependency graph.
         Supports dependency overrides for testing.
@@ -408,21 +408,21 @@ class DependencyGraph:
     def node[
         I, **P
     ](
-        self, factory_or_class: ty.Callable[P, I], /, **config: ty.Unpack[INodeConfig]
-    ) -> ty.Callable[P, I]: ...
+        self, factory_or_class: IFactory[I, P], /, **config: ty.Unpack[INodeConfig]
+    ) -> IFactory[I, P]: ...
 
     @ty.overload
     def node[
         I, **P
-    ](self, **config: ty.Unpack[INodeConfig]) -> TDecor[T_Factory[I, P]]: ...
+    ](self, **config: ty.Unpack[INodeConfig]) -> TDecor[IFactory[I, P]]: ...
 
     def node[
         I, **P
     ](
         self,
-        factory_or_class: T_Factory[I, P] | None = None,
+        factory_or_class: IFactory[I, P] | type[I] | None = None,
         **config: ty.Unpack[INodeConfig],
-    ) -> (T_Factory[I, P] | TDecor[T_Factory[I, P]]):
+    ) -> (IFactory[I, P] | TDecor[IFactory[I, P]]):
         """
         ### Decorator to register a node in the dependency graph.
 
@@ -450,7 +450,7 @@ class DependencyGraph:
         """
         if not factory_or_class:
             return ty.cast(
-                TDecor[T_Factory[I, P]],
+                TDecor[IFactory[I, P]],
                 functools.partial(self.node, **config),
             )
 

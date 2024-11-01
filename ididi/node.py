@@ -15,7 +15,7 @@ from .errors import (
     ProtocolFacotryNotProvidedError,
     UnsolvableDependencyError,
 )
-from .types import NodeConfig, T_Factory
+from .types import IFactory, NodeConfig
 from .utils.param_utils import NULL, Nullable
 from .utils.typing_utils import (
     eval_type,
@@ -381,7 +381,7 @@ class DependentNode[T]:
     @classmethod
     def _from_factory[
         I, **P
-    ](cls, factory: T_Factory[I, P], config: NodeConfig) -> "DependentNode[I]":
+    ](cls, factory: IFactory[I, P], config: NodeConfig) -> "DependentNode[I]":
 
         signature = get_full_typed_signature(factory)
         if signature.return_annotation is inspect.Signature.empty:
@@ -417,13 +417,13 @@ class DependentNode[T]:
     def from_node[
         I, **P
     ](
-        cls, node: T_Factory[I, P], config: NodeConfig | None = None
+        cls, node: IFactory[I, P] | type[I], config: NodeConfig | None = None
     ) -> "DependentNode[I]":
         config = config or NodeConfig()
         if is_class(node):
             return cls._from_class(ty.cast(type[I], node), config)
         elif callable(node):
-            return cls._from_factory(node, config)
+            return cls._from_factory(ty.cast(IFactory[I, P], node), config)
 
     @classmethod
     def from_param(

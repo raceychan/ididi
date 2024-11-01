@@ -1,7 +1,7 @@
 import typing as ty
 from dataclasses import dataclass
 
-type T_Factory[I, **P] = ty.Callable[P, I] | type[I]
+type IFactory[I, **P] = ty.Callable[P, I] 
 type TDecor[T_Factory] = ty.Callable[[T_Factory], T_Factory]
 
 
