@@ -1,3 +1,5 @@
+import typing as ty
+
 from .graph import DependencyGraph
 from .node import DependentNode as DependentNode
 
@@ -18,21 +20,31 @@ class Visualizer:
         self._dot = dot
         self._graph_attrs = graph_attrs
 
+    @property
+    def dot(self) -> "Digraph | None":
+        return self._dot
+
+    @property
+    def view(self) -> "Digraph | None":
+        return self.make_graph().dot
+
     def make_graph(
         self,
         node_attr: dict[str, str] = {"color": "black"},
         edge_attr: dict[str, str] = {"color": "black"},
-    ):
-        """
-        # TODO: ignore builtin types
-        Convert DependencyGraph to Graphviz visualization
+    ) -> "Visualizer":
+        """Converting DependencyGraph to Graphviz visualization
 
         Args:
-            graph: Your DependencyGraph instance
-            output_path: Output file path (without extension)
-            format: Output format ('png', 'svg', 'pdf')
+            node_attr (dict[str, str], optional): Node attributes. Defaults to {"color": "black"}.
+            edge_attr (dict[str, str], optional): Edge attributes. Defaults to {"color": "black"}.
+
+        Returns:
+            Visualizer: Visualizer instance
         """
-        dot = Digraph(comment="Dependency Graph", graph_attr=self._graph_attrs)
+        dot = self._dot or Digraph(
+            comment="Dependency Graph", graph_attr=self._graph_attrs
+        )
 
         # Add edges
         for node in self._dg.nodes.values():
@@ -46,11 +58,15 @@ class Visualizer:
 
     def make_node[
         T
-    ](self, node: type[T], node_attr: dict[str, str], edge_attr: dict[str, str]):
+    ](
+        self, node: type[T], node_attr: dict[str, str], edge_attr: dict[str, str]
+    ) -> "Visualizer":
         """
         Create a graphviz graph for a single node
         """
-        dot = Digraph(comment=f"Dependency Graph {node}", graph_attr=self._graph_attrs)
+        dot = self._dot or Digraph(
+            comment=f"Dependency Graph {node}", graph_attr=self._graph_attrs
+        )
         self._dg.node(node)
         dep_node: DependentNode[T] = self._dg.nodes[node]
 
@@ -61,9 +77,6 @@ class Visualizer:
             dot.edge(node_repr, dependency_repr, **edge_attr)
         return self.__class__(self._dg, dot, self._graph_attrs)
 
-    def save(self, output_path: str, format: str = "png"):
+    def save(self, output_path: str, format: str = "png") -> None:
         # Render the graph
         self._dot.render(output_path, format=format, cleanup=True)
-
-    def show(self):
-        self._dot.view()

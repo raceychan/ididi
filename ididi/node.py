@@ -116,7 +116,10 @@ class ForwardDependent(AbstractDependent[ty.Any]):
 
 
 """
+@dataclass(frozen=True, slots=True)
 class LazyDependent(AbstractDependent[ty.Any]):
+    _dependent_type: type[T]
+
     def __getattr__(self, name: str) -> ty.Any:
         '''
         dynamically build the dependent type on the fly
@@ -280,6 +283,10 @@ class DependentNode[T]:
             )
             self.dependency_params[index] = new_dep_param
             yield resolved_node
+
+    # def __iter__(self) -> ty.Generator["DependentNode[ty.Any]", None, None]:
+    #     for dep_param in self.dependency_params:
+    #         yield dep_param.dependency
 
     def build_type_without_dependencies(self) -> T:
         """
