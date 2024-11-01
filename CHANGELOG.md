@@ -13,3 +13,13 @@
 ### Fixed
 
 - Factory return generic types
+
+### Features
+
+- [x] (beta) Visualizer to visualize the dependency graph
+
+### Improvements
+
+- [x] support more resource types
+- [x] support more builtin types
+- [ ] (beta) node config

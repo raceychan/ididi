@@ -1,7 +1,0 @@
-// Dependency Graph
-digraph {
-	"DependentNode(EmailService)" [label="DependentNode(EmailService)" color=black]
-	"DependentNode(EmailService)" -> "DependentNode(NotificationService)" [color=black]
-	"DependentNode(EmailService)" [label="DependentNode(EmailService)" color=black]
-	"DependentNode(EmailService)" -> "DependentNode(UserService)" [color=black]
-}

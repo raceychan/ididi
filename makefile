@@ -32,3 +32,9 @@ build:
 .PHONY: publish
 publish:
 	pixi run -e publish publish
+
+# .PHONY: release
+# release:
+# 	git tag -a v0.1.2 -m "Release version 0.1.2"
+# 	git push origin master
+# 	git push origin v0.1.2
