@@ -20,3 +20,15 @@ cov:
 visualize:
 	pixi run -e dev python -m illustrate
 
+
+.PHONY: patch
+patch:
+	pixi run -e publish hatch version patch
+
+.PHONY: build
+build:
+	pixi run -e publish hatch build
+
+.PHONY: publish
+publish:
+	pixi run -e publish publish

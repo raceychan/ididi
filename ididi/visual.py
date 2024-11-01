@@ -1,5 +1,3 @@
-import typing as ty
-
 from .graph import DependencyGraph
 from .node import DependentNode as DependentNode
 
