@@ -3,7 +3,6 @@ import typing as ty
 import pytest
 
 from ididi import DependencyGraph
-from ididi.errors import ProtocolFacotryNotProvidedError
 
 dg = DependencyGraph()
 

@@ -4,13 +4,12 @@ from abc import ABC, abstractmethod
 import pytest
 
 from ididi.errors import (
-    CircularDependencyDetectedError,
-    MissingImplementationError,
+    ABCWithoutImplementationError,
     MultipleImplementationsError,
     TopLevelBulitinTypeError,
     UnsolvableDependencyError,
 )
-from ididi.graph import DependencyGraph
+from ididi.graph import DependencyGraph, is_closable
 
 dag = DependencyGraph()
 
@@ -42,14 +41,14 @@ class AuthService:
         self.db = db
 
 
-@dag.node
+@dag.node(reuse=False)
 class UserService:
     def __init__(self, repo: UserRepository, auth: AuthService, name: str = "user"):
         self.repo = repo
         self.auth = auth
 
 
-@dag.node
+@dag.node(reuse=False)
 def auth_service_factory(database: Database) -> AuthService:
     return AuthService(db=database)
 
@@ -91,7 +90,7 @@ def test_top_level_builtin_dependency():
 
 def test_missing_implementation():
     dag = DependencyGraph()
-    with pytest.raises(MissingImplementationError):
+    with pytest.raises(ABCWithoutImplementationError):
         dag.resolve(Repository)
 
 
@@ -108,8 +107,33 @@ def test_multiple_implementations():
         def save(self) -> None:
             pass
 
+    # @dag.node
+    # def repo_factory() -> Repository:
+    #     return Repo2()
+
     with pytest.raises(MultipleImplementationsError):
         dag.resolve(Repository)
+
+
+def test_multiple_implementations_with_factory():
+    dag = DependencyGraph()
+
+    @dag.node
+    class Repo1(Repository):  # type: ignore
+        def save(self) -> None:
+            pass
+
+    @dag.node
+    class Repo2(Repository):  # type: ignore
+        def save(self) -> None:
+            pass
+
+    @dag.node
+    def repo_factory() -> Repository:
+        return Repo2()
+
+    repo = dag.resolve(Repository)
+    assert isinstance(repo, Repo2)
 
 
 def test_resource_cleanup():
@@ -150,8 +174,9 @@ def test_node_removal():
     node = dag.nodes[Service]
     dag.remove_node(node)
 
-    with pytest.raises(MissingImplementationError):
-        dag.resolve(Service)
+    assert Service not in dag.nodes
+
+    dag.resolve(Service)
 
 
 def test_graph_reset():
@@ -186,11 +211,13 @@ def test_graph_repr():
         def __init__(self, leaf: LeafService):
             self.leaf = leaf
 
-    repr_str = str(dag)
+    repr_str = dag.__stats__()
     assert "nodes=2" in repr_str
     assert "resolved=0" in repr_str
     assert "RootService" in repr_str
     assert "LeafService" in repr_str
+
+    str(dag)
 
 
 def test_node_removal_cleanup():
@@ -298,8 +325,8 @@ def test_resource_type_check():
         async def close(self):
             pass
 
-    assert not dag.is_resource(NonResource())
-    assert dag.is_resource(Resource())
+    assert not is_closable(NonResource())
+    assert is_closable(Resource())
 
 
 def test_initialization_order():
@@ -404,6 +431,7 @@ def test_multiple_dependency_paths():
     assert instance.s1.shared2.value == instance.s2.shared1.value == "shared"
 
 
+@pytest.mark.debug
 def test_type_mapping_cleanup():
     dag = DependencyGraph()
 
@@ -423,5 +451,3 @@ def test_type_mapping_cleanup():
 
     # Verify type mapping is cleaned up
     assert Interface not in dag.type_mappings or not dag.type_mappings[Interface]
-
-

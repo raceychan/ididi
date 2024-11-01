@@ -2,8 +2,13 @@ import typing as ty
 
 import pytest
 
-from ididi.errors import GenericDependencyNotSupportedError
-from ididi.node import DependentNode
+from ididi.errors import (
+    GenericDependencyNotSupportedError,
+    MissingAnnotationError,
+    NotSupportedError,
+    UnsolvableDependencyError,
+)
+from ididi.node import EMPTY_SIGNATURE, AbstractDependent, DependentNode
 
 
 def print_dependency_tree(node: DependentNode[ty.Any], level: int = 0):
@@ -96,8 +101,9 @@ def basic_nodes():
 #     assert complex_obj.kwargs == {}
 
 
-def test_unsolvable_dependency():
-    DependentNode.from_node(ComplexDependency)
+def test_complex_signature():
+    node = DependentNode.from_node(ComplexDependency)
+    assert len(node.dependency_params) == 5
 
 
 def test_factory_function():
@@ -121,20 +127,13 @@ def test_generic_service_not_supported():
         DependentNode.from_node(GenericService[str])
 
 
-# def test_forward_reference():
-#     # Test forward reference handling
-#     class ServiceA:
-#         def __init__(self, b: "ServiceB"):
-#             self.b = b
+def test_typed_annotation():
+    # Test forward reference handling
+    class ServiceA:
+        def __init__(self, nums: list[int]):
+            self.nums = nums
 
-#     class ServiceB:
-#         def __init__(self):
-#             pass
-
-#     node = DependentNode.from_node(ServiceA)
-#     assert any(
-#         isinstance(dep.dependency, ForwardDependency) for dep in node.dependency_params
-#     )
+    DependentNode.from_node(ServiceA)
 
 
 def test_empty_init():
@@ -155,3 +154,97 @@ def test_factory_without_return_type():
 
     with pytest.raises(ValueError, match="Factory must have a return type"):
         DependentNode.from_node(bad_factory)
+
+
+def test_node_without_annotation():
+
+    class Service:
+        def __init__(self, a):
+            self.a = a
+
+    with pytest.raises(MissingAnnotationError):
+        DependentNode.from_node(Service)
+
+
+def test_not_supported_annotation():
+    class Unsupported:
+        def __init__(self, exc: Exception):
+            self.exc = exc
+
+    with pytest.raises(NotSupportedError):
+        DependentNode.from_node(Unsupported)
+
+
+def test_weird_annotation():
+    class Weird:
+        def __init__(self, a: int | str):
+            self.a = a
+
+    f = DependentNode.from_node(Weird)
+    with pytest.raises(UnsolvableDependencyError):
+        f.build()
+
+    def weird_factory(a: int | str = 3) -> Weird:
+        return Weird(a)
+
+    f = DependentNode.from_node(weird_factory)
+    f.build()
+
+
+def test_not_implemented_abstract_methods():
+    class Abstract(AbstractDependent):
+        pass
+
+    abstract = Abstract()
+
+    with pytest.raises(NotImplementedError):
+        abstract.__name__
+
+    with pytest.raises(NotImplementedError):
+        abstract.resolve()
+
+    with pytest.raises(NotImplementedError):
+        abstract.dependent_type
+
+    with pytest.raises(NotImplementedError):
+        str(abstract)
+
+
+def test_varidc_keyword_args():
+    class Service:
+        def __init__(self, **kwargs: int):
+            self.kwargs = kwargs
+
+    node = DependentNode.from_node(Service)
+    node.build()
+
+
+def test_node_repr():
+    node = DependentNode.from_node(Service)
+    assert "Service" in str(node)
+
+
+def test_node_without_params():
+    node = DependentNode.from_node(object)
+    assert node.signature == EMPTY_SIGNATURE
+    assert "object" in str(node)
+    node.build()
+
+    with pytest.raises(UnsolvableDependencyError):
+        DependentNode.from_node(int).build()
+
+
+def test_forward_dependent_repr():
+    class A:
+        def __init__(self, b: "B"):
+            self.b = b
+
+    class B:
+        def __init__(self, a: int):
+            self.a = a
+
+    node = DependentNode.from_node(A)
+    node.dependent.resolve()
+
+    str(node)
+    str(node.dependent)

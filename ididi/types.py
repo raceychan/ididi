@@ -1,34 +1,20 @@
 import typing as ty
-from types import MappingProxyType
+from dataclasses import dataclass
 
-from .node import DependentNode
+type T_Factory[I, **P] = ty.Callable[P, I] | type[I]
+type TDecor[T_Factory] = ty.Callable[[T_Factory], T_Factory]
 
-type NodeDependent = type
-"""
-### A dependent can be a concrete type or a forward reference
-"""
 
-type GraphNodes[I] = dict[type[I], DependentNode[I]]
-"""
-### mapping a type to its corresponding node
-"""
+class INodeConfig(ty.TypedDict, total=False):
+    """
+    Only used for type hinting, typing.Unpack[INodeConfig]
+    For actual config, use NodeConfig
+    """
 
-type GraphNodesView[I] = MappingProxyType[type[I], DependentNode[I]]
-"""
-### a readonly view of GraphNodes
-"""
+    reuse: bool
+    # lazy: bool 
 
-type ResolvedInstances = dict[type, ty.Any]
-"""
-mapping a type to its resolved instance
-"""
 
-type TypeMappings = dict[NodeDependent, list[NodeDependent]]
-"""
-### mapping a type to its dependencies
-"""
-
-type TypeMappingView = MappingProxyType[NodeDependent, list[NodeDependent]]
-"""
-### a readonly view of TypeMappings
-"""
+@dataclass(kw_only=True, frozen=True, slots=True, unsafe_hash=True)
+class NodeConfig:
+    reuse: bool = True
