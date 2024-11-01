@@ -6,16 +6,15 @@ type TDecor[T_Factory] = ty.Callable[[T_Factory], T_Factory]
 
 
 class INodeConfig(ty.TypedDict, total=False):
-    reuse: bool
+    """
+    Only used for type hinting, typing.Unpack[INodeConfig]
+    For actual config, use NodeConfig
+    """
 
-@dataclass(frozen=True)
+    reuse: bool
+    # lazy: bool 
+
+
+@dataclass(kw_only=True, frozen=True, slots=True, unsafe_hash=True)
 class NodeConfig:
     reuse: bool = True
-
-
-
-# ConfigDefault: INodeConfig = INodeConfig(reuse=True)
-
-
-# def config_with_default(user_config: INodeConfig) -> INodeConfig:
-#     return INodeConfig(**(ConfigDefault | user_config))

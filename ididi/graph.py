@@ -341,15 +341,6 @@ class DependencyGraph:
             self._resolved_nodes.add(node)
         return node
 
-    # def build[
-    #     T, **P
-    # ](
-    #     self, dependency_type: T_Factory[T, P], /, *args: P.args, **kwargs: P.kwargs
-    # ) -> T:
-    #     node_dep_type = ty.cast(type[T], dependency_type)
-    #     node: DependentNode[T] = self.resolve_node(node_dep_type)
-    #     return node.build(*args, **kwargs)
-
     def resolve[
         T, **P
     ](self, dependency_type: T_Factory[T, P], /, **overrides: ty.Any) -> T:
