@@ -112,9 +112,11 @@ class EmailService:
         self.user = user
 
 dg.resolve(EmailService)
-vs.view
+vs.view # In jupyter notebook, or use save(path) otherwise
 ```
-![idid_visual](https://github.com/user-attachments/assets/e0d1b587-ebec-439c-816f-f2e08d298da4)
+
+![image](https://github.com/user-attachments/assets/b86be121-3957-43f3-b75c-3689a855d7fb)
+
 
 ### Runtime override is also supported
 
