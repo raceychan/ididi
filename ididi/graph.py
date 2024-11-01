@@ -341,15 +341,13 @@ class DependencyGraph:
             self._resolved_nodes.add(node)
         return node
 
-    def resolve[
-        T, **P
-    ](self, dependency_type: IFactory[T, P], /, **overrides: ty.Any) -> T:
+    def resolve[T, **P](self, dependency_type: type[T], /, **overrides: ty.Any) -> T:
         """
         Resolve a dependency and bild its complete dependency graph.
         Supports dependency overrides for testing.
         Overrides are only applied to the requested type, not its dependencies.
         """
-        node_dep_type = ty.cast(type[T], dependency_type)
+        node_dep_type = dependency_type
 
         if node_dep_type in self._resolution_registry:
             return self._resolution_registry[node_dep_type]
@@ -398,23 +396,13 @@ class DependencyGraph:
         self._type_registry.register(dependent_type)
 
     @ty.overload
-    def node[
-        I
-    ](self, factory_or_class: type[I], /, **config: ty.Unpack[INodeConfig]) -> type[
-        I
-    ]: ...
+    def node[I](self, factory_or_class: type[I]) -> type[I]: ...
 
     @ty.overload
-    def node[
-        I, **P
-    ](
-        self, factory_or_class: IFactory[I, P], /, **config: ty.Unpack[INodeConfig]
-    ) -> IFactory[I, P]: ...
+    def node[I, **P](self, factory_or_class: IFactory[I, P]) -> IFactory[I, P]: ...
 
     @ty.overload
-    def node[
-        I, **P
-    ](self, **config: ty.Unpack[INodeConfig]) -> TDecor[IFactory[I, P]]: ...
+    def node[I, **P](self, **config: ty.Unpack[INodeConfig]) -> TDecor: ...
 
     def node[
         I, **P
@@ -422,7 +410,7 @@ class DependencyGraph:
         self,
         factory_or_class: IFactory[I, P] | type[I] | None = None,
         **config: ty.Unpack[INodeConfig],
-    ) -> (IFactory[I, P] | TDecor[IFactory[I, P]]):
+    ) -> (IFactory[I, P] | type[I] | TDecor):
         """
         ### Decorator to register a node in the dependency graph.
 
@@ -450,7 +438,7 @@ class DependencyGraph:
         """
         if not factory_or_class:
             return ty.cast(
-                TDecor[IFactory[I, P]],
+                TDecor,
                 functools.partial(self.node, **config),
             )
 
