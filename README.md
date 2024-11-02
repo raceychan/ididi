@@ -62,6 +62,7 @@ assert isinstance(service.repo.cache, Cache)
 assert isinstance(service.auth.db, Database)
 assert service.auth.db is service.repo.db
 ```
+
 ### Visualize the dependency graph(beta)
 
 ```python
@@ -111,8 +112,8 @@ class EmailService:
         self.notification = notification
         self.user = user
 
-dg.resolve(EmailService)
-vs.view # In jupyter notebook, or use save(path) otherwise
+dg.static_resolve(EmailService)
+vs.view # use vs.view in jupyter notebook, or use vs.save(path, format) otherwise
 ```
 
 ![image](https://github.com/user-attachments/assets/b86be121-3957-43f3-b75c-3689a855d7fb)
