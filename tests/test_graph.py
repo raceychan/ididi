@@ -426,6 +426,8 @@ def test_multiple_dependency_paths():
             self.s2 = s2
 
     instance = dag.resolve(Root)
+    assert dag.resolution_registry[Shared] is instance.s1.shared2
+    assert dag.resolution_registry[Shared] is instance.s2.shared1
     # Verify shared instance is actually shared
     assert instance.s1.shared2 is instance.s2.shared1
     assert instance.s1.shared2.value == instance.s2.shared1.value == "shared"

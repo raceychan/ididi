@@ -35,3 +35,46 @@ def test_visualizer():
     vis = Visualizer(dag)
     vis.make_graph()
     vis.make_node(AuthService, {}, {})
+
+
+def test_complex_graph():
+    dg = DependencyGraph()
+    vs = Visualizer(dg)
+
+    class ConfigService:
+        def __init__(self, env: str = "test"):
+            self.env = env
+
+    class DatabaseService:
+        def __init__(self, config: ConfigService):
+            self.config = config
+
+    class CacheService:
+        def __init__(self, config: ConfigService):
+            self.config = config
+
+    class BaseService:
+        def __init__(self, db: DatabaseService):
+            self.db = db
+
+    class AuthService(BaseService):
+        def __init__(self, db: DatabaseService, cache: CacheService):
+            super().__init__(db)
+            self.cache = cache
+
+    class UserService:
+        def __init__(self, auth: AuthService, db: DatabaseService):
+            self.auth = auth
+            self.db = db
+
+    class NotificationService:
+        def __init__(self, config: ConfigService):
+            self.config = config
+
+    class EmailService:
+        def __init__(self, notification: NotificationService, user: UserService):
+            self.notification = notification
+            self.user = user
+
+    dg.static_resolve(EmailService)
+    vs.make_graph()  # .save("test_visual")

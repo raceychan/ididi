@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from ididi.graph import DependencyGraph
@@ -29,9 +31,14 @@ def dag():
     return DependencyGraph()
 
 
-def test_visualizer():
+def test_visualizer(tmp_path: Path):
+    d = tmp_path / "test_visual"
+    d.mkdir()
+    p = d / "hello.png"
+
     dag = DependencyGraph()
     dag.node(AuthService)
+    dag.static_resolve(AuthService)
     vis = Visualizer(dag)
-    vis.make_graph()
-    vis.make_node(AuthService, {}, {})
+    vis.view
+    vis.make_graph().save(p)

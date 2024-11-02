@@ -1703,9 +1703,9 @@ packages:
   timestamp: 1720853576813
 - kind: pypi
   name: ididi
-  version: 0.1.1
+  version: 0.1.2
   path: .
-  sha256: ff252b8d4c90d76c05e5f79167a0634f4ee4c087cb83c8d1c04248a59e6892bf
+  sha256: e0906c88250ff320fe1e29cec901731057517991399bfe27244edd818a737b2d
   requires_dist:
   - python-graphviz<0.21,>=0.20.3 ; extra == 'graphviz'
   requires_python: '>=3.12'

@@ -2,8 +2,6 @@ import functools
 import inspect
 import typing as ty
 from collections import defaultdict
-
-# from contextlib import AsyncExitStack, ExitStack
 from types import MappingProxyType, TracebackType
 
 from .errors import (
@@ -11,8 +9,8 @@ from .errors import (
     MultipleImplementationsError,
     TopLevelBulitinTypeError,
 )
-from .node import AbstractDependent, DependentNode, ForwardDependent
-from .types import IFactory, INodeConfig, NodeConfig, TDecor
+from .node import AbstractDependent, DependentNode
+from .types import GraphConfig, IFactory, INodeConfig, NodeConfig, TDecor
 from .utils.typing_utils import get_full_typed_signature, is_builtin_type, is_closable
 
 type NodeDependent[T] = type[T]
@@ -41,7 +39,7 @@ type TypeMappings[T] = dict[NodeDependent[T], list[NodeDependent[T]]]
 """
 
 
-class ImplemntationRegistry:
+class TypeRegistry:
     """
     A mapping of dependent types to their implementations.
     """
@@ -125,26 +123,14 @@ class DependencyGraph:
     """
     ### Description:
     A dependency DAG (Directed Acyclic Graph) that manages dependency nodes and their relationships.
-
-    ### Attributes:
-    #### nodes: dict[type, DependentNode]
-    mapping a type to its corresponding node
-
-    #### resolved_instances: dict[type, object]
-    mapping a type to its resolved instance, to be used for caching
-
-    #### type_mapping: dict[type, list[type]]
-    mapping abstract type to its implementations
     """
 
-    def __init__(self):
+    def __init__(self, static_resolve: bool = True):
         self._nodes: GraphNodes[ty.Any] = {}
-        # self._resolved_instances: ResolvedInstances = {}
         self._resolution_registry = ResolutionRegistry()
-        self._type_registry = ImplemntationRegistry()
-
-        # Set of resolved nodes, to avoid resolving the same node multiple times
-        self._resolved_nodes: dict[type, DependentNode[ty.Any]] = dict()
+        self._type_registry = TypeRegistry()
+        self._resolved_nodes: GraphNodes[ty.Any] = {}
+        self._config = GraphConfig(static_resolve=static_resolve)
 
     def __repr__(self) -> str:
         return (
@@ -176,6 +162,13 @@ class DependencyGraph:
         """
         should we reopen closed resources when entering a graph?
         """
+        if not self._config.static_resolve:
+            return self
+
+        for node_type in self._nodes:
+            if node_type in self._resolved_nodes:
+                continue
+            self.static_resolve(node_type)
         return self
 
     async def __aexit__(
@@ -191,8 +184,27 @@ class DependencyGraph:
         return MappingProxyType(self._nodes)
 
     @property
-    def type_mappings(self) -> ImplemntationRegistry:
+    def resolution_registry(self) -> ResolutionRegistry:
+        """
+        A mapping of dependent types to their resolved instances.
+        """
+        return self._resolution_registry
+
+    @property
+    def type_mappings(self) -> TypeRegistry:
+        """
+        A mapping of abstract types to their implementations.
+        """
         return self._type_registry
+
+    @property
+    def resolved_nodes(self) -> GraphNodesView[ty.Any]:
+        """
+        A node is considered resolved if all its dependencies have been resolved.
+        Which means all its forward dependencies have been resolved.
+        This would also include builtin types.
+        """
+        return MappingProxyType(self._resolved_nodes)
 
     def remove_node(self, node: DependentNode[ty.Any]) -> None:
         """
@@ -317,6 +329,33 @@ class DependencyGraph:
         first_implementations = implementations[0]
         return first_implementations
 
+    def _resolve_concrete_node[T](self, dependency_type: type[T]) -> DependentNode[T]:
+        try:
+            concrete_type = self._resolve_concrete_type(dependency_type)
+        except MissingImplementationError:
+            node = DependentNode.from_node(dependency_type, NodeConfig())
+            self.register_node(node)
+        else:
+            node = self._nodes[concrete_type]
+        return node
+
+    def static_resolve[T](self, dependency_type: type[T]) -> DependentNode[T]:
+        """
+        Resolve a dependency without building its instance.
+        """
+        dep_type = ty.get_origin(dependency_type) or dependency_type
+        if dep_type in self._resolved_nodes:
+            return self._resolved_nodes[dep_type]
+
+        node = self._resolve_concrete_node(dep_type)
+
+        for subnode in node.iter_dependencies():
+            resolved_node = self.static_resolve(subnode.dependent_type)
+            self.register_node(resolved_node)
+            self._resolved_nodes[subnode.dependent_type] = resolved_node
+        self._resolved_nodes[dep_type] = node
+        return node
+
     def resolve_node[T](self, dependency_type: type[T]) -> DependentNode[T]:
         """
         Resolve which node should be used for the given type and its dependencies.
@@ -329,19 +368,12 @@ class DependencyGraph:
         if is_builtin_type(dep_type):
             raise TopLevelBulitinTypeError(dep_type)
 
-        try:
-            concrete_type = self._resolve_concrete_type(dep_type)
-        except MissingImplementationError:
-            node = DependentNode.from_node(dep_type, NodeConfig())
-            self.register_node(node)
-        else:
-            node = self._nodes[concrete_type]
+        node = self._resolve_concrete_node(dep_type)
 
         # Handle forward dependencies
-        if dep_type not in self._resolved_nodes:
-            for subnode in node.actualize_forward_deps():
-                self.register_node(subnode)
-            self._resolved_nodes[dep_type] = node
+        for subnode in node.actualize_forward_deps():
+            self.register_node(subnode)
+        self._resolved_nodes[dep_type] = node
         return node
 
     def resolve[T, **P](self, dependency_type: type[T], /, **overrides: ty.Any) -> T:
@@ -358,7 +390,6 @@ class DependencyGraph:
         node: DependentNode[T] = self.resolve_node(node_dep_type)
         resolved_deps = overrides.copy()
 
-        # Resolve and build all dependencies
         for dep_param in node.dependency_params:
             sub_node = dep_param.dependency
             param_name = dep_param.name
@@ -382,16 +413,8 @@ class DependencyGraph:
         dep_type = node.dependent.dependent_type
         dependent_type: type = ty.get_origin(dep_type) or dep_type
 
-        if dependent_type in self._resolved_nodes:
-            return
-
-        if isinstance(node.dependent, ForwardDependent):
-            return
-
+        # Skip if registered
         if dependent_type in self._nodes:
-            return  # Skip if already registered
-
-        if is_builtin_type(dependent_type):
             return
 
         # Register main type

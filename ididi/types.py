@@ -24,8 +24,9 @@ class TDecor:
 
 class INodeConfig(ty.TypedDict, total=False):
     """
-    Only used for type hinting, typing.Unpack[INodeConfig]
-    For actual config, use NodeConfig
+    reuse: bool
+    ---
+    whether the resolved instanec should be reused if it already exists in the graph.
     """
 
     reuse: bool
@@ -35,3 +36,8 @@ class INodeConfig(ty.TypedDict, total=False):
 @dataclass(kw_only=True, frozen=True, slots=True, unsafe_hash=True)
 class NodeConfig:
     reuse: bool = True
+
+
+@dataclass(kw_only=True, frozen=True, slots=True, unsafe_hash=True)
+class GraphConfig:
+    static_resolve: bool = True

@@ -95,9 +95,8 @@ class Dependent[T](AbstractDependent[T]):
     def resolve(self) -> type[T]:
         return self._dependent_type
 
-    def __hash__(self) -> int:
-        return hash(self._dependent_type)
-
+    # def __hash__(self) -> int:
+        # return hash(f"{self.__class__.__name__}:{self._dependent_type}")
 
 @dataclass(frozen=True, slots=True)
 class ForwardDependent(AbstractDependent[ty.Any]):
@@ -112,8 +111,8 @@ class ForwardDependent(AbstractDependent[ty.Any]):
         except NameError as e:
             raise ForwardReferenceNotFoundError(self.forward_ref) from e
 
-    def __hash__(self) -> int:
-        return hash(self.forward_ref.__forward_arg__)
+    # def __hash__(self) -> int:
+    #     return hash(self.forward_ref.__forward_arg__)
 
 
 """
@@ -227,9 +226,6 @@ class DependentNode[T]:
     dependency_params: list[DependencyParam] = field(default_factory=list, repr=False)
     config: NodeConfig
 
-    def __hash__(self) -> int:
-        return hash(self.dependent)
-
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.dependent.__name__})"
 
@@ -293,22 +289,10 @@ class DependentNode[T]:
             yield resolved_node
 
     def iter_dependencies(self) -> ty.Generator["DependentNode[ty.Any]", None, None]:
-        for index, dep_param in enumerate(self.dependency_params):
-            param_name = dep_param.param.name
-            dep = dep_param.dependency.dependent
-            if isinstance(dep, ForwardDependent):
-                resolved_type = self.resolve_forward_dependency(dep)
-                resolved_node = DependentNode.from_node(resolved_type, self.config)
-                new_dep_param = DependencyParam(
-                    name=param_name,
-                    param=dep_param.param,
-                    dependency=resolved_node,
-                    is_builtin=False,
-                )
-                self.dependency_params[index] = new_dep_param
-                yield resolved_node
-            else:
-                yield dep_param.dependency
+        for dep_param in self.dependency_params:
+            if dep_param.is_builtin:
+                continue
+            yield dep_param.dependency
 
     def build_type_without_dependencies(self) -> T:
         """

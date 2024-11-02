@@ -23,13 +23,12 @@ py-modules = ["ididi"]
 
 [tool.pytest.ini_options]
 addopts = "-vx --strict-markers --capture=no"
+filterwarnings = ["ignore::DeprecationWarning"]
 markers = [
   "integration_test: marks tests as slow integration tests (deselect with '-m \"not integration_test\"')",
   "debug: marks tests as debug tests (deselect with '-m \"not debug\"')",
 ]
 testpaths = ["tests"]
-
-filterwarnings = ["ignore::DeprecationWarning"]
 
 [tool.coverage.run]
 omit = [
@@ -60,13 +59,13 @@ ididi = {path = ".", editable = true}
 python = ">=3.12"
 
 [tool.pixi.feature.dev.dependencies]
-python-graphviz = ">=0.20.3,<0.21"
 jupyter = ">=1.1.1,<2"
+python-graphviz = ">=0.20.3,<0.21"
 
 [tool.pixi.feature.test.dependencies]
 pytest = ">=8.3.3"
-pytest-cov = ">=4.1.0"
 pytest-asyncio = ">=0.24.0,<0.25"
+pytest-cov = ">=4.1.0"
 python-graphviz = ">=0.20.3,<0.21"
 
 [tool.pixi.feature.publish.dependencies]

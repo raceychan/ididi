@@ -22,4 +22,8 @@
 
 - [x] support more resource types
 - [x] support more builtin types
-- [ ] (beta) node config
+
+## version 0.1.3
+
+- [ ] bettr typing support
+- [ ] node config
