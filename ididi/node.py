@@ -96,7 +96,8 @@ class Dependent[T](AbstractDependent[T]):
         return self._dependent_type
 
     # def __hash__(self) -> int:
-        # return hash(f"{self.__class__.__name__}:{self._dependent_type}")
+    # return hash(f"{self.__class__.__name__}:{self._dependent_type}")
+
 
 @dataclass(frozen=True, slots=True)
 class ForwardDependent(AbstractDependent[ty.Any]):
@@ -243,23 +244,23 @@ class DependentNode[T]:
             parameters=parameters, return_annotation=self.dependent
         )
 
-    def resolve_forward_dependency(self, dep: ForwardDependent) -> type:
-        """
-        Resolve a forward dependency and check for circular dependencies.
-        Returns the resolved type and its node.
-        """
+    # def resolve_forward_dependency(self, dep: ForwardDependent) -> type:
+    #     """
+    #     Resolve a forward dependency and check for circular dependencies.
+    #     Returns the resolved type and its node.
+    #     """
 
-        resolved_type = dep.resolve()
+    #     resolved_type = dep.resolve()
 
-        # Check for circular dependencies
-        sub_params = get_full_typed_signature(resolved_type).parameters.values()
-        for sub_param in sub_params:
-            if sub_param.annotation is self.dependent.dependent_type:
-                raise CircularDependencyDetectedError(
-                    [self.dependent.dependent_type, resolved_type]
-                )
+    #     # Check for circular dependencies
+    #     sub_params = get_full_typed_signature(resolved_type).parameters.values()
+    #     for sub_param in sub_params:
+    #         if sub_param.annotation is self.dependent.dependent_type:
+    #             raise CircularDependencyDetectedError(
+    #                 [self.dependent.dependent_type, resolved_type]
+    #             )
 
-        return resolved_type
+    #     return resolved_type
 
     def actualize_forward_deps(
         self,
@@ -277,7 +278,29 @@ class DependentNode[T]:
             if not isinstance(dep, ForwardDependent):
                 continue
 
-            resolved_type = self.resolve_forward_dependency(dep)
+            resolved_type = dep.resolve()
+            visited: set[type] = {self.dependent.dependent_type}
+
+            def check_circular(type_to_check: type) -> None:
+                sub_params = get_full_typed_signature(type_to_check).parameters.values()
+                for sub_param in sub_params:
+                    annotation: type = get_typed_annotation(
+                        sub_param.annotation, dep.globalns
+                    )
+                    if annotation in visited:
+                        raise CircularDependencyDetectedError([*visited, annotation])
+
+                    # Skip if it's not a proper type annotation
+                    if not isinstance(annotation, (type, types.GenericAlias)):
+                        continue
+                    if is_builtin_type(annotation):
+                        continue
+
+                    visited.add(annotation)
+                    check_circular(annotation)
+                    visited.remove(annotation)
+
+            check_circular(resolved_type)
             resolved_node = DependentNode.from_node(resolved_type, self.config)
             new_dep_param = DependencyParam(
                 name=param.name,
