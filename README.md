@@ -12,6 +12,11 @@ It allows you to define dependencies in a declarative way without any boilerplat
 pip install ididi
 ```
 
+Too view viusal dependency graph
+```bash
+pip install ididi[graphviz]
+```
+
 ## Usage
 
 ### Decorate your top level dependencies and leave the rest to ididi
