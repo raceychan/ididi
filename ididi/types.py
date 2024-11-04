@@ -5,11 +5,9 @@ type IFactory[I, **P] = ty.Callable[P, I]
 
 
 class TDecor:
-    """
-    NOTE: can't switch the order of factory: type[I] and ty.Callable[P, I]
-    because type[I] -> type[I] is a subtype of ty.Callable[P, I] -> ty.Callable[P, I]
-    so that type[I] would be ignored by the overload resolution
-    """
+    # NOTE: don't switch the order of factory: type[I] and ty.Callable[P, I]
+    # because type[I] -> type[I] is a subtype of ty.Callable[P, I] -> ty.Callable[P, I]
+    # type[I] would be ignored by the overload resolution
 
     @ty.overload
     def __call__[I](self, factory: type[I]) -> type[I]: ...

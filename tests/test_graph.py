@@ -433,7 +433,6 @@ def test_multiple_dependency_paths():
     assert instance.s1.shared2.value == instance.s2.shared1.value == "shared"
 
 
-@pytest.mark.debug
 def test_type_mapping_cleanup():
     dag = DependencyGraph()
 
@@ -453,3 +452,16 @@ def test_type_mapping_cleanup():
 
     # Verify type mapping is cleaned up
     assert Interface not in dag.type_mappings or not dag.type_mappings[Interface]
+
+
+def test_node_factory():
+    factory = dag.factory(UserService)
+    assert callable(factory)
+    assert isinstance(factory(), UserService)
+
+
+@pytest.mark.asyncio
+async def test_graph_without_static_resolve():
+    dag = DependencyGraph(static_resolve=False)
+    async with dag:
+        dag.resolve(UserService)

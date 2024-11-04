@@ -22,7 +22,7 @@ def test_cycle_detection():
     with pytest.raises(CircularDependencyDetectedError) as exc_info:
         dag.resolve(CircleServiceA)
 
-
+    assert exc_info.value.cycle_path == [CircleServiceA, CircleServiceB]
 
 
 dag.reset()

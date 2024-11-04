@@ -123,6 +123,11 @@ class DependencyGraph:
     """
     ### Description:
     A dependency DAG (Directed Acyclic Graph) that manages dependency nodes and their relationships.
+
+    [config]
+    static_resolve: bool
+    ---
+    whether to statically resolve all nodes when entering the graph.
     """
 
     def __init__(self, static_resolve: bool = True):
@@ -258,6 +263,8 @@ class DependencyGraph:
             visited.add(node_type)
             node = self._nodes[node_type]
             for dep_param in node.dependency_params:
+                if dep_param.is_builtin:
+                    continue
                 dependent_type = dep_param.dependent_type
                 visit(dependent_type)
 
@@ -339,50 +346,48 @@ class DependencyGraph:
             node = self._nodes[concrete_type]
         return node
 
-    def static_resolve[T](self, dependency_type: type[T]) -> DependentNode[T]:
+    def static_resolve[T](self, dependent: type[T]) -> DependentNode[T]:
         """
         Resolve a dependency without building its instance.
         """
-        dep_type = ty.get_origin(dependency_type) or dependency_type
-        if dep_type in self._resolved_nodes:
-            return self._resolved_nodes[dep_type]
+        if dependent in self._resolved_nodes:
+            return self._resolved_nodes[dependent]
 
-        node = self._resolve_concrete_node(dep_type)
+        node = self._resolve_concrete_node(dependent)
 
         for subnode in node.iter_dependencies():
             resolved_node = self.static_resolve(subnode.dependent_type)
             self.register_node(resolved_node)
             self._resolved_nodes[subnode.dependent_type] = resolved_node
-        self._resolved_nodes[dep_type] = node
+        self._resolved_nodes[dependent] = node
         return node
 
-    def resolve_node[T](self, dependency_type: type[T]) -> DependentNode[T]:
+    def resolve_node[T](self, dependent: type[T]) -> DependentNode[T]:
         """
         Resolve which node should be used for the given type and its dependencies.
         Returns the resolved node and a mapping of parameter names to their dependency types.
         """
-        dep_type = ty.get_origin(dependency_type) or dependency_type
-        if dep_type in self._resolved_nodes:
-            return self._resolved_nodes[dep_type]
+        if dependent in self._resolved_nodes:
+            return self._resolved_nodes[dependent]
 
-        if is_builtin_type(dep_type):
-            raise TopLevelBulitinTypeError(dep_type)
+        if is_builtin_type(dependent):
+            raise TopLevelBulitinTypeError(dependent)
 
-        node = self._resolve_concrete_node(dep_type)
+        node = self._resolve_concrete_node(dependent)
 
         # Handle forward dependencies
         for subnode in node.actualize_forward_deps():
             self.register_node(subnode)
-        self._resolved_nodes[dep_type] = node
+        self._resolved_nodes[dependent] = node
         return node
 
-    def resolve[T, **P](self, dependency_type: type[T], /, **overrides: ty.Any) -> T:
+    def resolve[T](self, dependent: type[T], /, **overrides: ty.Any) -> T:
         """
         Resolve a dependency and bild its complete dependency graph.
         Supports dependency overrides for testing.
         Overrides are only applied to the requested type, not its dependencies.
         """
-        node_dep_type = dependency_type
+        node_dep_type = dependent
 
         if node_dep_type in self._resolution_registry:
             return self._resolution_registry[node_dep_type]
@@ -404,6 +409,14 @@ class DependencyGraph:
         if node.config.reuse:
             self._resolution_registry.register(node_dep_type, instance)
         return instance
+
+    def factory[T](self, dependent: type[T]) -> IFactory[T, ...]:
+        """
+        A helper function that creates a resolver for a given type.
+        """
+        if dependent not in self._resolved_nodes:
+            self.static_resolve(dependent)
+        return functools.partial(self.resolve, dependent)
 
     def register_node(self, node: DependentNode[ty.Any]) -> None:
         """
@@ -430,7 +443,7 @@ class DependencyGraph:
     def node[I, **P](self, factory_or_class: IFactory[I, P]) -> IFactory[I, P]: ...
 
     @ty.overload
-    def node[I, **P](self, **config: ty.Unpack[INodeConfig]) -> TDecor: ...
+    def node(self, **config: ty.Unpack[INodeConfig]) -> TDecor: ...
 
     def node[
         I, **P
