@@ -216,7 +216,8 @@ def test_varidc_keyword_args():
             self.kwargs = kwargs
 
     node = DependentNode.from_node(Service)
-    node.build()
+    with pytest.raises(UnsolvableDependencyError):
+        node.build()
 
 
 def test_node_repr():
@@ -248,3 +249,31 @@ def test_forward_dependent_repr():
 
     str(node)
     str(node.dependent)
+
+
+def test_complex_union_type():
+    class Service:
+        def __init__(self, union_builtins: dict[str, str] | list[int]):
+            self.union_builtins = union_builtins
+
+    node = DependentNode.from_node(Service)
+    with pytest.raises(UnsolvableDependencyError):
+        res = node.build()
+
+
+def test_complex_union_type_2():
+    class A:
+        def __init__(self, *args: int):
+            self.args = args
+
+    class B:
+        def __init__(self, *args: str):
+            self.args = args
+
+    class Service:
+        def __init__(self, *args: A | B):
+            self.args = args
+
+    node = DependentNode.from_node(Service)
+    with pytest.raises(UnsolvableDependencyError):
+        res = node.build()

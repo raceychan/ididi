@@ -222,34 +222,32 @@ class DependencyGraph:
         self._resolution_registry.remove(dependent_type)
         self._resolved_nodes.pop(dependent_type, None)
 
-    def get_dependent_types[
-        T
-    ](self, dependency_type: NodeDependent[T]) -> list[NodeDependent[T]]:
+    def get_dependent_types[T](self, dependent: type[T]) -> list[type[T]]:
         """
         Get all types that depend on the given type.
         """
-        dependents: list[NodeDependent[T]] = []
+        dependents: list[type[T]] = []
         for node_type, node in self._nodes.items():
             for dep_param in node.dependency_params:
-                dependent: AbstractDependent[ty.Any] = dep_param.dependency.dependent
-                if dependent.dependent_type == dependency_type:
+                sub_dependent: AbstractDependent[ty.Any] = (
+                    dep_param.dependency.dependent
+                )
+                if sub_dependent.dependent_type == dependent:
                     dependents.append(node_type)
         return dependents
 
-    def get_dependency_types[
-        T
-    ](self, dependent_type: NodeDependent[T]) -> list[type[T]]:
+    def get_dependency_types[T](self, dependent: type[T]) -> list[type[T]]:
         """
         Get all types that the given type depends on.
         """
-        node = self._nodes[dependent_type]
+        node = self._nodes[dependent]
         deps: list[type[T]] = []
         for param in node.dependency_params:
-            dependent_type = param.dependent_type
-            deps.append(dependent_type)
+            dependent = param.dependent_type
+            deps.append(dependent)
         return deps
 
-    def get_initialization_order(self) -> list[type]:
+    def top_sorted_dependencies(self) -> list[type]:
         """
         Return types in dependency order (topological sort).
         """
@@ -286,11 +284,11 @@ class DependencyGraph:
         Close any resources held by resolved instances.
         Closes in reverse initialization order.
         """
-        close_order = reversed(self.get_initialization_order())
+        close_order = reversed(self.top_sorted_dependencies())
         await self._resolution_registry.close_all(close_order)
         self.reset()
 
-    def is_factory_override[
+    def _is_factory_override[
         I, **P
     ](
         self,
@@ -307,15 +305,6 @@ class DependencyGraph:
         has_return_type = factory_return_type is not inspect.Signature.empty
         is_registered_node = factory_return_type in self._nodes
         return is_factory and has_return_type and is_registered_node
-
-    def replace_node(
-        self, old_node: DependentNode[ty.Any], new_node: DependentNode[ty.Any]
-    ) -> None:
-        """
-        Replace an existing node with a new node.
-        """
-        self.remove_node(old_node)
-        self.register_node(new_node)
 
     def _resolve_concrete_type(self, abstract_type: type) -> type:
         """
@@ -336,15 +325,24 @@ class DependencyGraph:
         first_implementations = implementations[0]
         return first_implementations
 
-    def _resolve_concrete_node[T](self, dependency_type: type[T]) -> DependentNode[T]:
+    def _resolve_concrete_node[T](self, dependent: type[T]) -> DependentNode[T]:
         try:
-            concrete_type = self._resolve_concrete_type(dependency_type)
+            concrete_type = self._resolve_concrete_type(dependent)
         except MissingImplementationError:
-            node = DependentNode.from_node(dependency_type, NodeConfig())
+            node = DependentNode.from_node(dependent, NodeConfig())
             self.register_node(node)
         else:
             node = self._nodes[concrete_type]
         return node
+
+    def replace_node(
+        self, old_node: DependentNode[ty.Any], new_node: DependentNode[ty.Any]
+    ) -> None:
+        """
+        Replace an existing node with a new node.
+        """
+        self.remove_node(old_node)
+        self.register_node(new_node)
 
     def static_resolve[T](self, dependent: type[T]) -> DependentNode[T]:
         """
@@ -486,7 +484,7 @@ class DependencyGraph:
         node_config = NodeConfig(**config)
 
         return_type = get_full_typed_signature(factory_or_class).return_annotation
-        if self.is_factory_override(return_type, factory_or_class):
+        if self._is_factory_override(return_type, factory_or_class):
             new_node = DependentNode.from_node(factory_or_class, node_config)
             old_node = self._nodes[return_type]
             self.replace_node(old_node, new_node)

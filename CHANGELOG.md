@@ -25,5 +25,18 @@
 
 ## version 0.1.3
 
-- [ ] bettr typing support
-- [ ] node config
+- [x] bettr typing support
+- [x] node config
+
+## version 0.1.4
+
+- [x] static resolve
+- [x] async context manager with graph
+- [x] fix: when exit DependencyGraph, iterate over all nodes would cause rror when builtin types are involved
+- [x] feat: DependencyGraph.factory would statically resolve the dependent and return a factory
+
+## version 0.1.5
+
+- [x] fix: when a dependency is a union type, the dependency resolver would not be able to identify the dependency
+
+- [x] fix: variadic arguments would cause UnsolvableDependencyError, instead of injection an empty tuple or dict

@@ -305,13 +305,12 @@ def test_factory_registration():
 def test_unsupported_annotation():
     dag = DependencyGraph()
 
+    @dag.node
+    class BadService:
+        def __init__(self, bad: None):  # object is not a proper annotation
+            self.bad = bad
+
     with pytest.raises(UnsolvableDependencyError):
-
-        @dag.node
-        class BadService:
-            def __init__(self, bad: None):  # object is not a proper annotation
-                self.bad = bad
-
         dag.resolve(BadService)
 
 
@@ -346,7 +345,7 @@ def test_initialization_order():
         def __init__(self, b: ServiceB):
             self.b = b
 
-    order = dag.get_initialization_order()
+    order = dag.top_sorted_dependencies()
     # C should be initialized before B, and B before A
     assert order.index(ServiceC) < order.index(ServiceB)
     assert order.index(ServiceB) < order.index(ServiceA)
@@ -465,3 +464,9 @@ async def test_graph_without_static_resolve():
     dag = DependencyGraph(static_resolve=False)
     async with dag:
         dag.resolve(UserService)
+
+
+def test_graph_factory_partial():
+    dag = DependencyGraph()
+    factory = dag.factory(UserService)
+    assert isinstance(factory(), UserService)

@@ -94,3 +94,7 @@ git-push:
 	@echo "Pushing to remote repository..."
 	@git push origin master
 	@git push origin "v$(VERSION)"
+
+
+publish-release:
+	pixi run -e publish publish

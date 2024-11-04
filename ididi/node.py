@@ -44,17 +44,8 @@ def is_class_with_empty_init(cls: type) -> bool:
     return is_undefined_init or is_protocol
 
 
-"""
-TODO: search in global for factory,
-we might search for prefix '_di_'
-we can have _di_service_factory in the global namespace
-def search_factory[
-    I
-](dependent: type[I], globalvars: dict[str, ty.Any] | None = None) -> (
-    ty.Callable[..., I] | None
-):
-    raise NotSupportedError("searching to be implemented")
-"""
+def factory_placeholder() -> None:
+    raise NotSupportedError("Factory placeholder")
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,14 +144,18 @@ class DependencyParam:
 
     def build(self, **kwargs: ty.Any) -> ty.Any:
         """Build the dependency if needed, handling defaults and overrides."""
+
         if self.param.name in kwargs:
             return kwargs[self.param.name]
 
         if self.param.default != Parameter.empty:
             return self.param.default
 
+        if self.is_builtin:
+            raise UnsolvableDependencyError(self.param.name, self.param.annotation)
+
         if self.param.kind in (Parameter.VAR_POSITIONAL, Parameter.VAR_KEYWORD):
-            return {}  # Skip *args and **kwargs if not provided
+            raise UnsolvableDependencyError(self.param.name, self.param.annotation)
 
         return self.dependency.build()
 
@@ -280,18 +275,14 @@ class DependentNode[T]:
                     raise ABCWithoutImplementationError(self.factory, abstract_methods)
                 return ty.cast(ty.Callable[..., T], self.factory)()
 
-        try:
-            return self.factory()
-        except TypeError as e:
-            raise UnsolvableDependencyError(
-                str(self.dependent_type), self.factory
-            ) from e
+        return self.factory()
 
     def build(self, *args: ty.Any, **kwargs: ty.Any) -> T:
         """
         Build the dependent, resolving dependencies and applying defaults.
         kwargs override any dependencies or defaults.
         """
+
         if not self.dependency_params:
             return self.build_type_without_dependencies()
 
@@ -304,6 +295,7 @@ class DependentNode[T]:
                 bound_args.arguments[dep_param.param.name] = value
 
         bound_args.apply_defaults()
+
         return self.factory(*bound_args.args, **bound_args.kwargs)
 
     @classmethod
@@ -316,7 +308,10 @@ class DependentNode[T]:
         globalns: dict[str, ty.Any],
         config: NodeConfig,
     ) -> "DependencyParam":
-        if isinstance(param.annotation, ty.ForwardRef):
+        if is_builtin_type(dependent):
+            dependency = cls._create_type_holder(Dependent(dependent), NULL, config)
+            is_builtin = True
+        elif isinstance(param.annotation, ty.ForwardRef):
             lazy_dep = ForwardDependent(param.annotation, globalns)
             dependency = DependentNode._from_param(
                 dependent=lazy_dep,
@@ -332,6 +327,7 @@ class DependentNode[T]:
                 globalns=globalns,
                 config=config,
             )
+
             is_builtin = is_builtin_type(dependency.dependent.dependent_type)
 
         return DependencyParam(
@@ -339,6 +335,80 @@ class DependentNode[T]:
             param=param,
             dependency=dependency,
             is_builtin=is_builtin,
+        )
+
+    @classmethod
+    def _from_param(
+        cls,
+        *,
+        dependent: type[ty.Any] | ForwardDependent,
+        param: inspect.Parameter,
+        globalns: dict[str, ty.Any],
+        config: NodeConfig,
+    ) -> "DependentNode[ty.Any]":
+        """
+        Process a parameter to create a dependency node.
+        like def __init__(self, a: int, b: str):
+        here we have two params: a and b
+
+        we might use a fancier way to implement this, such as Chain of Responsibility,
+        as we will have more and more cases to handle.
+        Handles forward references, builtin types, classes, and generic types, etc.
+        """
+
+        if isinstance(dependent, ForwardDependent):
+            return cls._create_type_holder(
+                dependent=dependent,
+                default=param.default,
+                config=config,
+            )
+
+        param_name = param.name
+        default = param.default if param.default != inspect.Parameter.empty else NULL
+        annotation = get_typed_annotation(param.annotation, globalns)
+        annotation = ty.get_origin(annotation) or annotation
+
+        if annotation is inspect.Parameter.empty:
+            if param.kind in (Parameter.VAR_POSITIONAL, Parameter.KEYWORD_ONLY):
+                raise NotSupportedError(
+                    f"Unsupported parameter kind: {param.kind} in {dependent}"
+                )
+            raise MissingAnnotationError(dependent, param_name)
+
+        if isinstance(annotation, ty.TypeVar):
+            raise GenericDependencyNotSupportedError(annotation)
+
+        # === Solvable dependency, NOTE: order matters!===
+
+        if annotation is types.UnionType:
+            union_types = ty.get_args(param.annotation)
+            # we do care which type is correct, it would be provided by the factory
+            annotation = union_types[0]
+
+        if is_builtin_type(annotation):
+            node = cls._create_type_holder(Dependent(annotation), default, config)
+        else:
+            node = cls.from_node(annotation, config)
+
+        cls._type_registry[node.dependent_type] = node
+        return node
+
+    @classmethod
+    def _create_type_holder[
+        I
+    ](
+        cls,
+        dependent: AbstractDependent[I],
+        default: Nullable[I],
+        config: NodeConfig,
+    ) -> "DependentNode[ty.Any]":
+        if default is inspect.Parameter.empty:
+            default = NULL
+        return DependentNode(
+            dependent=dependent,
+            factory=factory_placeholder,
+            default=default,
+            config=config,
         )
 
     @classmethod
@@ -374,7 +444,6 @@ class DependentNode[T]:
             dependency_params=dependency_params,
             config=config,
         )
-
         return node
 
     @classmethod
@@ -423,70 +492,3 @@ class DependentNode[T]:
             return cls._from_class(ty.cast(type[I], node), config)
         elif callable(node):
             return cls._from_factory(ty.cast(IFactory[I, P], node), config)
-
-    @classmethod
-    def _from_param(
-        cls,
-        *,
-        dependent: type[ty.Any] | ForwardDependent,
-        param: inspect.Parameter,
-        globalns: dict[str, ty.Any],
-        config: NodeConfig,
-    ) -> "DependentNode[ty.Any]":
-        """
-        Process a parameter to create a dependency node.
-        like def __init__(self, a: int, b: str):
-        here we have two params: a and b
-
-        we might use a fancier way to implement this, such as Chain of Responsibility,
-        as we will have more and more cases to handle.
-        Handles forward references, builtin types, classes, and generic types, etc.
-        """
-
-        """
-        # TODO: we need to implement a cache machenism
-        # since we might have the same dependency for different params
-        if annotation in cls._type_registry:
-            return cls._type_registry[annotation]
-        """
-
-        if isinstance(dependent, ForwardDependent):
-            return DependentNode(
-                dependent=dependent,
-                factory=lambda: None,
-                config=config,
-            )
-
-        param_name = param.name
-        default = param.default if param.default != inspect.Parameter.empty else NULL
-        annotation = get_typed_annotation(param.annotation, globalns)
-        annotation = ty.get_origin(annotation) or annotation
-
-        if annotation is inspect.Parameter.empty:
-            if param.kind in (Parameter.VAR_POSITIONAL, Parameter.KEYWORD_ONLY):
-                raise NotSupportedError(f"Unsupported parameter kind: {param.kind}")
-            raise MissingAnnotationError(dependent, param_name)
-
-        if isinstance(annotation, ty.TypeVar):
-            raise GenericDependencyNotSupportedError(annotation)
-
-        # ===Solvable dependency, NOTE: order matters!===
-        if annotation is types.UnionType:
-            union_types = ty.get_args(param.annotation)
-            # we do care which type is correct, it would be provided by the factory
-            if union_types:
-                return cls.from_node(union_types[0], config)
-
-        # Handle builtin types
-        if is_builtin_type(annotation):
-            return DependentNode(
-                dependent=Dependent(annotation),
-                factory=annotation,
-                default=default,
-                config=config,
-            )
-
-        if not isinstance(annotation, type):
-            raise NotSupportedError(f"Unsupported annotation type: {annotation}")
-
-        return cls.from_node(annotation, config)

@@ -26,11 +26,11 @@ class NodeError(IDIDIError):
 
 
 class UnsolvableDependencyError(NodeError):
-    def __init__(self, param_name: str, required_type: ty.Any):
-        self.param_name = param_name
+    def __init__(self, dep_name: str, required_type: ty.Any):
+        self.dep_name = dep_name
         self.required_type = required_type
         super().__init__(
-            f"Unable to resolve dependency for parameter: {param_name}, value of {required_type} must be provided"
+            f"Unable to resolve dependency for parameter: {dep_name}, value of {required_type} must be provided"
         )
 
 
