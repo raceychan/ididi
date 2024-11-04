@@ -53,6 +53,8 @@ def factory_placeholder() -> None:
 class AbstractDependent[T]:
     """Base class for all dependent types."""
 
+    dependent_type: type[T] = field(init=False)
+
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.__name__})"
 
@@ -65,27 +67,19 @@ class AbstractDependent[T]:
         """Resolve to concrete type."""
         raise NotImplementedError
 
-    @property
-    def dependent_type(self) -> type[T]:
-        raise NotImplementedError
-
 
 @dataclass(frozen=True, slots=True)
 class Dependent[T](AbstractDependent[T]):
     """Represents a concrete (non-forward-reference) dependent type."""
 
-    _dependent_type: type[T]
+    dependent_type: type[T]
 
     @property
     def __name__(self) -> str:
-        return self._dependent_type.__name__
-
-    @property
-    def dependent_type(self) -> type[T]:
-        return self._dependent_type
+        return self.dependent_type.__name__
 
     def resolve(self) -> type[T]:
-        return self._dependent_type
+        return self.dependent_type
 
     # def __hash__(self) -> int:
     #     return hash(f"{self.__class__.__name__}:{self._dependent_type}")

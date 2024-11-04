@@ -203,8 +203,8 @@ def test_not_implemented_abstract_methods():
     with pytest.raises(NotImplementedError):
         abstract.resolve()
 
-    with pytest.raises(NotImplementedError):
-        abstract.dependent_type
+    # with pytest.raises(NotImplementedError):
+    #     abstract.dependent_type
 
     with pytest.raises(NotImplementedError):
         str(abstract)
