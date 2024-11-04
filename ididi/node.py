@@ -3,6 +3,7 @@ import inspect
 import types
 import typing as ty
 from dataclasses import dataclass, field
+from functools import lru_cache
 from inspect import Parameter
 
 from .errors import (
@@ -87,7 +88,7 @@ class Dependent[T](AbstractDependent[T]):
         return self._dependent_type
 
     # def __hash__(self) -> int:
-    # return hash(f"{self.__class__.__name__}:{self._dependent_type}")
+    #     return hash(f"{self.__class__.__name__}:{self._dependent_type}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -179,8 +180,6 @@ class DependentNode[T]:
     - factory: the factory function that creates the dependent, e.g AuthService.__init__, auth_service_factory
     - dependencies: the dependencies of the dependent, e.g redis: Redis, keyspace: str
     """
-
-    _type_registry: ty.ClassVar[dict[type[ty.Any], "DependentNode[ty.Any]"]] = {}
 
     dependent: AbstractDependent[T]
     default: Nullable[T] = NULL
@@ -299,49 +298,51 @@ class DependentNode[T]:
         return self.factory(*bound_args.args, **bound_args.kwargs)
 
     @classmethod
-    def _create_depram[
+    def _create_deprams[
         I
     ](
         cls,
         dependent: type[I],
-        param: inspect.Parameter,
-        globalns: dict[str, ty.Any],
+        params: ty.Sequence[inspect.Parameter],
         config: NodeConfig,
-    ) -> "DependencyParam":
-        if is_builtin_type(dependent):
-            dependency = cls._create_type_holder(Dependent(dependent), NULL, config)
-            is_builtin = True
-        elif isinstance(param.annotation, ty.ForwardRef):
-            lazy_dep = ForwardDependent(param.annotation, globalns)
-            dependency = DependentNode._from_param(
-                dependent=lazy_dep,
-                param=param,
-                globalns=globalns,
-                config=config,
-            )
-            is_builtin = False
-        else:
-            dependency = DependentNode._from_param(
-                dependent=dependent,
-                param=param,
-                globalns=globalns,
-                config=config,
-            )
+    ) -> list["DependencyParam"]:
+        dep_params: list["DependencyParam"] = []
+        globalns: dict[str, ty.Any] = getattr(dependent.__init__, "__globals__", {})
 
-            is_builtin = is_builtin_type(dependency.dependent.dependent_type)
+        for param in params:
+            if is_builtin_type(dependent):
+                dependency = cls._create_holder_node(Dependent(dependent), NULL, config)
+                is_builtin = True
+            elif isinstance(param.annotation, ty.ForwardRef):
+                dependency = cls._create_holder_node(
+                    dependent=ForwardDependent(param.annotation, globalns),
+                    default=param.default,
+                    config=config,
+                )
+                is_builtin = False
+            else:
+                dependency = DependentNode._from_param(
+                    dependent=dependent,
+                    param=param,
+                    globalns=globalns,
+                    config=config,
+                )
+                is_builtin = is_builtin_type(dependency.dependent.dependent_type)
 
-        return DependencyParam(
-            name=param.name,
-            param=param,
-            dependency=dependency,
-            is_builtin=is_builtin,
-        )
+            dep_param = DependencyParam(
+                name=param.name,
+                param=param,
+                dependency=dependency,
+                is_builtin=is_builtin,
+            )
+            dep_params.append(dep_param)
+        return dep_params
 
     @classmethod
     def _from_param(
         cls,
         *,
-        dependent: type[ty.Any] | ForwardDependent,
+        dependent: type[ty.Any],
         param: inspect.Parameter,
         globalns: dict[str, ty.Any],
         config: NodeConfig,
@@ -355,13 +356,6 @@ class DependentNode[T]:
         as we will have more and more cases to handle.
         Handles forward references, builtin types, classes, and generic types, etc.
         """
-
-        if isinstance(dependent, ForwardDependent):
-            return cls._create_type_holder(
-                dependent=dependent,
-                default=param.default,
-                config=config,
-            )
 
         param_name = param.name
         default = param.default if param.default != inspect.Parameter.empty else NULL
@@ -386,15 +380,14 @@ class DependentNode[T]:
             annotation = union_types[0]
 
         if is_builtin_type(annotation):
-            node = cls._create_type_holder(Dependent(annotation), default, config)
+            node = cls._create_holder_node(Dependent(annotation), default, config)
         else:
             node = cls.from_node(annotation, config)
 
-        cls._type_registry[node.dependent_type] = node
         return node
 
     @classmethod
-    def _create_type_holder[
+    def _create_holder_node[
         I
     ](
         cls,
@@ -402,6 +395,10 @@ class DependentNode[T]:
         default: Nullable[I],
         config: NodeConfig,
     ) -> "DependentNode[ty.Any]":
+        """
+        Create a holder node for certain dependent types.
+        e.g. builtin types, forward references, etc.
+        """
         if default is inspect.Parameter.empty:
             default = NULL
         return DependentNode(
@@ -428,20 +425,15 @@ class DependentNode[T]:
         # so that user can see right away what is wrong without having to trace back.
 
         params = tuple(signature.parameters.values())
-        globalns = getattr(dependent.__init__, "__globals__", {})
 
         if is_class_or_method(factory):
             # Skip 'self' parameter
             params = params[1:]
 
-        dependency_params = list(
-            cls._create_depram(dependent, param, globalns, config) for param in params
-        )
-
         node = DependentNode(
             dependent=Dependent(dependent),
             factory=factory,
-            dependency_params=dependency_params,
+            dependency_params=cls._create_deprams(dependent, params, config),
             config=config,
         )
         return node
@@ -482,6 +474,7 @@ class DependentNode[T]:
         )
 
     @classmethod
+    @lru_cache(maxsize=1000)
     def from_node[
         I, **P
     ](
