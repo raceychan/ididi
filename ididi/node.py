@@ -49,7 +49,7 @@ def factory_placeholder() -> None:
     raise NotSupportedError("Factory placeholder")
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class AbstractDependent[T]:
     """Base class for all dependent types."""
 
@@ -67,7 +67,7 @@ class AbstractDependent[T]:
         raise NotImplementedError
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class Dependent[T](AbstractDependent[T]):
     """Represents a concrete (non-forward-reference) dependent type."""
 
@@ -80,11 +80,8 @@ class Dependent[T](AbstractDependent[T]):
     def resolve(self) -> type[T]:
         return self.dependent_type
 
-    # def __hash__(self) -> int:
-    #     return hash(f"{self.__class__.__name__}:{self._dependent_type}")
 
-
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class ForwardDependent(AbstractDependent[ty.Any]):
     """A placeholder for a dependent type that hasn't been resolved yet."""
 
@@ -100,49 +97,37 @@ class ForwardDependent(AbstractDependent[ty.Any]):
         except NameError as e:
             raise ForwardReferenceNotFoundError(self.forward_ref) from e
 
-    # def __hash__(self) -> int:
-    #     return hash(self.forward_ref.__forward_arg__)
 
-
-@dataclass(frozen=True, slots=True)
-class LazyDependent(AbstractDependent[ty.Any]):
-    dependent_type: type[ty.Any]
-    dependency_params: dict[str, "DependencyParam"]
+@dataclass(slots=True)
+class LazyDependent[T](AbstractDependent[T]):
+    dependent_type: type[T]
+    signature: "DependentSignature"
+    cached_instance: Nullable[T] = NULL
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.dependent_type})"
 
-    def __getattr__(self, name: str) -> ty.Any:
+    def __getattr__(self, attriname: str, /) -> ty.Any:
         """
         dynamically build the dependent type on the fly
-
-        # TODO:
-        # differentiate a node attribute from a normal attribute
-        # e.g. self.db.some_attribute
-        # if some_attribute is a lazy dependent, return it
-        # if some_attribute is a normal attribute, solve the db instance and return value of some_attribute
         """
+
         try:
-            dpram = self.dependency_params[name]
+            dpram = self.signature[attriname]
+            return dpram.node.dependent
         except KeyError:
-            # build the dependent type on the fly then return attribute
-            if name not in self.dependent_type.__dict__:
-                # NOTE: This won't would if attributes is set in obj.init with
-                # self._dynamic = value
-                raise AttributeError(f"{self.dependent_type} has no attribute {name}")
-
-            deps = {}
-            for dpram in self.dependency_params.values():
-                dep = dpram.build()
-                deps[dpram.name] = dep
-            dependent = self.dependent_type(**deps)
-            return dependent.__getattribute__(name)
-
-        dep = dpram.node.dependent
-        return dep
+            if self.cached_instance is NULL:
+                bound_args = self.signature.bound_args()
+                self.cached_instance = self.dependent_type(
+                    *bound_args.args, **bound_args.kwargs
+                )
+            return self.cached_instance.__getattribute__(attriname)
 
     def resolve(self) -> type[ty.Any]:
         raise NotImplementedError("Lazy dependent type should be resolved at runtime")
+
+
+# ======================= Signature =====================================
 
 
 @dataclass(kw_only=True, slots=True, frozen=True)
@@ -200,29 +185,32 @@ class DependencyParam:
 
 @dataclass(slots=True, frozen=True, kw_only=True)
 class DependentSignature:
-    dprams: list[DependencyParam] = field(default_factory=list, repr=False)
+    dprams: dict[str, DependencyParam] = field(default_factory=dict, repr=False)
     dependent: type[ty.Any] = type(None)
 
     def __iter__(self) -> ty.Iterator[DependencyParam]:
-        return iter(self.dprams)
+        return iter(self.dprams.values())
 
     def __len__(self) -> int:
         return len(self.dprams)
 
-    def update(self, index: int, dpram: DependencyParam) -> None:
-        self.dprams[index] = dpram
+    def __getitem__(self, param_name: str) -> DependencyParam:
+        return self.dprams[param_name]
+
+    def update(self, param_name: str, dpram: DependencyParam) -> None:
+        self.dprams[param_name] = dpram
 
     def bound_args(self, *args: ty.Any, **kwargs: ty.Any) -> inspect.BoundArguments:
         dprams = self.dprams
 
         sig = inspect.Signature(
-            parameters=[dpram.param for dpram in dprams],
+            parameters=[dpram.param for dpram in dprams.values()],
             return_annotation=self.dependent,
         )
 
         bound_args = sig.bind_partial()
 
-        for dpram in dprams:
+        for dpram in dprams.values():
             # TODO: make this in static resolve
             if dpram.node.config.lazy:
                 value = dpram.node.dependent
@@ -233,9 +221,6 @@ class DependentSignature:
         bound_args.apply_defaults()
         return bound_args
 
-    def param_mapping(self) -> dict[str, DependencyParam]:
-        return {dpram.param.name: dpram for dpram in self.dprams}
-
 
 # ======================= Node =====================================
 
@@ -243,9 +228,7 @@ class DependentSignature:
 def _create_holder_node[
     I
 ](
-    dependent: AbstractDependent[I],
-    default: Nullable[I],
-    config: NodeConfig,
+    dependent: AbstractDependent[I], default: Nullable[I], config: NodeConfig
 ) -> "DependentNode[ty.Any]":
     """
     Create a holder node for certain dependent types.
@@ -265,8 +248,11 @@ def _create_holder_node[
 def _create_sig(
     *, dependent: type[ty.Any], params: ty.Sequence[Parameter], config: NodeConfig
 ) -> DependentSignature:
+    """
+    Create a signature for a dependent type.
+    """
 
-    dep_params: list["DependencyParam"] = []
+    dep_params: dict[str, DependencyParam] = {}
     globalns: dict[str, ty.Any] = getattr(dependent.__init__, "__globals__", {})
 
     for param in params:
@@ -295,7 +281,7 @@ def _create_sig(
             node=dependency,
             is_builtin=is_builtin,
         )
-        dep_params.append(dep_param)
+        dep_params[param.name] = dep_param
     return DependentSignature(dprams=dep_params, dependent=dependent)
 
 
@@ -315,8 +301,7 @@ class DependentNode[T]:
 
     in this case:
     - dependent: the dependent type that this node represents, e.g AuthService
-    - factory: the factory function that creates the dependent, e.g AuthService.__init__, auth_service_factory
-    - dependencies: the dependencies of the dependent, e.g redis: Redis, keyspace: str
+    - factory: the factory function that creates the dependent, e.g AuthService.__init__
     """
 
     dependent: AbstractDependent[T]
@@ -357,7 +342,7 @@ class DependentNode[T]:
         Update all forward dependency params to their resolved types.
         """
 
-        for index, dep_param in enumerate(self.signature):
+        for dep_param in self.signature:
             param = dep_param.param
             dep = dep_param.node.dependent
 
@@ -375,7 +360,7 @@ class DependentNode[T]:
                 node=resolved_node,
                 is_builtin=False,
             )
-            self.signature.update(index, new_dep_param)
+            self.signature.update(param.name, new_dep_param)
             yield resolved_node
 
     def iter_dependencies(self) -> ty.Generator["DependentNode[ty.Any]", None, None]:
@@ -441,9 +426,9 @@ class DependentNode[T]:
         dpram_sig = _create_sig(dependent=dependent, params=params, config=config)
 
         if config.lazy:
-            dep = LazyDependent(dependent, dpram_sig.param_mapping())
+            dep = LazyDependent(dependent_type=dependent, signature=dpram_sig)
         else:
-            dep = Dependent(dependent)
+            dep = Dependent(dependent_type=dependent)
 
         node = DependentNode(
             dependent=dep,
