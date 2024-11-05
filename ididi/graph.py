@@ -228,10 +228,8 @@ class DependencyGraph:
         """
         dependents: list[type[T]] = []
         for node_type, node in self._nodes.items():
-            for dep_param in node.dependency_params:
-                sub_dependent: AbstractDependent[ty.Any] = (
-                    dep_param.dependency.dependent
-                )
+            for dep_param in node.signature:
+                sub_dependent: AbstractDependent[ty.Any] = dep_param.node.dependent
                 if sub_dependent.dependent_type == dependent:
                     dependents.append(node_type)
         return dependents
@@ -242,7 +240,7 @@ class DependencyGraph:
         """
         node = self._nodes[dependent]
         deps: list[type[T]] = []
-        for param in node.dependency_params:
+        for param in node.signature:
             dependent = param.dependent_type
             deps.append(dependent)
         return deps
@@ -260,7 +258,7 @@ class DependencyGraph:
 
             visited.add(node_type)
             node = self._nodes[node_type]
-            for dep_param in node.dependency_params:
+            for dep_param in node.signature:
                 if dep_param.is_builtin:
                     continue
                 dependent_type = dep_param.dependent_type
@@ -347,6 +345,8 @@ class DependencyGraph:
     def static_resolve[T](self, dependent: type[T]) -> DependentNode[T]:
         """
         Resolve a dependency without building its instance.
+
+        TODO: register node with lazy dependent
         """
         if dependent in self._resolved_nodes:
             return self._resolved_nodes[dependent]
@@ -393,15 +393,18 @@ class DependencyGraph:
         node: DependentNode[T] = self.resolve_node(node_dep_type)
         resolved_deps = overrides.copy()
 
-        for dep_param in node.dependency_params:
-            sub_node = dep_param.dependency
-            param_name = dep_param.name
-            dep_type = sub_node.dependent_type
-            if param_name in resolved_deps or dep_param.is_builtin:
+        for dep_param in node.signature:
+            if dep_param.should_not_resolve:
                 continue
 
+            if dep_param.name in resolved_deps:
+                continue
+
+            sub_node = dep_param.node
+            dep_type = sub_node.dependent_type
+
             resolved_dep = self.resolve(dep_type)
-            resolved_deps[param_name] = resolved_dep
+            resolved_deps[dep_param.name] = resolved_dep
 
         instance = node.build(**resolved_deps)
         if node.config.reuse:

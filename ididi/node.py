@@ -55,13 +55,12 @@ class AbstractDependent[T]:
 
     dependent_type: type[T] = field(init=False)
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self.__name__})"
-
     @property
     def __name__(self) -> str:
-        """Return the name of the dependent type."""
-        raise NotImplementedError
+        return "AbstractDependent"
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}"
 
     def resolve(self) -> type[T]:
         """Resolve to concrete type."""
@@ -92,6 +91,9 @@ class ForwardDependent(AbstractDependent[ty.Any]):
     forward_ref: ty.ForwardRef
     globalns: dict[str, ty.Any] = field(repr=False)
 
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({self.forward_ref})"
+
     def resolve(self) -> type:
         try:
             return eval_type(self.forward_ref, self.globalns, self.globalns)
@@ -105,35 +107,78 @@ class ForwardDependent(AbstractDependent[ty.Any]):
 @dataclass(frozen=True, slots=True)
 class LazyDependent(AbstractDependent[ty.Any]):
     dependent_type: type[ty.Any]
+    dependency_params: dict[str, "DependencyParam"]
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({self.dependent_type})"
 
     def __getattr__(self, name: str) -> ty.Any:
         """
         dynamically build the dependent type on the fly
+
+        # TODO:
+        # differentiate a node attribute from a normal attribute
+        # e.g. self.db.some_attribute
+        # if some_attribute is a lazy dependent, return it
+        # if some_attribute is a normal attribute, solve the db instance and return value of some_attribute
         """
+        try:
+            dpram = self.dependency_params[name]
+        except KeyError:
+            # build the dependent type on the fly then return attribute
+            if name not in self.dependent_type.__dict__:
+                # NOTE: This won't would if attributes is set in obj.init with
+                # self._dynamic = value
+                raise AttributeError(f"{self.dependent_type} has no attribute {name}")
+
+            deps = {}
+            for dpram in self.dependency_params.values():
+                dep = dpram.build()
+                deps[dpram.name] = dep
+            dependent = self.dependent_type(**deps)
+            return dependent.__getattribute__(name)
+
+        dep = dpram.node.dependent
+        return dep
 
     def resolve(self) -> type[ty.Any]:
-        return self
+        raise NotImplementedError("Lazy dependent type should be resolved at runtime")
 
 
 @dataclass(kw_only=True, slots=True, frozen=True)
 class DependencyParam:
-    """Represents a parameter and its corresponding dependency node.
+    """'dpram' for short
+    Represents a parameter and its corresponding dependency node
 
-    This class encapsulates the relationship between a parameter and its
-    dependency node, making the one-to-one relationship explicit.
+    @dg.node
+    def dependent_factory(self, name: str) -> ty.Any:
+
+    Here we 'name: str' would be built into a DependencyParam
     """
 
     name: str
     param: Parameter
     is_builtin: bool
-    dependency: "DependentNode[ty.Any]"
+    node: "DependentNode[ty.Any]"
 
     def __repr__(self) -> str:
-        return f"{self.param.name}: {self.dependency}"
+        return f"{self.param.name}: {self.node}"
 
     @property
     def dependent_type(self) -> type[ty.Any]:
-        return self.dependency.dependent_type
+        return self.node.dependent_type
+
+    @property
+    def should_not_resolve(self) -> bool:
+        """
+        Conditions that make this dependency param not be resolved at DependencyGraph.resolve()
+
+        - lazy dependency
+        Lazy Dependency should be resolved at runtime, not at graph resolution time
+        - builtin type
+        Builtin type can't be instantiated without arguments, so it should not be resolved
+        """
+        return self.node.config.lazy or self.is_builtin
 
     def build(self, **kwargs: ty.Any) -> ty.Any:
         """Build the dependency if needed, handling defaults and overrides."""
@@ -150,7 +195,108 @@ class DependencyParam:
         if self.param.kind in (Parameter.VAR_POSITIONAL, Parameter.VAR_KEYWORD):
             raise UnsolvableDependencyError(self.param.name, self.param.annotation)
 
-        return self.dependency.build()
+        return self.node.build()
+
+
+@dataclass(slots=True, frozen=True, kw_only=True)
+class DependentSignature:
+    dprams: list[DependencyParam] = field(default_factory=list, repr=False)
+    dependent: type[ty.Any] = type(None)
+
+    def __iter__(self) -> ty.Iterator[DependencyParam]:
+        return iter(self.dprams)
+
+    def __len__(self) -> int:
+        return len(self.dprams)
+
+    def update(self, index: int, dpram: DependencyParam) -> None:
+        self.dprams[index] = dpram
+
+    def bound_args(self, *args: ty.Any, **kwargs: ty.Any) -> inspect.BoundArguments:
+        dprams = self.dprams
+
+        sig = inspect.Signature(
+            parameters=[dpram.param for dpram in dprams],
+            return_annotation=self.dependent,
+        )
+
+        bound_args = sig.bind_partial()
+
+        for dpram in dprams:
+            # TODO: make this in static resolve
+            if dpram.node.config.lazy:
+                value = dpram.node.dependent
+            else:
+                value = dpram.build(*args, **kwargs)
+            bound_args.arguments[dpram.param.name] = value
+
+        bound_args.apply_defaults()
+        return bound_args
+
+    def param_mapping(self) -> dict[str, DependencyParam]:
+        return {dpram.param.name: dpram for dpram in self.dprams}
+
+
+# ======================= Node =====================================
+
+
+def _create_holder_node[
+    I
+](
+    dependent: AbstractDependent[I],
+    default: Nullable[I],
+    config: NodeConfig,
+) -> "DependentNode[ty.Any]":
+    """
+    Create a holder node for certain dependent types.
+    e.g. builtin types, forward references, etc.
+    """
+    if default is inspect.Parameter.empty:
+        default = NULL
+    return DependentNode(
+        dependent=dependent,
+        factory=factory_placeholder,
+        signature=DependentSignature(),
+        default=default,
+        config=config,
+    )
+
+
+def _create_sig(
+    *, dependent: type[ty.Any], params: ty.Sequence[Parameter], config: NodeConfig
+) -> DependentSignature:
+
+    dep_params: list["DependencyParam"] = []
+    globalns: dict[str, ty.Any] = getattr(dependent.__init__, "__globals__", {})
+
+    for param in params:
+        if is_builtin_type(dependent):
+            dep = Dependent(dependent)
+            dependency = _create_holder_node(dep, NULL, config)
+            is_builtin = True
+        elif isinstance(param.annotation, ty.ForwardRef):
+            dep = ForwardDependent(param.annotation, globalns)
+            dependency = _create_holder_node(
+                dependent=dep, default=param.default, config=config
+            )
+            is_builtin = False
+        else:
+            dependency = DependentNode.from_param(
+                dependent=dependent,
+                param=param,
+                globalns=globalns,
+                config=config,
+            )
+            is_builtin = is_builtin_type(dependency.dependent.dependent_type)
+
+        dep_param = DependencyParam(
+            name=param.name,
+            param=param,
+            node=dependency,
+            is_builtin=is_builtin,
+        )
+        dep_params.append(dep_param)
+    return DependentSignature(dprams=dep_params, dependent=dependent)
 
 
 @dataclass(kw_only=True, slots=True)
@@ -176,25 +322,15 @@ class DependentNode[T]:
     dependent: AbstractDependent[T]
     default: Nullable[T] = NULL
     factory: ty.Callable[..., T]
-    dependency_params: list[DependencyParam] = field(default_factory=list, repr=False)
+    signature: DependentSignature
     config: NodeConfig
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self.dependent.__name__})"
+        return f"{self.__class__.__name__}({self.dependent})"
 
     @property
     def dependent_type(self) -> type[T]:
         return self.dependent.dependent_type
-
-    @property
-    def signature(self) -> inspect.Signature:
-        """Reconstruct signature from dependency_params"""
-        if not self.dependency_params:
-            return EMPTY_SIGNATURE
-        parameters = [dep.param for dep in self.dependency_params]
-        return inspect.Signature(
-            parameters=parameters, return_annotation=self.dependent
-        )
 
     def resolve_forward_dependency(self, dep: ForwardDependent) -> type:
         """
@@ -220,9 +356,10 @@ class DependentNode[T]:
         """
         Update all forward dependency params to their resolved types.
         """
-        for index, dep_param in enumerate(self.dependency_params):
+
+        for index, dep_param in enumerate(self.signature):
             param = dep_param.param
-            dep = dep_param.dependency.dependent
+            dep = dep_param.node.dependent
 
             if dep_param.is_builtin:
                 continue
@@ -235,17 +372,17 @@ class DependentNode[T]:
             new_dep_param = DependencyParam(
                 name=param.name,
                 param=param,
-                dependency=resolved_node,
+                node=resolved_node,
                 is_builtin=False,
             )
-            self.dependency_params[index] = new_dep_param
+            self.signature.update(index, new_dep_param)
             yield resolved_node
 
     def iter_dependencies(self) -> ty.Generator["DependentNode[ty.Any]", None, None]:
-        for dep_param in self.dependency_params:
+        for dep_param in self.signature:
             if dep_param.is_builtin:
                 continue
-            yield dep_param.dependency
+            yield dep_param.node
 
     def build_type_without_dependencies(self) -> T:
         """
@@ -273,65 +410,51 @@ class DependentNode[T]:
         Build the dependent, resolving dependencies and applying defaults.
         kwargs override any dependencies or defaults.
         """
-
-        if not self.dependency_params:
+        if not self.signature:
             return self.build_type_without_dependencies()
 
-        bound_args = self.signature.bind_partial()
-
-        # Build all dependencies using DependencyParam
-        for dep_param in self.dependency_params:
-            value = dep_param.build(*args, **kwargs)
-            if value is not None:  # Skip None values from *args/**kwargs
-                bound_args.arguments[dep_param.param.name] = value
-
-        bound_args.apply_defaults()
-
+        bound_args = self.signature.bound_args(*args, **kwargs)
         return self.factory(*bound_args.args, **bound_args.kwargs)
 
     @classmethod
-    def _create_deprams[
-        I
+    def _create[
+        N
     ](
         cls,
-        dependent: type[I],
-        params: ty.Sequence[inspect.Parameter],
+        *,
+        dependent: type[N],
+        factory: ty.Callable[..., N],
+        signature: inspect.Signature,
         config: NodeConfig,
-    ) -> list["DependencyParam"]:
-        dep_params: list["DependencyParam"] = []
-        globalns: dict[str, ty.Any] = getattr(dependent.__init__, "__globals__", {})
+    ) -> "DependentNode[N]":
+        """Create a new dependency node with the specified type."""
 
-        for param in params:
-            if is_builtin_type(dependent):
-                dependency = cls._create_holder_node(Dependent(dependent), NULL, config)
-                is_builtin = True
-            elif isinstance(param.annotation, ty.ForwardRef):
-                dependency = cls._create_holder_node(
-                    dependent=ForwardDependent(param.annotation, globalns),
-                    default=param.default,
-                    config=config,
-                )
-                is_builtin = False
-            else:
-                dependency = DependentNode._from_param(
-                    dependent=dependent,
-                    param=param,
-                    globalns=globalns,
-                    config=config,
-                )
-                is_builtin = is_builtin_type(dependency.dependent.dependent_type)
+        # TODO: we need to make errors happen within this function much more deatiled,
+        # so that user can see right away what is wrong without having to trace back.
 
-            dep_param = DependencyParam(
-                name=param.name,
-                param=param,
-                dependency=dependency,
-                is_builtin=is_builtin,
-            )
-            dep_params.append(dep_param)
-        return dep_params
+        params = tuple(signature.parameters.values())
+
+        if is_class_or_method(factory):
+            # Skip 'self' parameter
+            params = params[1:]
+
+        dpram_sig = _create_sig(dependent=dependent, params=params, config=config)
+
+        if config.lazy:
+            dep = LazyDependent(dependent, dpram_sig.param_mapping())
+        else:
+            dep = Dependent(dependent)
+
+        node = DependentNode(
+            dependent=dep,
+            factory=factory,
+            signature=dpram_sig,
+            config=config,
+        )
+        return node
 
     @classmethod
-    def _from_param(
+    def from_param(
         cls,
         *,
         dependent: type[ty.Any],
@@ -372,62 +495,10 @@ class DependentNode[T]:
             annotation = union_types[0]
 
         if is_builtin_type(annotation):
-            node = cls._create_holder_node(Dependent(annotation), default, config)
+            node = _create_holder_node(Dependent(annotation), default, config)
         else:
-            node = cls.from_node(annotation, config)
+            node = DependentNode.from_node(annotation, config)
 
-        return node
-
-    @classmethod
-    def _create_holder_node[
-        I
-    ](
-        cls,
-        dependent: AbstractDependent[I],
-        default: Nullable[I],
-        config: NodeConfig,
-    ) -> "DependentNode[ty.Any]":
-        """
-        Create a holder node for certain dependent types.
-        e.g. builtin types, forward references, etc.
-        """
-        if default is inspect.Parameter.empty:
-            default = NULL
-        return DependentNode(
-            dependent=dependent,
-            factory=factory_placeholder,
-            default=default,
-            config=config,
-        )
-
-    @classmethod
-    def _create_node[
-        N
-    ](
-        cls,
-        *,
-        dependent: type[N],
-        factory: ty.Callable[..., N],
-        signature: inspect.Signature,
-        config: NodeConfig,
-    ) -> "DependentNode[N]":
-        """Create a new dependency node with the specified type."""
-
-        # TODO: we need to make errors happen within this function much more deatiled,
-        # so that user can see right away what is wrong without having to trace back.
-
-        params = tuple(signature.parameters.values())
-
-        if is_class_or_method(factory):
-            # Skip 'self' parameter
-            params = params[1:]
-
-        node = DependentNode(
-            dependent=Dependent(dependent),
-            factory=factory,
-            dependency_params=cls._create_deprams(dependent, params, config),
-            config=config,
-        )
         return node
 
     @classmethod
@@ -440,7 +511,7 @@ class DependentNode[T]:
             raise ValueError("Factory must have a return type")
         dependent = ty.cast(type[I], signature.return_annotation)
 
-        return cls._create_node(
+        return cls._create(
             dependent=dependent, factory=factory, signature=signature, config=config
         )
 
@@ -453,7 +524,7 @@ class DependentNode[T]:
                 dependent = res
 
         if is_class_with_empty_init(dependent):
-            return cls._create_node(
+            return cls._create(
                 dependent=dependent,
                 factory=ty.cast(ty.Callable[..., I], dependent),
                 signature=EMPTY_SIGNATURE,
@@ -461,7 +532,7 @@ class DependentNode[T]:
             )
         signature = get_full_typed_signature(dependent.__init__)
         signature = signature.replace(return_annotation=dependent)
-        return cls._create_node(
+        return cls._create(
             dependent=dependent, factory=dependent, signature=signature, config=config
         )
 
@@ -476,4 +547,8 @@ class DependentNode[T]:
         if is_class(node):
             return cls._from_class(ty.cast(type[I], node), config)
         elif callable(node):
+            if config.lazy:
+                raise NotSupportedError(
+                    "Lazy dependency is not supported for factories"
+                )
             return cls._from_factory(ty.cast(IFactory[I, P], node), config)

@@ -70,40 +70,9 @@ def basic_nodes():
     }
 
 
-# def test_nested_dependencies():
-#     config_node = DependentNode.from_node(Config)
-#     db_node = DependentNode.from_node(Database)
-#     db_node.dependencies = [config_node]
-#     service_node = DependentNode.from_node(Service)
-#     service_node.dependencies = [db_node]
-
-#     service = service_node.build()
-
-#     assert isinstance(service, Service)
-#     assert isinstance(service.db, Database)
-#     assert isinstance(service.db.config, Config)
-#     assert service.db.config.env == "dev"
-
-
-# def test_complex_dependency_injection():
-#     complex_node = DependentNode.from_node(ComplexDependency)
-
-#     complex_obj = complex_node.build()
-
-#     assert isinstance(complex_obj, ComplexDependency)
-#     assert isinstance(complex_obj.a, A)
-#     assert complex_obj.a.a == 5
-#     assert isinstance(complex_obj.b, B)
-#     assert complex_obj.b.b == "b"
-#     assert complex_obj.args == ()  # Empty tuple, as no args were provided
-#     assert isinstance(complex_obj.config, Config)
-#     assert complex_obj.config.env == "dev"
-#     assert complex_obj.kwargs == {}
-
-
 def test_complex_signature():
     node = DependentNode.from_node(ComplexDependency)
-    assert len(node.dependency_params) == 5
+    assert len(node.signature) == 5
 
 
 def test_factory_function():
@@ -144,7 +113,7 @@ def test_empty_init():
     node = DependentNode.from_node(EmptyService)
     instance = node.build()
     assert isinstance(instance, EmptyService)
-    assert not node.dependency_params
+    assert not node.signature
 
 
 def test_factory_without_return_type():
@@ -198,16 +167,7 @@ def test_not_implemented_abstract_methods():
     abstract = Abstract()
 
     with pytest.raises(NotImplementedError):
-        abstract.__name__
-
-    with pytest.raises(NotImplementedError):
         abstract.resolve()
-
-    # with pytest.raises(NotImplementedError):
-    #     abstract.dependent_type
-
-    with pytest.raises(NotImplementedError):
-        str(abstract)
 
 
 def test_varidc_keyword_args():
@@ -227,7 +187,7 @@ def test_node_repr():
 
 def test_node_without_params():
     node = DependentNode.from_node(object)
-    assert node.signature == EMPTY_SIGNATURE
+    assert not node.signature
     assert "object" in str(node)
     node.build()
 

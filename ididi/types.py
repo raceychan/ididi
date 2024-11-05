@@ -28,12 +28,13 @@ class INodeConfig(ty.TypedDict, total=False):
     """
 
     reuse: bool
-    # lazy: bool
+    lazy: bool
 
 
 @dataclass(kw_only=True, frozen=True, slots=True, unsafe_hash=True)
 class NodeConfig:
     reuse: bool = True
+    lazy: bool = False
 
 
 @dataclass(kw_only=True, frozen=True, slots=True, unsafe_hash=True)

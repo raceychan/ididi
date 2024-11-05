@@ -1,6 +1,7 @@
 # Byte-compiled / optimized / DLL files
 .pixi/
 *.pixi
+DEVNOTE.md
 
 # Python cache files (more comprehensive)
 __pycache__/

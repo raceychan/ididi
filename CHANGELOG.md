@@ -40,3 +40,9 @@
 - [x] fix: when a dependency is a union type, the dependency resolver would not be able to identify the dependency
 
 - [x] fix: variadic arguments would cause UnsolvableDependencyError, instead of injection an empty tuple or dict
+
+## version 0.2.0
+
+- [ ] feat: lazy dependent
+
+- [ ] feat: dg.resolve depends on static resolve
