@@ -102,19 +102,17 @@ class ForwardDependent(AbstractDependent[ty.Any]):
     #     return hash(self.forward_ref.__forward_arg__)
 
 
-"""
 @dataclass(frozen=True, slots=True)
 class LazyDependent(AbstractDependent[ty.Any]):
-    _dependent_type: type[T]
+    dependent_type: type[ty.Any]
 
     def __getattr__(self, name: str) -> ty.Any:
-        '''
+        """
         dynamically build the dependent type on the fly
-        '''
+        """
 
-    def resolve(self) -> ty.Self:
+    def resolve(self) -> type[ty.Any]:
         return self
-"""
 
 
 @dataclass(kw_only=True, slots=True, frozen=True)
