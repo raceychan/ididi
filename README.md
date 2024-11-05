@@ -124,7 +124,45 @@ vs.view # use vs.view in jupyter notebook, or use vs.save(path, format) otherwis
 
 ![image](https://github.com/user-attachments/assets/b86be121-3957-43f3-b75c-3689a855d7fb)
 
-### Runtime override is also supported
+### Lazy Dependency(Beta)
+
+when a node is defined as 'lazy', each of its dependency will be delayed to be resolved as much as possible.
+
+Note that 'lazy' is transitive, if `ServiceA` is lazy, and `ServiceA` depends on `ServiceB`, then `ServiceB` is also lazy.
+
+```python
+
+class UserRepo:
+    def __init__(self, db: Database):
+        self._db = db
+
+    def test(self):
+        return "test"
+
+@dg.node(lazy=True)
+class ServiceA:
+    def __init__(self, user_repo: UserRepo, session_repo: SessionRepo):
+        self._user_repo = user_repo
+        self._session_repo = session_repo
+
+        assert isinstance(self._user_repo, LazyDependent)
+        assert isinstance(self._session_repo, LazyDependent)
+
+    @property
+    def user_repo(self) -> UserRepo:
+        return self._user_repo
+
+    @property
+    def session_repo(self) -> SessionRepo:
+        return self._session_repo
+
+assert isinstance(instance.user_repo, LazyDependent)
+assert isinstance(instance.session_repo, LazyDependent)
+
+assert instance.user_repo.test() == "test" # user_repo would be resolved when user_repo.test is accessed.
+```
+
+### Runtime override
 
 ```python
 dg = DependencyGraph()
@@ -142,7 +180,6 @@ class Outer:
 instance = dg.resolve(Outer, inner=Inner(value="overridden"))
 assert instance.inner.value == "overridden"
 ```
-
 
 ## Features
 
