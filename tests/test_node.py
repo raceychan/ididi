@@ -14,8 +14,8 @@ from ididi.node import EMPTY_SIGNATURE, AbstractDependent, DependentNode
 def print_dependency_tree(node: DependentNode[ty.Any], level: int = 0):
     indent = "  " * level
     print(f"{indent} {node.dependent=}, {node.default=}")
-    for dep in node.dependency_params:
-        print_dependency_tree(dep.dependency, level + 1)
+    for dep in node.signature:
+        print_dependency_tree(dep.node, level + 1)
 
 
 class A:
@@ -160,16 +160,6 @@ def test_weird_annotation():
     f.build()
 
 
-def test_not_implemented_abstract_methods():
-    class Abstract(AbstractDependent):
-        pass
-
-    abstract = Abstract()
-
-    with pytest.raises(NotImplementedError):
-        abstract.resolve()
-
-
 def test_varidc_keyword_args():
     class Service:
         def __init__(self, **kwargs: int):
@@ -205,7 +195,6 @@ def test_forward_dependent_repr():
             self.a = a
 
     node = DependentNode.from_node(A)
-    node.dependent.resolve()
 
     str(node)
     str(node.dependent)
@@ -235,5 +224,8 @@ def test_complex_union_type_2():
             self.args = args
 
     node = DependentNode.from_node(Service)
+    for dep in node.signature:
+        repr(dep)
+
     with pytest.raises(UnsolvableDependencyError):
         res = node.build()

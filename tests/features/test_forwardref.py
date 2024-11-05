@@ -23,6 +23,7 @@ class ServiceC:
 
 def test_forward_reference():
     # Resolve ServiceA which has a forward reference to ServiceB
+
     instance = dag.resolve(ServiceA)
 
     # Assert that the forward reference was properly resolved

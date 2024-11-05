@@ -1,5 +1,6 @@
 import pytest
 
+from ididi.errors import NotSupportedError
 from ididi.graph import DependencyGraph
 from ididi.node import LazyDependent
 
@@ -16,7 +17,6 @@ Here dg.resolve(UserRepository) will return a user_repository instance with db b
 """
 
 
-@pytest.mark.debug
 def test_lazynode():
     dg = DependencyGraph()
 
@@ -32,14 +32,19 @@ def test_lazynode():
             return f"saved {name}"
 
     class UserRepo:
-        def __init__(self, db: Database):
+        def __init__(self, db: Database, config: Config):
             self._db = db
+            self.config = config
 
         def test(self):
             return "test"
 
         def save(self, name: str):
             return self._db.save(name)
+
+        @property
+        def db(self) -> Database:
+            return self._db
 
     class SessionRepo:
         def __init__(self, db: Database):
@@ -66,14 +71,32 @@ def test_lazynode():
     assert isinstance(instance, ServiceA)
 
     assert isinstance(instance.user_repo, LazyDependent)
+    repr(instance.user_repo.db)
     assert isinstance(instance.session_repo, LazyDependent)
 
     db1 = instance.user_repo._db
     db2 = instance.session_repo._db
     assert db1 is db2
 
+    assert isinstance(instance.user_repo.config, LazyDependent)
+
     assert instance.user_repo.test() == "test"
     repo1 = instance.user_repo
     assert instance.user_repo.save("test") == "saved test"
     repo2 = instance.user_repo
     assert repo1 is repo2
+
+
+def test_lazyfactory():
+    dg = DependencyGraph()
+
+    @dg.node
+    class Service:
+        def __init__(self, name: str):
+            self._name = name
+
+    with pytest.raises(NotSupportedError):
+
+        @dg.node(lazy=True)
+        def service_factory() -> Service:
+            return Service(name="test")

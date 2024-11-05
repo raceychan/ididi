@@ -12,7 +12,8 @@ It allows you to define dependencies in a declarative way without any boilerplat
 pip install ididi
 ```
 
-Too view viusal dependency graph
+To view viusal dependency graph, install `graphviz`
+
 ```bash
 pip install ididi[graphviz]
 ```
@@ -30,7 +31,7 @@ class Config:
     def __init__(self, env: str = "prod"):
         self.env = env
 
-
+@dg.node(reuse=False) # disable reuse for database, it would be created every time
 class Database:
     def __init__(self, config: Config):
         self.config = config
@@ -122,7 +123,6 @@ vs.view # use vs.view in jupyter notebook, or use vs.save(path, format) otherwis
 ```
 
 ![image](https://github.com/user-attachments/assets/b86be121-3957-43f3-b75c-3689a855d7fb)
-
 
 ### Runtime override is also supported
 

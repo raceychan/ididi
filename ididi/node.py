@@ -46,7 +46,7 @@ def is_class_with_empty_init(cls: type) -> bool:
 
 
 def factory_placeholder() -> None:
-    raise NotSupportedError("Factory placeholder")
+    raise NotSupportedError("Factory placeholder should not be called")
 
 
 @dataclass(slots=True)
@@ -59,13 +59,6 @@ class AbstractDependent[T]:
     def __name__(self) -> str:
         return "AbstractDependent"
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}"
-
-    def resolve(self) -> type[T]:
-        """Resolve to concrete type."""
-        raise NotImplementedError
-
 
 @dataclass(slots=True)
 class Dependent[T](AbstractDependent[T]):
@@ -77,9 +70,6 @@ class Dependent[T](AbstractDependent[T]):
     def __name__(self) -> str:
         return self.dependent_type.__name__
 
-    def resolve(self) -> type[T]:
-        return self.dependent_type
-
 
 @dataclass(slots=True)
 class ForwardDependent(AbstractDependent[ty.Any]):
@@ -87,9 +77,6 @@ class ForwardDependent(AbstractDependent[ty.Any]):
 
     forward_ref: ty.ForwardRef
     globalns: dict[str, ty.Any] = field(repr=False)
-
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self.forward_ref})"
 
     def resolve(self) -> type:
         try:
@@ -107,13 +94,16 @@ class LazyDependent[T](AbstractDependent[T]):
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.dependent_type})"
 
-    def __getattr__(self, attriname: str, /) -> ty.Any:
+    def __getattr__(self, attrname: str, /) -> ty.Any:
         """
         dynamically build the dependent type on the fly
         """
+        classattr = self.dependent_type.__dict__.get(attrname)
 
         try:
-            dpram = self.signature[attriname]
+            if isinstance(classattr, property):
+                raise KeyError(attrname)
+            dpram = self.signature[attrname]
             return dpram.node.dependent
         except KeyError:
             if self.cached_instance is NULL:
@@ -121,10 +111,7 @@ class LazyDependent[T](AbstractDependent[T]):
                 self.cached_instance = self.dependent_type(
                     *bound_args.args, **bound_args.kwargs
                 )
-            return self.cached_instance.__getattribute__(attriname)
-
-    def resolve(self) -> type[ty.Any]:
-        raise NotImplementedError("Lazy dependent type should be resolved at runtime")
+            return self.cached_instance.__getattribute__(attrname)
 
 
 # ======================= Signature =====================================
