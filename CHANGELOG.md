@@ -51,5 +51,9 @@
 
 ## version 0.2.2
 
+- [ ] feat: adding py.typed file
+
+## version 0.2.3
+
 - [ ] feat: support for classmethod as factory
 - [ ] feat: dg.resolve depends on static resolve
