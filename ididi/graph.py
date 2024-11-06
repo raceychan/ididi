@@ -170,7 +170,7 @@ class DependencyGraph:
         if not self._config.static_resolve:
             return self
 
-        for node_type in self._nodes:
+        for node_type in self._nodes.copy():
             if node_type in self._resolved_nodes:
                 continue
             self.static_resolve(node_type)
@@ -504,8 +504,6 @@ class DependencyGraph:
             new_node = DependentNode.from_node(factory_or_class, node_config)
             old_node = self._nodes[return_type]
             self.replace_node(old_node, new_node)
-
-
 
         else:
             node = DependentNode.from_node(factory_or_class, node_config)

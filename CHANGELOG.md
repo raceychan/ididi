@@ -45,8 +45,11 @@
 
 - [x] feat: lazy dependent
 
-
 ## version 0.2.1
+
+- [x] fix: static resolve at __aenter__ would cause dict changed during iteration error
+
+## version 0.2.2
 
 - [ ] feat: support for classmethod as factory
 - [ ] feat: dg.resolve depends on static resolve
