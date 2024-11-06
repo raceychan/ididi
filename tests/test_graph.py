@@ -491,5 +491,5 @@ def test_graph_factory_partial():
 
 #     """
 #     BUG: classmethod as factory creates a new corner case we did not think about, that return type could be a forward reference
-    
+
 #     """

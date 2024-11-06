@@ -42,7 +42,7 @@ minor:
 VERSION ?= x.x.x
 BRANCH = version/$(VERSION)
 
-release: check-branch check-version update-version hatch-build git-commit git-merge git-tag git-push
+release: check-branch check-version update-version git-commit git-merge git-tag git-push hatch-build 
 
 check-branch:
 	@if [ "$$(git rev-parse --abbrev-ref HEAD)" != "$(BRANCH)" ]; then \
@@ -77,9 +77,7 @@ update-version:
 	@echo "Updating Pixi version to $(VERSION)..."
 	@pixi run -e publish hatch version $(VERSION)
 
-hatch-build:
-	@echo "Building version $(VERSION)..."
-	@pixi run -e publish hatch build
+
 
 git-commit:
 	@echo "Committing changes..."
@@ -99,6 +97,10 @@ git-push:
 	@echo "Pushing to remote repository..."
 	@git push origin master
 	@git push origin "v$(VERSION)"
+
+hatch-build:
+	@echo "Building version $(VERSION)..."
+	@pixi run -e publish hatch build
 
 publish-release:
 	pixi run -e publish publish
