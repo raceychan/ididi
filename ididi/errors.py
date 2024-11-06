@@ -26,6 +26,10 @@ class NodeError(IDIDIError):
 
 
 class UnsolvableDependencyError(NodeError):
+    """
+    Raised when a dependency parameter can't be built.
+    """
+
     def __init__(self, dep_name: str, required_type: ty.Any):
         self.dep_name = dep_name
         self.required_type = required_type
@@ -49,6 +53,18 @@ class MissingAnnotationError(NodeError):
         self.dependent = dependent
         self.param_name = param_name
         msg = f"Unable to resolve dependency for parameter: {param_name} in {dependent}, annotation for `{param_name}` must be provided"
+        super().__init__(msg)
+
+
+class MissingReturnTypeError(NodeError):
+    """
+    Raised when a factory has no return type.
+    Thus can't be determined what it is trying to override
+    """
+
+    def __init__(self, factory: ty.Callable[..., ty.Any]):
+        self.factory = factory
+        msg = f"Factory {factory} must have a return type"
         super().__init__(msg)
 
 

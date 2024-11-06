@@ -12,6 +12,7 @@ from .errors import (
     ForwardReferenceNotFoundError,
     GenericDependencyNotSupportedError,
     MissingAnnotationError,
+    MissingReturnTypeError,
     NotSupportedError,
     ProtocolFacotryNotProvidedError,
     UnsolvableDependencyError,
@@ -29,7 +30,7 @@ EMPTY_SIGNATURE = inspect.Signature()
 
 
 def is_class_or_method(obj: ty.Any) -> bool:
-    return isinstance(obj, (type, types.MethodType))
+    return isinstance(obj, (type, types.MethodType, classmethod))
 
 
 def is_class(obj: type | ty.Callable[..., ty.Any]) -> bool:
@@ -77,6 +78,9 @@ class ForwardDependent(AbstractDependent[ty.Any]):
 
     forward_ref: ty.ForwardRef
     globalns: dict[str, ty.Any] = field(repr=False)
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({self.forward_ref})"
 
     def resolve(self) -> type:
         try:
@@ -221,8 +225,6 @@ def _create_holder_node[
     Create a holder node for certain dependent types.
     e.g. builtin types, forward references, etc.
     """
-    if default is inspect.Parameter.empty:
-        default = NULL
     return DependentNode(
         dependent=dependent,
         factory=factory_placeholder,
@@ -248,9 +250,8 @@ def _create_sig(
             dependency = _create_holder_node(dep, NULL, config)
             is_builtin = True
         elif isinstance(param.annotation, ty.ForwardRef):
-            dep = ForwardDependent(param.annotation, globalns)
-            dependency = _create_holder_node(
-                dependent=dep, default=param.default, config=config
+            dependency = DependentNode.from_forwardref(
+                forwardref=param.annotation, globalns=globalns, config=config
             )
             is_builtin = False
         else:
@@ -328,6 +329,11 @@ class DependentNode[T]:
         """
         Update all forward dependency params to their resolved types.
         """
+        # classmethod factory would lead self.dependent being a ForwardDependent
+        # if isinstance(self.dependent, ForwardDependent):
+        #     resolved_type = self.resolve_forward_dependency(self.dependent)
+        #     resolved_node = DependentNode.from_node(resolved_type, self.config)
+        #     yield resolved_node
 
         for dep_param in self.signature:
             param = dep_param.param
@@ -426,6 +432,14 @@ class DependentNode[T]:
         return node
 
     @classmethod
+    def from_forwardref(
+        cls, forwardref: ty.ForwardRef, globalns: dict[str, ty.Any], config: NodeConfig
+    ) -> "DependentNode[ty.Any]":
+        dep = ForwardDependent(forwardref, globalns)
+        node = _create_holder_node(dependent=dep, default=NULL, config=config)
+        return node
+
+    @classmethod
     def from_param(
         cls,
         *,
@@ -480,7 +494,7 @@ class DependentNode[T]:
 
         signature = get_full_typed_signature(factory)
         if signature.return_annotation is inspect.Signature.empty:
-            raise ValueError("Factory must have a return type")
+            raise MissingReturnTypeError(factory)
         dependent = ty.cast(type[I], signature.return_annotation)
 
         return cls._create(
@@ -518,7 +532,7 @@ class DependentNode[T]:
         config = config or NodeConfig()
         if is_class(node):
             return cls._from_class(ty.cast(type[I], node), config)
-        elif callable(node):
+        else:
             if config.lazy:
                 raise NotSupportedError(
                     "Lazy dependency is not supported for factories"

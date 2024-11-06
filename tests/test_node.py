@@ -5,10 +5,11 @@ import pytest
 from ididi.errors import (
     GenericDependencyNotSupportedError,
     MissingAnnotationError,
+    MissingReturnTypeError,
     NotSupportedError,
     UnsolvableDependencyError,
 )
-from ididi.node import EMPTY_SIGNATURE, AbstractDependent, DependentNode
+from ididi.node import DependentNode
 
 
 def print_dependency_tree(node: DependentNode[ty.Any], level: int = 0):
@@ -121,7 +122,7 @@ def test_factory_without_return_type():
     def bad_factory():
         return object()
 
-    with pytest.raises(ValueError, match="Factory must have a return type"):
+    with pytest.raises(MissingReturnTypeError):
         DependentNode.from_node(bad_factory)
 
 
@@ -229,3 +230,5 @@ def test_complex_union_type_2():
 
     with pytest.raises(UnsolvableDependencyError):
         res = node.build()
+
+

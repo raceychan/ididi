@@ -424,6 +424,7 @@ class DependencyGraph:
         Register a dependency node and update dependency relationships.
         Automatically registers any unregistered dependencies.
         """
+
         dep_type = node.dependent.dependent_type
         dependent_type: type = ty.get_origin(dep_type) or dep_type
 
@@ -487,10 +488,25 @@ class DependencyGraph:
         node_config = NodeConfig(**config)
 
         return_type = get_full_typed_signature(factory_or_class).return_annotation
+
+        # elif (
+        #     isinstance(factory_or_class, classmethod)
+        #     and callable(factory_or_class.__func__)
+        #     and isinstance(return_type, ty.ForwardRef)
+        # ):
+        #     node = DependentNode.from_forwardref(
+        #         forwardref=return_type,
+        #         globalns=factory_or_class.__func__.__globals__,
+        #         config=node_config,
+        #     )
+
         if self._is_factory_override(return_type, factory_or_class):
             new_node = DependentNode.from_node(factory_or_class, node_config)
             old_node = self._nodes[return_type]
             self.replace_node(old_node, new_node)
+
+
+
         else:
             node = DependentNode.from_node(factory_or_class, node_config)
             self.register_node(node)

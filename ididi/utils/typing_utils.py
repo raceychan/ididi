@@ -93,7 +93,11 @@ def get_typed_annotation(annotation: ty.Any, globalns: dict[str, ty.Any]) -> ty.
 
 
 def get_full_typed_signature[T](call: ty.Callable[..., T]) -> inspect.Signature:
+    # if isinstance(call, classmethod):
+    #     call = call.__func__
+
     signature = inspect.signature(call)
+
     globalns = getattr(call, "__globals__", {})
     typed_params = [
         inspect.Parameter(

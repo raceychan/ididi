@@ -43,6 +43,10 @@
 
 ## version 0.2.0
 
-- [ ] feat: lazy dependent
+- [x] feat: lazy dependent
 
+
+## version 0.2.1
+
+- [ ] feat: support for classmethod as factory
 - [ ] feat: dg.resolve depends on static resolve

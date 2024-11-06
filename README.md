@@ -69,6 +69,28 @@ assert isinstance(service.auth.db, Database)
 assert service.auth.db is service.repo.db
 ```
 
+### Usage with FastAPI
+
+```python
+from fastapi import FastAPI
+from ididi import DependencyGraph
+
+app = FastAPI()
+dg = DependencyGraph()
+
+class AuthService: ...
+
+@dg.node
+def auth_service_factory() -> AuthService:
+    return AuthService()
+
+Service = ty.Annotated[AuthService, Depends(dg.factory(auth_service_factory))]
+
+@app.get("/")
+def get_service(service: Service):
+    return service
+```
+
 ### Visualize the dependency graph(beta)
 
 ```python
