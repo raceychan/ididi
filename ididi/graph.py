@@ -424,9 +424,12 @@ class DependencyGraph:
             dependent=Dummy, factory=func, signature=sig, config=NodeConfig(**kwargs)
         )
         self.register_node(node)
-        # raise NotImplementedError
 
-        return self.factory(node.dependent_type)
+        def resolve(*args: P.args, **kwargs: P.kwargs) -> R:
+            dep = ty.cast(type[R], Dummy)
+            return self.resolve(dep, *args, **kwargs)
+
+        return resolve
 
     def register_node(self, node: DependentNode[ty.Any]) -> None:
         """
