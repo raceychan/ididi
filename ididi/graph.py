@@ -365,6 +365,7 @@ class DependencyGraph:
         self._resolved_nodes[dependent] = node
         return node
 
+    # might return awaitable[T]
     def resolve[T](self, dependent: type[T], /, **overrides: ty.Any) -> T:
         """
         Resolve a dependency and bild its complete dependency graph.
@@ -396,7 +397,7 @@ class DependencyGraph:
         instance = node.build(**resolved_deps)
         if node.config.reuse:
             self._resolution_registry.register(node_dep_type, instance)
-        return instance
+        return ty.cast(T, instance)
 
     @lru_cache
     def factory[T](self, dependent: type[T]) -> IFactory[T, ...]:
@@ -406,28 +407,37 @@ class DependencyGraph:
         if dependent not in self._resolved_nodes:
             self.static_resolve(dependent)
 
-        def resolver():
+        def resolver() -> T:
             return self.resolve(dependent)
 
         return resolver
 
     def entry_node[
         **P, R
-    ](
-        self, func: ty.Callable[P, R], /, **kwargs: ty.Unpack[INodeConfig]
-    ) -> ty.Callable[[], R]:
+    ](self, func: ty.Callable[P, R], /, **kwargs: ty.Unpack[INodeConfig]) -> (
+        ty.Callable[[], R] | ty.Callable[[], ty.Awaitable[R]]
+    ):
         Dummy = type("Dummy", (object,), {})
+        dep = ty.cast(type[R], Dummy)
         sig = get_full_typed_signature(func)
         node = DependentNode.create(
-            dependent=Dummy, factory=func, signature=sig, config=NodeConfig(**kwargs)
+            dependent=dep, factory=func, signature=sig, config=NodeConfig(**kwargs)
         )
         self.register_node(node)
 
         def resolve(*args: P.args, **kwargs: P.kwargs) -> R:
-            dep = ty.cast(type[R], Dummy)
-            return self.resolve(dep, *args, **kwargs)
+            r = self.resolve(dep, *args, **kwargs)
+            return r
 
-        return resolve
+        async def async_resolve(*args: P.args, **kwargs: P.kwargs) -> R:
+            r = await ty.cast(ty.Awaitable[R], self.resolve(dep, *args, **kwargs))
+            return r
+
+        if inspect.iscoroutinefunction(func):
+            f = async_resolve
+        else:
+            f = resolve
+        return f
 
     def register_node(self, node: DependentNode[ty.Any]) -> None:
         """
@@ -512,6 +522,12 @@ class DependencyGraph:
 
 def entry[
     R, **P
-](func: ty.Callable[P, R], /, **kwargs: ty.Unpack[INodeConfig],) -> ty.Callable[..., R]:
+](
+    func: ty.Callable[P, R],
+    /,
+    **kwargs: ty.Unpack[INodeConfig],
+) -> (
+    ty.Callable[..., R] | ty.Callable[..., ty.Awaitable[R]]
+):
     dg = DependencyGraph()
     return dg.entry_node(func, **kwargs)

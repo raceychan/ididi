@@ -162,7 +162,7 @@ class DependencyParam[T]:
         """
         return self.node.config.lazy or self.is_builtin
 
-    def build(self, override: T | dict[str, ty.Any]) -> T:
+    def build(self, override: T | dict[str, ty.Any]) -> T | ty.Awaitable[T]:
         """Build the dependency if needed, handling defaults and overrides."""
         if override:
             if override.__class__ is not dict:
@@ -386,7 +386,7 @@ class DependentNode[T]:
                     dpram.param.name, dpram.param.annotation
                 )
 
-    def build(self, **override: dict[str, ty.Any]) -> T:
+    def build(self, **override: dict[str, ty.Any]) -> T | ty.Awaitable[T]:
         """
         Build the dependent, resolving dependencies and applying defaults.
         kwargs override any dependencies or defaults.

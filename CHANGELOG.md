@@ -59,10 +59,6 @@
 
 - [x] fix: fix a bug with subclass of ty.Protocol
 
-## version 0.2.4
-
-~~- [ ] feat: support for classmethod as factory~~
-
 - [x] feat: dg.resolve depends on static resolve
 
 - [x] feat: node.build now support nested, partial override
@@ -93,4 +89,8 @@ assert instance.repository.db.engine == "sqlite"
 assert instance.repository.db.driver == "aiomysql"
 ```
 
-- [ ] feat: detect unsolveable dependency with static resolve
+- [x] feat: detect unsolveable dependency with static resolve
+
+## version 0.2.4
+
+- [x] feat: support for async entry
