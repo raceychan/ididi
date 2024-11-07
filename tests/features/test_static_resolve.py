@@ -1,5 +1,6 @@
 import pytest
 
+from ididi.errors import ForwardReferenceNotFoundError, UnsolvableDependencyError
 from ididi.graph import DependencyGraph
 
 # Create test classes with various dependency patterns
@@ -48,21 +49,28 @@ class EmailService:
         self.user = user
 
 
-# Create and register nodes
-dg = DependencyGraph()
+@pytest.fixture(scope="function")
+def dg() -> DependencyGraph:
+    return DependencyGraph()
 
 
-def test_static_resolve():
+def test_static_resolve(dg: DependencyGraph):
     node = dg.static_resolve(EmailService)
     assert len(dg.nodes) == 7
     assert len(dg.resolved_nodes) == 7
 
-    dg.resolve(EmailService)
+
+def test_static_resolve_equal_resolve(dg: DependencyGraph):
+    node = dg.static_resolve(EmailService)
     assert len(dg.nodes) == 7
     assert len(dg.resolved_nodes) == 7
 
+    dg.reset()
 
-dg2 = DependencyGraph()
+    dg.resolve(EmailService)
+
+    assert len(dg.nodes) == 7
+    assert len(dg.resolved_nodes) == 7
 
 
 class ForwardService:
@@ -79,21 +87,55 @@ class ForwardConfig:
     pass
 
 
-def test_forward_dependency():
-    node = dg2.static_resolve(ForwardService)
-    assert len(dg2.nodes) == 3
-    assert len(dg2.resolved_nodes) == 3
+def test_forward_dependency(dg: DependencyGraph):
+    node = dg.static_resolve(ForwardService)
+    assert len(dg.nodes) == 3
+    assert len(dg.resolved_nodes) == 3
 
-    dg2.resolve(ForwardService)
-    assert len(dg2.nodes) == 3
-    assert len(dg2.resolved_nodes) == 3
+    dg.resolve(ForwardService)
+    assert len(dg.nodes) == 3
+    assert len(dg.resolved_nodes) == 3
 
 
 @pytest.mark.asyncio
-async def test_async_enter():
-    @dg2.node(reuse=False)
+async def test_async_enter(dg: DependencyGraph):
+    @dg.node(reuse=False)
     class AsyncService:
         pass
 
-    async with dg2:
-        dg2.resolve(AsyncService)
+    async with dg:
+        dg.resolve(AsyncService)
+
+
+def test_forward_ref_in_local_scope():
+    dag = DependencyGraph()
+
+    class ServiceA:
+        def __init__(self, b: "ServiceB"):
+            self.b = b
+
+    class ServiceB:
+        def __init__(self, a: str = "a"):
+            self.a = a
+
+    with pytest.raises(ForwardReferenceNotFoundError):
+        dag.static_resolve(ServiceA)
+
+
+@pytest.mark.debug
+def test_static_resolve_would_raise_error(dg: DependencyGraph):
+    class DataBase:
+        def __init__(self, engine: str):
+            self.engine = engine
+
+    class Repository:
+        def __init__(self, db: DataBase):
+            self.db = db
+
+    class UserService:
+        def __init__(self, repository: Repository):
+            self.repository = repository
+
+    with pytest.raises(UnsolvableDependencyError):
+        node = dg.static_resolve(UserService)
+

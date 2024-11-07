@@ -39,7 +39,6 @@ async def test_resource():
     assert resource._closed
 
 
-@pytest.mark.debug
 @pytest.mark.asyncio
 async def test_graph_context_manager():
 

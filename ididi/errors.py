@@ -6,6 +6,10 @@ class IDIDIError(Exception):
     Base class for all IDIDI exceptions.
     """
 
+    def __init__(self, message: str, /):
+        self.message = message
+        super().__init__(self.message)
+
 
 # =============== General Errors ===============
 
@@ -25,20 +29,13 @@ class NodeError(IDIDIError):
     """
 
 
-class UnsolvableDependencyError(NodeError):
+class UnsolvableParameterError(NodeError):
     """
-    Raised when a dependency parameter can't be built.
+    Raised when a parameter is unsolveable.
     """
 
-    def __init__(self, dep_name: str, required_type: ty.Any):
-        self.dep_name = dep_name
-        self.required_type = required_type
-        super().__init__(
-            f"Unable to resolve dependency for parameter: {dep_name}, value of {required_type} must be provided"
-        )
 
-
-class ForwardReferenceNotFoundError(NodeError):
+class ForwardReferenceNotFoundError(UnsolvableParameterError):
     """
     Raised when a forward reference can't be found in the global namespace.
     """
@@ -48,7 +45,7 @@ class ForwardReferenceNotFoundError(NodeError):
         super().__init__(msg)
 
 
-class MissingAnnotationError(NodeError):
+class MissingAnnotationError(UnsolvableParameterError):
     def __init__(self, dependent: type, param_name: str):
         self.dependent = dependent
         self.param_name = param_name
@@ -56,7 +53,7 @@ class MissingAnnotationError(NodeError):
         super().__init__(msg)
 
 
-class MissingReturnTypeError(NodeError):
+class MissingReturnTypeError(UnsolvableParameterError):
     """
     Raised when a factory has no return type.
     Thus can't be determined what it is trying to override
@@ -79,6 +76,16 @@ class GenericDependencyNotSupportedError(NodeError):
         )
 
 
+class UnsolvableDependencyError(NodeError):
+    """
+    Raised when a dependency parameter can't be built.
+    """
+
+    def __init__(self, dep_name: str, required_type: ty.Any):
+        self.message = f"Unable to resolve dependency for parameter: {dep_name}, value of {required_type} must be provided"
+        super().__init__(self.message)
+
+
 class ProtocolFacotryNotProvidedError(NodeError):
     """
     Raised when a protocol is used as a dependency without a factory.
@@ -90,7 +97,7 @@ class ProtocolFacotryNotProvidedError(NodeError):
         )
 
 
-class ABCWithoutImplementationError(NodeError):
+class ABCNotImplementedError(NodeError):
     """
     Raised when an ABC is used as a dependency without a factory.
     """

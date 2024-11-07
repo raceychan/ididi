@@ -92,6 +92,7 @@ def test_factory_function():
     assert factory_obj.kwargs == {"extra": "test"}
 
 
+@pytest.mark.debug
 def test_generic_service_not_supported():
     with pytest.raises(GenericDependencyNotSupportedError):
         DependentNode.from_node(GenericService[str])
@@ -141,7 +142,7 @@ def test_not_supported_annotation():
         def __init__(self, exc: Exception):
             self.exc = exc
 
-    with pytest.raises(NotSupportedError):
+    with pytest.raises(MissingAnnotationError):
         DependentNode.from_node(Unsupported)
 
 
@@ -232,3 +233,24 @@ def test_complex_union_type_2():
         res = node.build()
 
 
+def test_build_node_with_override():
+    class DataBase:
+        def __init__(self, engine: str = "mysql", /, driver: str = "aiomysql"):
+            self.engine = engine
+            self.driver = driver
+
+    class Repository:
+        def __init__(self, db: DataBase):
+            self.db = db
+
+    class UserService:
+        def __init__(self, repository: Repository):
+            self.repository = repository
+
+    node = DependentNode.from_node(UserService)
+    instance = node.build(repository=dict(db=dict(engine="sqlite")))
+    assert isinstance(instance, UserService)
+    assert isinstance(instance.repository, Repository)
+    assert isinstance(instance.repository.db, DataBase)
+    assert instance.repository.db.engine == "sqlite"
+    assert instance.repository.db.driver == "aiomysql"

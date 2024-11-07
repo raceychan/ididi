@@ -5,7 +5,7 @@ import pytest
 
 from ididi import DependencyGraph
 from ididi.errors import (
-    ABCWithoutImplementationError,
+    ABCNotImplementedError,
     ForwardReferenceNotFoundError,
     ProtocolFacotryNotProvidedError,
     UnsolvableDependencyError,
@@ -46,7 +46,7 @@ def test_abc():
         def __init__(self, engine: AbstractEngine):
             self.engine = engine
 
-    with pytest.raises(ABCWithoutImplementationError):
+    with pytest.raises(ABCNotImplementedError):
         dg.resolve(Database)
 
 
@@ -81,19 +81,16 @@ def test_abc_dependency_with_implementation():
 
     dg.resolve(Database)
 
-
 def test_forward_ref_in_local_scope():
     """
     Test that defining forward reference in local scope raises ForwardReferenceNotFoundError
     """
     dag = DependencyGraph()
 
-    @dag.node
     class ServiceA:
         def __init__(self, b: "ServiceB"):
             self.b = b
 
-    @dag.node
     class ServiceB:
         def __init__(self, a: str = "a"):
             self.a = a
@@ -102,7 +99,6 @@ def test_forward_ref_in_local_scope():
         dag.resolve(ServiceA)
 
 
-# @pytest.mark.debug
 def test_factory_with_builtin_type_str():
     class Setttings:
         def __init__(self, name: str):
@@ -115,7 +111,6 @@ def test_factory_with_builtin_type_str():
     dg.resolve(Setttings)
 
 
-# @pytest.mark.debug
 def test_factory_with_builtin_type():
     """
     BUG(fixed):

@@ -52,8 +52,8 @@ dev = {features = ["dev"], solve-group = "default"}
 publish = {features = ["publish"], solve-group = "default"}
 test = {features = ["test"], solve-group = "default"}
 
-[tool.pixi.pypi-dependencies]
-ididi = {path = ".", editable = true}
+# [tool.pixi.pypi-dependencies]
+# ididi = {path = ".", editable = true}
 
 [tool.pixi.dependencies]
 python = ">=3.12"

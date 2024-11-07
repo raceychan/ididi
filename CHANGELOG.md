@@ -51,9 +51,46 @@
 
 ## version 0.2.2
 
-- [ ] feat: adding py.typed file
+- [x] feat: adding py.typed file
 
 ## version 0.2.3
 
-- [ ] feat: support for classmethod as factory
-- [ ] feat: dg.resolve depends on static resolve
+- [x] fix: change implementation of DependencyGraph.factory to be compatible with fastapi.Depends
+
+- [x] fix: fix a bug with subclass of ty.Protocol
+
+## version 0.2.4
+
+~~- [ ] feat: support for classmethod as factory~~
+
+- [x] feat: dg.resolve depends on static resolve
+
+- [x] feat: node.build now support nested, partial override
+
+e.g.
+
+```python
+class DataBase:
+    def __init__(self, engine: str = "mysql", /, driver: str = "aiomysql"):
+        self.engine = engine
+        self.driver = driver
+
+class Repository:
+    def __init__(self, db: DataBase):
+        self.db = db
+
+class UserService:
+    def __init__(self, repository: Repository):
+        self.repository = repository
+
+
+node = DependentNode.from_node(UserService)
+instance = node.build(repository=dict(db=dict(engine="sqlite")))
+assert isinstance(instance, UserService)
+assert isinstance(instance.repository, Repository)
+assert isinstance(instance.repository.db, DataBase)
+assert instance.repository.db.engine == "sqlite"
+assert instance.repository.db.driver == "aiomysql"
+```
+
+- [ ] feat: detect unsolveable dependency with static resolve

@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 import pytest
 
 from ididi.errors import (
-    ABCWithoutImplementationError,
+    ABCNotImplementedError,
     MultipleImplementationsError,
     TopLevelBulitinTypeError,
     UnsolvableDependencyError,
@@ -14,7 +14,6 @@ from ididi.graph import DependencyGraph, is_closable
 dag = DependencyGraph()
 
 
-@dag.node
 class Config:
     def __init__(self, env: str = "prod"):
         self.env = env
@@ -90,7 +89,7 @@ def test_top_level_builtin_dependency():
 
 def test_missing_implementation():
     dag = DependencyGraph()
-    with pytest.raises(ABCWithoutImplementationError):
+    with pytest.raises(ABCNotImplementedError):
         dag.resolve(Repository)
 
 
@@ -470,26 +469,3 @@ def test_graph_factory_partial():
     dag = DependencyGraph()
     factory = dag.factory(UserService)
     assert isinstance(factory(), UserService)
-
-
-# @pytest.mark.debug
-# def test_node_with_class_method_factory():
-#     dag = DependencyGraph()
-
-#     class ClassMethodService:
-#         def __init__(self, a: int):
-#             self.a = a
-
-#         @dag.node
-#         @classmethod
-#         def from_random(cls) -> "ClassMethodService":
-#             import random
-
-#             return cls(random.randint(0, 100))
-
-#     node = dag.resolve(ClassMethodService)
-
-#     """
-#     BUG: classmethod as factory creates a new corner case we did not think about, that return type could be a forward reference
-
-#     """

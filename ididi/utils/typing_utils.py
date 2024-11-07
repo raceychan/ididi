@@ -1,4 +1,5 @@
 import inspect
+import types
 import typing as ty
 from typing import _eval_type as ty_eval_type  # type: ignore
 
@@ -56,7 +57,7 @@ def is_unresolved_type(t: ty.Any) -> ty.TypeGuard[ty.Any]:
 
 
 def eval_type(
-    value: ty.Any,
+    value: ty.ForwardRef,
     globalns: dict[str, ty.Any] | None = None,
     localns: ty.Mapping[str, ty.Any] | None = None,
     *,
@@ -71,33 +72,24 @@ def eval_type(
         globalns: The local namespace to use during annotation evaluation.
         lenient: Whether to keep unresolvable annotations as is or re-raise the `NameError` exception. Default: re-raise.
     """
-    if value is None:
-        value = type(None)
-    elif isinstance(value, str):
-        value = ty.ForwardRef(value, is_argument=False, is_class=True)
 
     try:
         return ty.cast(type[ty.Any], ty_eval_type(value, globalns, localns))
     except NameError:
         if not lenient:
             raise
-        # the point of this function is to be tolerant to this case
         return value
 
 
 def get_typed_annotation(annotation: ty.Any, globalns: dict[str, ty.Any]) -> ty.Any:
     if isinstance(annotation, str):
-        annotation = ty.ForwardRef(annotation)
+        annotation = ty.ForwardRef(annotation, is_argument=False, is_class=True)
         annotation = eval_type(annotation, globalns, globalns, lenient=True)
     return annotation
 
 
 def get_full_typed_signature[T](call: ty.Callable[..., T]) -> inspect.Signature:
-    # if isinstance(call, classmethod):
-    #     call = call.__func__
-
     signature = inspect.signature(call)
-
     globalns = getattr(call, "__globals__", {})
     typed_params = [
         inspect.Parameter(
@@ -160,5 +152,24 @@ def is_async_context_manager(
     return isinstance(type_, ty.AsyncContextManager)
 
 
-# def is_resource(instance: ty.Any) -> ty.TypeGuard[Resource]:
-#     return is_closable(instance)
+def is_class_or_method(obj: ty.Any) -> bool:
+    return isinstance(obj, (type, types.MethodType, classmethod))
+
+
+def is_class(obj: type | ty.Callable[..., ty.Any]) -> ty.TypeGuard[type]:
+    origin = ty.get_origin(obj) or obj
+    is_type = isinstance(origin, type)
+    is_generic_alias = isinstance(obj, types.GenericAlias)
+    return is_type or is_generic_alias
+
+
+def is_class_with_empty_init(cls: type) -> bool:
+    """
+    Check if a class has an empty __init__ method.
+    """
+    is_undefined_init = cls.__init__ is object.__init__
+    is_protocol = cls.__init__ is EmptyInitProtocol.__init__
+    return is_undefined_init or is_protocol
+
+
+class EmptyInitProtocol(ty.Protocol): ...

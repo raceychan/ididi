@@ -1,7 +1,7 @@
-import functools
 import inspect
 import typing as ty
 from collections import defaultdict
+from functools import lru_cache, partial
 from types import MappingProxyType, TracebackType
 
 from .errors import (
@@ -324,6 +324,7 @@ class DependencyGraph:
         return first_implementations
 
     def _resolve_concrete_node[T](self, dependent: type[T]) -> DependentNode[T]:
+
         try:
             concrete_type = self._resolve_concrete_type(dependent)
         except MissingImplementationError:
@@ -345,26 +346,8 @@ class DependencyGraph:
     def static_resolve[T](self, dependent: type[T]) -> DependentNode[T]:
         """
         Resolve a dependency without building its instance.
-
-        TODO: register node with lazy dependent
         """
-        if dependent in self._resolved_nodes:
-            return self._resolved_nodes[dependent]
 
-        node = self._resolve_concrete_node(dependent)
-
-        for subnode in node.iter_dependencies():
-            resolved_node = self.static_resolve(subnode.dependent_type)
-            self.register_node(resolved_node)
-            self._resolved_nodes[subnode.dependent_type] = resolved_node
-        self._resolved_nodes[dependent] = node
-        return node
-
-    def resolve_node[T](self, dependent: type[T]) -> DependentNode[T]:
-        """
-        Resolve which node should be used for the given type and its dependencies.
-        Returns the resolved node and a mapping of parameter names to their dependency types.
-        """
         if dependent in self._resolved_nodes:
             return self._resolved_nodes[dependent]
 
@@ -372,10 +355,15 @@ class DependencyGraph:
             raise TopLevelBulitinTypeError(dependent)
 
         node = self._resolve_concrete_node(dependent)
+        for subnode in node.iter_dependencies():
+            resolved_node = self.static_resolve(subnode.dependent_type)
+            self.register_node(resolved_node)
+            self._resolved_nodes[subnode.dependent_type] = resolved_node
+        """
+        we need to check if the node is unsolveable here
+        """
+        node.check_for_resolvability()
 
-        # Handle forward dependencies
-        for subnode in node.actualize_forward_deps():
-            self.register_node(subnode)
         self._resolved_nodes[dependent] = node
         return node
 
@@ -390,7 +378,8 @@ class DependencyGraph:
         if node_dep_type in self._resolution_registry:
             return self._resolution_registry[node_dep_type]
 
-        node: DependentNode[T] = self.resolve_node(node_dep_type)
+        node: DependentNode[T] = self.static_resolve(node_dep_type)
+
         resolved_deps = overrides.copy()
 
         for dep_param in node.signature:
@@ -411,13 +400,33 @@ class DependencyGraph:
             self._resolution_registry.register(node_dep_type, instance)
         return instance
 
+    @lru_cache
     def factory[T](self, dependent: type[T]) -> IFactory[T, ...]:
         """
         A helper function that creates a resolver for a given type.
         """
         if dependent not in self._resolved_nodes:
             self.static_resolve(dependent)
-        return functools.partial(self.resolve, dependent)
+
+        def resolver():
+            return self.resolve(dependent)
+
+        return resolver
+
+    def entry_node[
+        **P, R
+    ](
+        self, func: ty.Callable[P, R], /, **kwargs: ty.Unpack[INodeConfig]
+    ) -> ty.Callable[[], R]:
+        Dummy = type("Dummy", (object,), {})
+        sig = get_full_typed_signature(func)
+        node = DependentNode._create(
+            dependent=Dummy, factory=func, signature=sig, config=NodeConfig(**kwargs)
+        )
+        self.register_node(node)
+        # raise NotImplementedError
+
+        return self.factory(node.dependent_type)
 
     def register_node(self, node: DependentNode[ty.Any]) -> None:
         """
@@ -482,23 +491,12 @@ class DependencyGraph:
         if not factory_or_class:
             return ty.cast(
                 TDecor,
-                functools.partial(self.node, **config),
+                partial(self.node, **config),
             )
 
         node_config = NodeConfig(**config)
 
         return_type = get_full_typed_signature(factory_or_class).return_annotation
-
-        # elif (
-        #     isinstance(factory_or_class, classmethod)
-        #     and callable(factory_or_class.__func__)
-        #     and isinstance(return_type, ty.ForwardRef)
-        # ):
-        #     node = DependentNode.from_forwardref(
-        #         forwardref=return_type,
-        #         globalns=factory_or_class.__func__.__globals__,
-        #         config=node_config,
-        #     )
 
         if self._is_factory_override(return_type, factory_or_class):
             new_node = DependentNode.from_node(factory_or_class, node_config)
@@ -509,3 +507,14 @@ class DependencyGraph:
             node = DependentNode.from_node(factory_or_class, node_config)
             self.register_node(node)
         return factory_or_class
+
+
+class Options(ty.TypedDict):
+    pass
+
+
+def entry[
+    R, **P
+](func: ty.Callable[P, R], /, **kwargs: ty.Unpack[Options]) -> ty.Callable[[], R]:
+    dg = DependencyGraph()
+    return dg.entry_node(func, **kwargs)
