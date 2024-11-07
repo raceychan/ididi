@@ -358,6 +358,7 @@ class DependentNode[T]:
 
     def check_for_resolvability(self) -> None:
         if isinstance(self.factory, type):
+            # no factory override
             if is_builtin_type(self.factory):
                 raise UnsolvableDependencyError(
                     self.dependent.dependent_name, self.factory
@@ -399,7 +400,7 @@ class DependentNode[T]:
         return self.factory(*bound_args.args, **bound_args.kwargs)
 
     @classmethod
-    def _create[
+    def create[
         **P, N
     ](
         cls,
@@ -498,7 +499,7 @@ class DependentNode[T]:
             raise MissingReturnTypeError(factory)
         dependent = ty.cast(type[I], signature.return_annotation)
 
-        return cls._create(
+        return cls.create(
             dependent=dependent, factory=factory, signature=signature, config=config
         )
 
@@ -511,7 +512,7 @@ class DependentNode[T]:
                 dependent = res
 
         if is_class_with_empty_init(dependent):
-            return cls._create(
+            return cls.create(
                 dependent=dependent,
                 factory=ty.cast(ty.Callable[..., I], dependent),
                 signature=EMPTY_SIGNATURE,
@@ -519,7 +520,7 @@ class DependentNode[T]:
             )
         signature = get_full_typed_signature(dependent.__init__)
         signature = signature.replace(return_annotation=dependent)
-        return cls._create(
+        return cls.create(
             dependent=dependent, factory=dependent, signature=signature, config=config
         )
 

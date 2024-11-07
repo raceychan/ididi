@@ -52,13 +52,12 @@ class AuthService:
     def __init__(self, db: Database):
         self.db = db
 
-@dg.node
 class UserService:
     def __init__(self, repo: UserRepository, auth: AuthService):
         self.repo = repo
         self.auth = auth
 
-@dg.node
+@dg.node # so that ididi knows AuthService should be created by this 
 def auth_service_factory(database: Database) -> AuthService:
     return AuthService(db=database)
 
@@ -67,6 +66,21 @@ assert isinstance(service.repo.db, Database)
 assert isinstance(service.repo.cache, Cache)
 assert isinstance(service.auth.db, Database)
 assert service.auth.db is service.repo.db
+```
+
+### Automatic dependencies injection
+
+```python
+from ididi import entry
+
+@entry
+def main(email: EmailService, es: EventStore) -> str:
+    assert isinstance(email, EmailService)
+    assert isinstance(es, EventStore)
+    assert email.user.auth.db.config.env == es.db.config.env
+    return "ok"
+
+assert main() == "ok"
 ```
 
 ### Usage with FastAPI

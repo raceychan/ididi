@@ -359,9 +359,7 @@ class DependencyGraph:
             resolved_node = self.static_resolve(subnode.dependent_type)
             self.register_node(resolved_node)
             self._resolved_nodes[subnode.dependent_type] = resolved_node
-        """
-        we need to check if the node is unsolveable here
-        """
+
         node.check_for_resolvability()
 
         self._resolved_nodes[dependent] = node
@@ -420,7 +418,7 @@ class DependencyGraph:
     ) -> ty.Callable[[], R]:
         Dummy = type("Dummy", (object,), {})
         sig = get_full_typed_signature(func)
-        node = DependentNode._create(
+        node = DependentNode.create(
             dependent=Dummy, factory=func, signature=sig, config=NodeConfig(**kwargs)
         )
         self.register_node(node)
@@ -512,12 +510,8 @@ class DependencyGraph:
         return factory_or_class
 
 
-class Options(ty.TypedDict):
-    pass
-
-
 def entry[
     R, **P
-](func: ty.Callable[P, R], /, **kwargs: ty.Unpack[Options]) -> ty.Callable[[], R]:
+](func: ty.Callable[P, R], /, **kwargs: ty.Unpack[INodeConfig],) -> ty.Callable[..., R]:
     dg = DependencyGraph()
     return dg.entry_node(func, **kwargs)

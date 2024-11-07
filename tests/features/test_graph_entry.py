@@ -1,6 +1,6 @@
 import pytest
 
-from ididi.graph import DependencyGraph, entry
+from ididi import entry
 
 
 class Config:
@@ -47,10 +47,20 @@ class EventStore:
 
 
 @entry
-def main(email: EmailService, es: EventStore) -> None:
+def main(email: EmailService, es: EventStore) -> str:
+    assert isinstance(email, EmailService)
+    assert isinstance(es, EventStore)
     assert email.user.auth.db.config.env == es.db.config.env
+    return "ok"
+
+
+@entry
+def second_entry(email: EmailService) -> str:
+    assert isinstance(email, EmailService)
+    return "hello"
 
 
 @pytest.mark.debug
 def test_graph_entry():
-    main()
+    assert main() == "ok"
+    assert second_entry() == "hello"
