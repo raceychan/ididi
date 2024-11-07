@@ -92,7 +92,6 @@ def test_factory_function():
     assert factory_obj.kwargs == {"extra": "test"}
 
 
-@pytest.mark.debug
 def test_generic_service_not_supported():
     with pytest.raises(GenericDependencyNotSupportedError):
         DependentNode.from_node(GenericService[str])

@@ -122,7 +122,6 @@ def test_forward_ref_in_local_scope():
         dag.static_resolve(ServiceA)
 
 
-@pytest.mark.debug
 def test_static_resolve_would_raise_error(dg: DependencyGraph):
     class DataBase:
         def __init__(self, engine: str):
@@ -138,4 +137,3 @@ def test_static_resolve_would_raise_error(dg: DependencyGraph):
 
     with pytest.raises(UnsolvableDependencyError):
         node = dg.static_resolve(UserService)
-

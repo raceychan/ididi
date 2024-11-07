@@ -60,7 +60,6 @@ def second_entry(email: EmailService) -> str:
     return "hello"
 
 
-@pytest.mark.debug
 def test_graph_entry():
     assert main() == "ok"
     assert second_entry() == "hello"
