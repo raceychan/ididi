@@ -73,6 +73,11 @@ assert service.auth.db is service.repo.db
 ```python
 from ididi import entry
 
+class EmailService: ...
+
+
+class EventStore: ...
+
 @entry
 def main(email: EmailService, es: EventStore) -> str:
     assert isinstance(email, EmailService)
