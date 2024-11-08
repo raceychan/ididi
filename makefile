@@ -11,6 +11,10 @@ test:
 debug:
 	pixi run -e test pytest -vx  -m debug  tests/
 
+.PHONY: benchmark
+benchmark:
+	pixi run -e test pytest -m benchmark tests/
+
 .PHONY: debug-cov
 debug-cov:
 	pixi run -e test pytest -vx  -m debug --cov=ididi --cov-report term-missing tests/

@@ -4,10 +4,23 @@ from dataclasses import dataclass
 type IFactory[I, **P] = ty.Callable[P, I]
 
 
+class Override[T](ty.Protocol):
+    @ty.overload
+    def __call__[**P](self, dep: ty.Callable[P, T], /) -> T: ...
+
+    @ty.overload
+    def __call__[
+        **P
+    ](self, dep: ty.Callable[P, T], /, *args: P.args, **kwargs: P.kwargs) -> T: ...
+
+    def __call__[
+        **P
+    ](self, dep: ty.Callable[P, T], /, *args: ty.Any, **kwargs: ty.Any) -> T: ...
+
+
 class TDecor:
-    # NOTE: don't switch the order of factory: type[I] and ty.Callable[P, I]
-    # because type[I] -> type[I] is a subtype of ty.Callable[P, I] -> ty.Callable[P, I]
-    # type[I] would be ignored by the overload resolution
+    # NOTE: order of definition matters
+    # type[I] -> type[I] is a subtype of IFactory[I, P] -> IFactory[I, P]
 
     @ty.overload
     def __call__[I](self, factory: type[I]) -> type[I]: ...

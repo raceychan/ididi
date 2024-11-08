@@ -379,22 +379,22 @@ class DependencyGraph:
 
         node: DependentNode[T] = self.static_resolve(node_dep_type)
 
-        resolved_deps = overrides.copy()
+        # resolved_deps = overrides.copy()
 
         for dep_param in node.signature:
+            dep_name = dep_param.name
             if dep_param.should_not_resolve:
                 continue
 
-            if dep_param.name in resolved_deps:
+            if dep_name in overrides:
                 continue
 
-            sub_node = dep_param.node
-            dep_type = sub_node.dependent_type
+            sub_node_dep_type = dep_param.node.dependent_type
 
-            resolved_dep = self.resolve(dep_type)
-            resolved_deps[dep_param.name] = resolved_dep
+            resolved_dep = self.resolve(sub_node_dep_type)
+            overrides[dep_name] = resolved_dep
 
-        instance = node.build(**resolved_deps)
+        instance = node.build(**overrides)
         if node.config.reuse:
             self._resolution_registry.register(node_dep_type, instance)
         return ty.cast(T, instance)
@@ -518,16 +518,3 @@ class DependencyGraph:
             node = DependentNode.from_node(factory_or_class, node_config)
             self.register_node(node)
         return factory_or_class
-
-
-def entry[
-    R, **P
-](
-    func: ty.Callable[P, R],
-    /,
-    **kwargs: ty.Unpack[INodeConfig],
-) -> (
-    ty.Callable[..., R] | ty.Callable[..., ty.Awaitable[R]]
-):
-    dg = DependencyGraph()
-    return dg.entry_node(func, **kwargs)

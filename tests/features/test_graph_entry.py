@@ -1,6 +1,8 @@
+import time
+
 import pytest
 
-from ididi import entry
+from ididi import DependencyGraph, entry, solve
 
 
 class Config:
@@ -60,6 +62,51 @@ def second_entry(email: EmailService) -> str:
     return "hello"
 
 
+# @partial
+# def third_entry(notification: NotificationService, name: str, age: int) -> str: ...
+
+
 def test_graph_entry():
     assert main() == "ok"
     assert second_entry() == "hello"
+
+
+@pytest.mark.benchmark(group="graph-entry")
+def test_performance():
+    dg = DependencyGraph()
+
+    def hard_coded_factory():
+        config = Config()
+        email = EmailService(
+            notification=NotificationService(config=config),
+            user=UserService(
+                auth=AuthService(
+                    db=DataBase(config=config), cache=CacheService(config=config)
+                ),
+                db=DataBase(config=config),
+            ),
+        )
+        return email
+
+    times = int((10**2))
+    start = time.perf_counter()
+    for _ in range(times):
+        hard_coded_factory()
+    end = time.perf_counter()
+    print(f"Time taken: {round(end - start, 6)} seconds")
+    time1 = end - start
+
+    start = time.perf_counter()
+    dg.static_resolve(EmailService)
+    for _ in range(times):
+        dg.resolve(EmailService)
+    end = time.perf_counter()
+    time2 = end - start
+    print(f"Time taken: {round(end - start, 6)} seconds")
+
+    print(f"hardcoded: {round(time2 / time1, 2)} times faster")
+
+
+def test_solve():
+    email = solve(EmailService)
+    assert isinstance(email, EmailService)
