@@ -6,6 +6,10 @@ ididi is a zero-configuration, minimal-code-intrusiveness dependency injection l
 
 It allows you to define dependencies in a declarative way without any boilerplate code.
 
+## Source Code
+
+[Github-ididi](https://github.com/raceychan/ididi)
+
 ## Install
 
 ```bash
@@ -222,11 +226,74 @@ instance = dg.resolve(Outer, inner=Inner(value="overridden"))
 assert instance.inner.value == "overridden"
 ```
 
-## Features
+### Advanced Usage
 
-- Automatically resolve dependencies
-- Circular dependencies detection
-- Support Forward References
+#### ABC
+
+##### Register ABC implementation with `dg.node`
+
+you should use `dg.node` to let ididi know about the implementations of the ABC.
+you are going to resolve.
+
+```python
+from abc import ABC, abstractmethod
+class Repository(ABC):
+    def __init__(self):
+        pass
+
+    @abstractmethod
+    def save(self) -> None:
+        """Save the repository data."""
+        pass
+
+@dag.node
+class Repo1(Repository):
+    def save(self) -> None:
+        pass
+
+@dag.node
+class Repo2(Repository):
+    def save(self) -> None:
+        pass
+
+dag.resolve(Repository)
+```
+
+You might also use `__init_subclass__` hook to automatically register implementations.
+
+##### Multiple Implementations of ABC
+
+ididi will use the last implementation registered to resolve the ABC, you can use a factory to override this behavior.
+
+```python
+class Repository(ABC):
+    def __init__(self):
+        pass
+
+    @abstractmethod
+    def save(self) -> None:
+        """Save the repository data."""
+        pass
+
+@dag.node
+class Repo1(Repository):
+    def save(self) -> None:
+        pass
+
+@dag.node
+class Repo2(Repository):
+    def save(self) -> None:
+        pass
+
+@dag.node
+def repo_factory() -> Repository:
+    return Repo1()
+
+assert Repository in dag.nodes
+
+repo = dag.resolve(Repository)
+assert isinstance(repo, Repo1)
+```
 
 ### Resolve Rules
 

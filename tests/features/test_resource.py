@@ -7,7 +7,6 @@ from ididi.graph import DependencyGraph
 dag = DependencyGraph()
 
 
-@dag.node
 class ArbitraryResource:
     def __init__(self):
         self._closed = False

@@ -1,27 +1,28 @@
+import inspect
 import typing as ty
 from dataclasses import dataclass
+
+EMPTY_SIGNATURE = inspect.Signature()
+INSPECT_EMPTY = inspect.Signature.empty
 
 type IFactory[I, **P] = ty.Callable[P, I]
 
 
-class Override[T](ty.Protocol):
-    @ty.overload
-    def __call__[**P](self, dep: ty.Callable[P, T], /) -> T: ...
+# class Override[T](ty.Protocol):
+#     @ty.overload
+#     def __call__[**P](self, dep: ty.Callable[P, T], /) -> T: ...
 
-    @ty.overload
-    def __call__[
-        **P
-    ](self, dep: ty.Callable[P, T], /, *args: P.args, **kwargs: P.kwargs) -> T: ...
+#     @ty.overload
+#     def __call__[
+#         **P
+#     ](self, dep: ty.Callable[P, T], /, *args: P.args, **kwargs: P.kwargs) -> T: ...
 
-    def __call__[
-        **P
-    ](self, dep: ty.Callable[P, T], /, *args: ty.Any, **kwargs: ty.Any) -> T: ...
+#     def __call__[
+#         **P
+#     ](self, dep: ty.Callable[P, T], /, *args: ty.Any, **kwargs: ty.Any) -> T: ...
 
 
 class TDecor:
-    # NOTE: order of definition matters
-    # type[I] -> type[I] is a subtype of IFactory[I, P] -> IFactory[I, P]
-
     @ty.overload
     def __call__[I](self, factory: type[I]) -> type[I]: ...
 

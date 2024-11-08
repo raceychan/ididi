@@ -1,7 +1,7 @@
 import typing as ty
 
 from .graph import DependencyGraph as DependencyGraph
-from .types import INodeConfig, Override
+from .types import INodeConfig
 
 
 def entry[
@@ -17,9 +17,16 @@ def entry[
     return dg.entry_node(func, **kwargs)
 
 
+@ty.overload
+def solve[**P, T](dep: ty.Callable[P, T], /) -> T: ...
 
+
+@ty.overload
 def solve[
     T, **P
-](cls: ty.Callable[P, T], /, *p_args: P.args, **p_kwargs: P.kwargs) -> Override[T]:
+](dep: ty.Callable[P, T], /, *args: P.args, **overrides: P.kwargs) -> T: ...
+
+
+def solve[**P, T](dep: ty.Callable[P, T], /, **overrides: ty.Any) -> T:
     dg = DependencyGraph()
-    return dg.resolve(cls, *p_args, **p_kwargs)
+    return dg.resolve(dep, **overrides)

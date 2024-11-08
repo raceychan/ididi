@@ -17,7 +17,7 @@ from .errors import (
     ProtocolFacotryNotProvidedError,
     UnsolvableDependencyError,
 )
-from .types import IFactory, NodeConfig
+from .types import EMPTY_SIGNATURE, INSPECT_EMPTY, IFactory, NodeConfig
 from .utils.param_utils import NULL, Nullable, is_not_null
 from .utils.typing_utils import (
     eval_type,
@@ -30,9 +30,6 @@ from .utils.typing_utils import (
     is_class_or_method,
     is_class_with_empty_init,
 )
-
-EMPTY_SIGNATURE = inspect.Signature()
-EMPTY_DEFAULT = inspect.Signature.empty
 
 
 def factory_placeholder() -> None:
@@ -148,7 +145,7 @@ class DependencyParam[T]:
     @property
     def default(self) -> Nullable[T]:
         default_val = self.param.default
-        if default_val is EMPTY_DEFAULT:
+        if default_val is INSPECT_EMPTY:
             return NULL
         return default_val
 
@@ -470,7 +467,7 @@ class DependentNode[T]:
         annotation = get_typed_annotation(param.annotation, globalns)
         annotation = ty.get_origin(annotation) or annotation
 
-        if annotation is inspect.Parameter.empty:
+        if annotation is inspect.Signature.empty:
             raise MissingAnnotationError(dependent, param_name)
 
         if isinstance(annotation, ty.TypeVar):
@@ -492,21 +489,21 @@ class DependentNode[T]:
         return node
 
     @classmethod
-    def _from_factory[
+    def from_factory[
         I, **P
     ](cls, *, factory: IFactory[I, P], config: NodeConfig) -> "DependentNode[I]":
         signature = get_full_typed_signature(factory)
-        if signature.return_annotation is inspect.Signature.empty:
-            raise MissingReturnTypeError(factory)
 
         dependent: type[I] = signature.return_annotation
+        if signature.return_annotation is inspect.Signature.empty:
+            raise MissingReturnTypeError(factory)
 
         return cls.create(
             dependent=dependent, factory=factory, signature=signature, config=config
         )
 
     @classmethod
-    def _from_class[
+    def from_class[
         I
     ](cls, *, dependent: type[I], config: NodeConfig) -> "DependentNode[I]":
         if hasattr(dependent, "__origin__"):
@@ -535,12 +532,12 @@ class DependentNode[T]:
         config = config or NodeConfig()
 
         if is_class(node):
-            return cls._from_class(dependent=node, config=config)
+            return cls.from_class(dependent=node, config=config)
         else:
             if config.lazy:
                 raise NotSupportedError(
                     "Lazy dependency is not supported for factories"
                 )
-            return cls._from_factory(
+            return cls.from_factory(
                 factory=ty.cast(IFactory[I, P], node), config=config
             )

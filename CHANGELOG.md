@@ -93,4 +93,13 @@ assert instance.repository.db.driver == "aiomysql"
 
 ## version 0.2.4
 
-- [x] feat: support for async entry
+Features:
+
+- feat: support for async entry
+- feat: adding `solve` as a top level api
+
+Improvements:
+
+- resolve / static resolve now supports factory
+- better typing support for DependentNode.resolve
+- dag.reset now supports clear resolved nodes

@@ -1,129 +1,13 @@
 import inspect
 import typing as ty
-from collections import defaultdict
 from functools import lru_cache, partial
 from types import MappingProxyType, TracebackType
 
-from .errors import (
-    MissingImplementationError,
-    MultipleImplementationsError,
-    TopLevelBulitinTypeError,
-)
+from .errors import MissingImplementationError, TopLevelBulitinTypeError
 from .node import AbstractDependent, DependentNode
-from .types import GraphConfig, IFactory, INodeConfig, NodeConfig, TDecor
-from .utils.typing_utils import (
-    get_full_typed_signature,
-    is_builtin_type,
-    is_closable,
-    is_factory,
-)
-
-type NodeDependent[T] = type[T]
-"""
-### A dependent can be a concrete type or a forward reference
-"""
-
-type GraphNodes[I] = dict[type[I], DependentNode[I]]
-"""
-### mapping a type to its corresponding node
-"""
-
-type GraphNodesView[I] = MappingProxyType[type[I], DependentNode[I]]
-"""
-### a readonly view of GraphNodes
-"""
-
-type ResolvedInstances[T] = dict[type[T], T]
-"""
-mapping a type to its resolved instance
-"""
-
-type TypeMappings[T] = dict[NodeDependent[T], list[NodeDependent[T]]]
-"""
-### mapping a type to its dependencies
-"""
-
-
-class TypeRegistry:
-    """
-    A mapping of dependent types to their implementations.
-    """
-
-    __slots__ = ("_mappings",)
-
-    def __init__(self):
-        self._mappings: TypeMappings[ty.Any] = defaultdict(list)
-
-    def __getitem__[T](self, dependent_type: type[T]) -> list[type[T]]:
-        return self._mappings[dependent_type].copy()
-
-    def __contains__(self, dependent_type: type) -> bool:
-        return dependent_type in self._mappings
-
-    def register(self, dependent_type: type):
-        """
-        Register a dependent type and update its base types.
-        """
-        self._mappings[dependent_type].append(dependent_type)
-
-        # __mro__[1:-1] skip dependent itself and object
-        for base in dependent_type.__mro__[1:-1]:
-            self._mappings[base].append(dependent_type)
-
-    def remove(self, dependent_type: type):
-        """
-        Remove a dependent type and update its base types.
-        """
-
-        for base in dependent_type.__mro__[1:-1]:
-            self._mappings[base].remove(dependent_type)
-
-        del self._mappings[dependent_type]
-
-    def get(
-        self, dependent_type: type, /, default: list[type] | None = None
-    ) -> list[type] | None:
-        return self._mappings.get(dependent_type, default)
-
-
-class ResolutionRegistry:
-    """
-    A mapping of dependent types to their resolved instances.
-    """
-
-    __slots__ = ("_mappings",)
-
-    def __init__(self):
-        self._mappings: ResolvedInstances[ty.Any] = {}
-
-    def __len__(self) -> int:
-        return len(self._mappings)
-
-    def __contains__(self, dependent_type: type | ty.Callable[..., ty.Any]) -> bool:
-        return dependent_type in self._mappings
-
-    def __getitem__[T](self, dependent_type: type[T] | ty.Callable[..., T]) -> T:
-        return self._mappings[dependent_type]
-
-    def remove(self, dependent_type: type) -> None:
-        self._mappings.pop(dependent_type, None)
-
-    def clear(self) -> None:
-        self._mappings.clear()
-
-    def register[
-        T
-    ](self, dependent_type: type[T] | ty.Callable[..., T], instance: T) -> None:
-        self._mappings[dependent_type] = instance
-
-    async def close(self, dependent_type: type) -> None:
-        instance = self._mappings.pop(dependent_type, None)
-        if instance and is_closable(instance):
-            await instance.close()
-
-    async def close_all(self, close_order: ty.Iterable[type]) -> None:
-        for type_ in close_order:
-            await self.close(type_)
+from .registry import GraphNodes, GraphNodesView, ResolutionRegistry, TypeRegistry
+from .types import INSPECT_EMPTY, GraphConfig, IFactory, INodeConfig, NodeConfig, TDecor
+from .utils.typing_utils import get_full_typed_signature, is_builtin_type, is_function
 
 
 class DependencyGraph:
@@ -139,9 +23,9 @@ class DependencyGraph:
 
     def __init__(self, static_resolve: bool = True):
         self._nodes: GraphNodes[ty.Any] = {}
+        self._resolved_nodes: GraphNodes[ty.Any] = {}
         self._resolution_registry = ResolutionRegistry()
         self._type_registry = TypeRegistry()
-        self._resolved_nodes: GraphNodes[ty.Any] = {}
         self._config = GraphConfig(static_resolve=static_resolve)
 
     def __repr__(self) -> str:
@@ -203,7 +87,7 @@ class DependencyGraph:
         return self._resolution_registry
 
     @property
-    def type_mappings(self) -> TypeRegistry:
+    def type_registry(self) -> TypeRegistry:
         """
         A mapping of abstract types to their implementations.
         """
@@ -266,9 +150,9 @@ class DependencyGraph:
             visited.add(node_type)
             node = self._nodes[node_type]
             for dep_param in node.signature:
-                if dep_param.is_builtin:
-                    continue
                 dependent_type = dep_param.dependent_type
+                if dependent_type not in self._nodes:
+                    continue
                 visit(dependent_type)
 
             order.append(node_type)
@@ -278,11 +162,21 @@ class DependencyGraph:
 
         return order
 
-    def reset(self) -> None:
+    def reset(self, clear_resolved: bool = False) -> None:
         """
         Clear all resolved instances while maintaining registrations.
+
+        clear_resolved: bool
+        ---
+        whether to clear:
+        - the node registry,
+        - the type registry,
         """
         self._resolution_registry.clear()
+        if clear_resolved:
+            self._type_registry.clear()
+            self._resolved_nodes.clear()
+            self._nodes.clear()
 
     async def aclose(self) -> None:
         """
@@ -291,46 +185,24 @@ class DependencyGraph:
         """
         close_order = reversed(self.top_sorted_dependencies())
         await self._resolution_registry.close_all(close_order)
-        self.reset()
-
-    def _is_factory_override[
-        I, **P
-    ](
-        self,
-        factory_return_type: type[I],
-        factory_or_class: IFactory[I, P] | type[I],
-    ) -> ty.TypeGuard[IFactory[I, P]]:
-        """
-        Check if a factory or class is overriding an existing node.
-        If a we receive a factory with a return type X, we check if X is already registered in the graph.
-        """
-        is_factory = callable(factory_or_class) and not inspect.isclass(
-            factory_or_class
-        )
-        has_return_type = factory_return_type is not inspect.Signature.empty
-        is_registered_node = factory_return_type in self._nodes
-        return is_factory and has_return_type and is_registered_node
+        self.reset(clear_resolved=True)
 
     def _resolve_concrete_type[T](self, abstract_type: type[T]) -> type[T]:
         """
         Resolve abstract type to concrete implementation.
         """
-        # If the type is already concrete and registered, return it
-        if abstract_type in self._nodes:
-            return abstract_type
-
         implementations: list[type] | None = self._type_registry.get(abstract_type)
 
         if not implementations:
             raise MissingImplementationError(abstract_type)
 
-        if len(implementations) > 1:
-            raise MultipleImplementationsError(abstract_type, implementations)
-
-        first_implementations = implementations[0]
-        return first_implementations
+        last_implementations = implementations[-1]
+        return last_implementations
 
     def _resolve_concrete_node[T](self, dependent: type[T]) -> DependentNode[T]:
+        if registered_node := self._nodes.get(dependent):
+            if is_function(registered_node.factory):
+                return registered_node
 
         try:
             concrete_type = self._resolve_concrete_type(dependent)
@@ -356,8 +228,8 @@ class DependencyGraph:
         """
         Resolve a dependency without building its instance.
         """
-        if is_factory(dependent_factory):
-            sig = get_full_typed_signature(dependent_factory)
+        if is_function(dependent_factory):
+            sig = get_full_typed_signature(dependent_factory, check_return=True)
             dependent: type[T] = sig.return_annotation
         else:
             dependent = ty.cast(type[T], dependent_factory)
@@ -369,6 +241,7 @@ class DependencyGraph:
             raise TopLevelBulitinTypeError(dependent)
 
         node = self._resolve_concrete_node(dependent)
+
         for subnode in node.iter_dependencies():
             resolved_node = self.static_resolve(subnode.dependent_type)
             self.register_node(resolved_node)
@@ -422,6 +295,7 @@ class DependencyGraph:
         instance = node.build(**resolved_deps)
         if node.config.reuse:
             self._resolution_registry.register(node_dep_type, instance)
+
         return ty.cast(T, instance)
 
     @lru_cache
@@ -525,21 +399,17 @@ class DependencyGraph:
         ```
         """
         if not factory_or_class:
-            return ty.cast(
-                TDecor,
-                partial(self.node, **config),
-            )
+            configed = ty.cast(TDecor, partial(self.node, **config))
+            return configed
 
         node_config = NodeConfig(**config)
 
         return_type = get_full_typed_signature(factory_or_class).return_annotation
 
-        if self._is_factory_override(return_type, factory_or_class):
-            new_node = DependentNode.from_node(factory_or_class, node_config)
+        if return_type is not INSPECT_EMPTY and return_type in self._nodes:
             old_node = self._nodes[return_type]
-            self.replace_node(old_node, new_node)
+            self.remove_node(old_node)
 
-        else:
-            node = DependentNode.from_node(factory_or_class, node_config)
-            self.register_node(node)
+        node = DependentNode.from_node(factory_or_class, node_config)
+        self.register_node(node)
         return factory_or_class

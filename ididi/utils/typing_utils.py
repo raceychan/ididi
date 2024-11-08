@@ -3,6 +3,8 @@ import types
 import typing as ty
 from typing import _eval_type as ty_eval_type  # type: ignore
 
+from ..errors import MissingReturnTypeError
+
 type PrimitiveBuiltins = type[int | float | complex | str | bool | bytes | bytearray]
 type ContainerBuiltins[T] = type[
     list[T] | tuple[T, ...] | dict[ty.Any, T] | set[T] | frozenset[T]
@@ -103,13 +105,17 @@ def get_typed_params[T](call: ty.Callable[..., T]) -> list[inspect.Parameter]:
     return typed_params
 
 
-def get_full_typed_signature[T](call: ty.Callable[..., T]) -> inspect.Signature:
+def get_full_typed_signature[
+    T
+](call: ty.Callable[..., T], check_return: bool = False) -> inspect.Signature:
     signature = inspect.signature(call)
     globalns = getattr(call, "__globals__", {})
     typed_signature = inspect.Signature(
         parameters=get_typed_params(call),
         return_annotation=get_typed_annotation(signature.return_annotation, globalns),
     )
+    if check_return and typed_signature.return_annotation is inspect.Signature.empty:
+        raise MissingReturnTypeError(call)
     return typed_signature
 
 
@@ -176,9 +182,12 @@ def is_class[T](obj: type[T] | ty.Callable[..., T]) -> ty.TypeGuard[type[T]]:
     return is_type or is_generic_alias
 
 
-def is_factory[
+def is_function[
     T, **P
 ](obj: type[T] | ty.Callable[P, T]) -> ty.TypeGuard[ty.Callable[P, T]]:
+    """
+    check if obj is a callable, instead of a class;
+    """
     return not is_class(obj)
 
 
