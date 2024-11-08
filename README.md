@@ -2,7 +2,7 @@
 
 ## Introduction
 
-ididi is a zero-configuration, minimal-code-intrusiveness dependency injection library for Python that works out of the box.
+Ididi is a pythonic dependency injection lib, with ergonomic apis, without boilplate code, works out of the box.
 
 It allows you to define dependencies in a declarative way without any boilerplate code.
 
@@ -27,49 +27,25 @@ pip install ididi[graphviz]
 ### Decorate your top level dependencies and leave the rest to ididi
 
 ```python
-from didi import DependencyGraph
-
-dg = DependencyGraph()
+import ididi
 
 class Config:
     def __init__(self, env: str = "prod"):
         self.env = env
 
-@dg.node(reuse=False) # disable reuse for database, it would be created every time
 class Database:
     def __init__(self, config: Config):
         self.config = config
 
-
-class Cache:
-    def __init__(self, config: Config):
-        self.config = config
-
-
 class UserRepository:
-    def __init__(self, db: Database, cache: Cache):
-        self.db = db
-        self.cache = cache
-
-
-class AuthService:
     def __init__(self, db: Database):
         self.db = db
 
 class UserService:
-    def __init__(self, repo: UserRepository, auth: AuthService):
+    def __init__(self, repo: UserRepository):
         self.repo = repo
-        self.auth = auth
 
-@dg.node # so that ididi knows AuthService should be created by this 
-def auth_service_factory(database: Database) -> AuthService:
-    return AuthService(db=database)
-
-service = dg.resolve(UserService)
-assert isinstance(service.repo.db, Database)
-assert isinstance(service.repo.cache, Cache)
-assert isinstance(service.auth.db, Database)
-assert service.auth.db is service.repo.db
+assert isinstance(ididi.solve(UserService), UserService)
 ```
 
 ### Automatic dependencies injection
