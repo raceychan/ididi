@@ -88,7 +88,7 @@ def get_typed_annotation(annotation: ty.Any, globalns: dict[str, ty.Any]) -> ty.
     return annotation
 
 
-def get_full_typed_signature[T](call: ty.Callable[..., T]) -> inspect.Signature:
+def get_typed_params[T](call: ty.Callable[..., T]) -> list[inspect.Parameter]:
     signature = inspect.signature(call)
     globalns = getattr(call, "__globals__", {})
     typed_params = [
@@ -100,12 +100,25 @@ def get_full_typed_signature[T](call: ty.Callable[..., T]) -> inspect.Signature:
         )
         for param in signature.parameters.values()
     ]
+    return typed_params
 
-    return_annotation = get_typed_annotation(signature.return_annotation, globalns)
+
+def get_full_typed_signature[T](call: ty.Callable[..., T]) -> inspect.Signature:
+    signature = inspect.signature(call)
+    globalns = getattr(call, "__globals__", {})
     typed_signature = inspect.Signature(
-        parameters=typed_params, return_annotation=return_annotation
+        parameters=get_typed_params(call),
+        return_annotation=get_typed_annotation(signature.return_annotation, globalns),
     )
     return typed_signature
+
+
+def get_factory_sig_from_cls[T](cls: type[T]) -> inspect.Signature:
+    """
+    Generate a signature from a class via its __init__ method.
+    """
+    params = get_typed_params(cls.__init__)
+    return inspect.Signature(parameters=params, return_annotation=cls)
 
 
 def first_implementation(
@@ -156,11 +169,17 @@ def is_class_or_method(obj: ty.Any) -> bool:
     return isinstance(obj, (type, types.MethodType, classmethod))
 
 
-def is_class(obj: type | ty.Callable[..., ty.Any]) -> ty.TypeGuard[type]:
+def is_class[T](obj: type[T] | ty.Callable[..., T]) -> ty.TypeGuard[type[T]]:
     origin = ty.get_origin(obj) or obj
     is_type = isinstance(origin, type)
     is_generic_alias = isinstance(obj, types.GenericAlias)
     return is_type or is_generic_alias
+
+
+def is_factory[
+    T, **P
+](obj: type[T] | ty.Callable[P, T]) -> ty.TypeGuard[ty.Callable[P, T]]:
+    return not is_class(obj)
 
 
 def is_class_with_empty_init(cls: type) -> bool:

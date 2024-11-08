@@ -21,8 +21,10 @@ from .types import IFactory, NodeConfig
 from .utils.param_utils import NULL, Nullable, is_not_null
 from .utils.typing_utils import (
     eval_type,
+    get_factory_sig_from_cls,
     get_full_typed_signature,
     get_typed_annotation,
+    get_typed_params,
     is_builtin_type,
     is_class,
     is_class_or_method,
@@ -320,8 +322,7 @@ class DependentNode[T]:
         resolved_type = dep.resolve()
 
         # Check for circular dependencies
-        sub_params = get_full_typed_signature(resolved_type).parameters.values()
-        for sub_param in sub_params:
+        for sub_param in get_typed_params(resolved_type):
             if sub_param.annotation is self.dependent.dependent_type:
                 raise CircularDependencyDetectedError(
                     [self.dependent.dependent_type, resolved_type]
@@ -497,7 +498,8 @@ class DependentNode[T]:
         signature = get_full_typed_signature(factory)
         if signature.return_annotation is inspect.Signature.empty:
             raise MissingReturnTypeError(factory)
-        dependent = ty.cast(type[I], signature.return_annotation)
+
+        dependent: type[I] = signature.return_annotation
 
         return cls.create(
             dependent=dependent, factory=factory, signature=signature, config=config
@@ -518,8 +520,7 @@ class DependentNode[T]:
                 signature=EMPTY_SIGNATURE,
                 config=config,
             )
-        signature = get_full_typed_signature(dependent.__init__)
-        signature = signature.replace(return_annotation=dependent)
+        signature = get_factory_sig_from_cls(dependent)
         return cls.create(
             dependent=dependent, factory=dependent, signature=signature, config=config
         )

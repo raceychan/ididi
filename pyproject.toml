@@ -26,7 +26,6 @@ addopts = "-vx --strict-markers --capture=no"
 filterwarnings = ["ignore::DeprecationWarning"]
 markers = [
   "integration_test: marks tests as slow integration tests (deselect with '-m \"not integration_test\"')",
-
   "debug: marks tests as debug tests (deselect with '-m \"not debug\"')",
   "benchmark: marks tests as benchmark tests (deselect with '-m \"not benchmark\"')",
 ]
@@ -39,8 +38,8 @@ omit = [
 ]
 
 [tool.pyright]
-exclude = ["tests"]
 include = ["ididi/*.py"]
+exclude = ["tests"]
 python_version = "3.12"
 typeCheckingMode = "strict"
 
