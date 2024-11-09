@@ -31,10 +31,50 @@ class NodeError(IDIDIError):
 
 
 class _ErrorChain(ty.NamedTuple):
-    prev: "_ErrorChain | None"
+    next: "_ErrorChain | None"
     error: NodeError
 
 
+# class LinkedExceptionBase(IDIDIError):
+#     """
+#     Base class for all linked exceptions.
+
+#     def create_engine(sql_client: Client) -> Engine:
+#         ...
+#     Here dependent is create_engine,
+#     dep_name is sql_client,
+#     dep_type is Client
+#     """
+
+#     chain: "_ErrorChain"
+
+#     # the dependent, a callable, that cause the error
+#     # either a factory or a class __init__
+#     dependent: type | ty.Callable[..., ty.Any]
+#     # the name of the dependency that caused the error
+#     dep_name: str
+#     # the type of the dependency that caused the error
+#     dep_type: type
+#     # the exception that caused the error
+#     cause: Exception | None = None
+
+#     def _make_error(self) -> str:
+#         if not self.dep_name:
+#             return ""
+
+#         dep_repr = {str(self.dependent)}
+#         param_repr = f"{self.dep_name}: {self.dep_type.__name__}"
+#         err = f"-> {dep_repr}({param_repr})\n"
+#         return err
+
+#     def add_to_chain(self, error: "LinkedExceptionBase | NodeCreationError"):
+#         if isinstance(error, NodeCreationError):
+#             self.chain = _ErrorChain(error.error_chain, self)
+#         else:
+#             self.cause = error
+
+#     def raise_with_chain(self):
+#         msg = self.chain.build_error()
 class NodeCreationError(NodeError):
     """
     Raised when a node can't be created in @dg.node.
@@ -93,7 +133,7 @@ class NodeCreationError(NodeError):
                 indent = tab * level
                 chain.append(indent + current_node.error._make_error())
                 level += 1
-            current_node = current_node.prev
+            current_node = current_node.next
 
         # Add root cause at the end
         chain.append(
