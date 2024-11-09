@@ -103,7 +103,42 @@ class NodeCreationError(NodeError):
         return "".join(chain)
 
 
-class UnsolvableParameterError(NodeError):
+class UnsolvableNodeError(NodeError): ...
+
+
+class UnsolvableDependencyError(UnsolvableNodeError):
+    """
+    Raised when a dependency parameter can't be built.
+    """
+
+    def __init__(self, dep_name: str, required_type: ty.Any):
+        self.message = f"Unable to resolve dependency for parameter: {dep_name}, value of {required_type} must be provided"
+        super().__init__(self.message)
+
+
+class ProtocolFacotryNotProvidedError(UnsolvableNodeError):
+    """
+    Raised when a protocol is used as a dependency without a factory.
+    """
+
+    def __init__(self, protocol: type):
+        super().__init__(
+            f"Protocol {protocol} can't be instantiated, a factory is required to resolve it"
+        )
+
+
+class ABCNotImplementedError(UnsolvableNodeError):
+    """
+    Raised when an ABC is used as a dependency without a factory.
+    """
+
+    def __init__(self, abc: type, abstract_methods: frozenset[str]):
+        super().__init__(
+            f"ABC {abc} has no valid implementations, either provide a implementation that implements {abstract_methods} or a factory"
+        )
+
+
+class UnsolvableParameterError(UnsolvableNodeError):
     """
     Raised when a parameter is unsolveable.
     """
@@ -150,38 +185,6 @@ class GenericDependencyNotSupportedError(NodeError):
         )
 
 
-class UnsolvableDependencyError(NodeError):
-    """
-    Raised when a dependency parameter can't be built.
-    """
-
-    def __init__(self, dep_name: str, required_type: ty.Any):
-        self.message = f"Unable to resolve dependency for parameter: {dep_name}, value of {required_type} must be provided"
-        super().__init__(self.message)
-
-
-class ProtocolFacotryNotProvidedError(NodeError):
-    """
-    Raised when a protocol is used as a dependency without a factory.
-    """
-
-    def __init__(self, protocol: type):
-        super().__init__(
-            f"Protocol {protocol} can't be instantiated, a factory is required to resolve it"
-        )
-
-
-class ABCNotImplementedError(NodeError):
-    """
-    Raised when an ABC is used as a dependency without a factory.
-    """
-
-    def __init__(self, abc: type, abstract_methods: frozenset[str]):
-        super().__init__(
-            f"ABC {abc} has no valid implementations, either provide a implementation that implements {abstract_methods} or a factory"
-        )
-
-
 # =============== Graph Errors ===============
 class GraphError(IDIDIError):
     """
@@ -189,7 +192,13 @@ class GraphError(IDIDIError):
     """
 
 
-class CircularDependencyDetectedError(GraphError):
+class GraphResolveError(GraphError):
+    """
+    Base class for all graph resolving related exceptions.
+    """
+
+
+class CircularDependencyDetectedError(GraphResolveError):
     """Raised when a circular dependency is detected in the dependency graph."""
 
     def __init__(self, cycle_path: list[type]):
@@ -202,7 +211,7 @@ class CircularDependencyDetectedError(GraphError):
         return self._cycle_path
 
 
-class TopLevelBulitinTypeError(GraphError):
+class TopLevelBulitinTypeError(GraphResolveError):
     """
     Raised when a builtin type is used as a top level dependency.
     Example:
@@ -215,7 +224,7 @@ class TopLevelBulitinTypeError(GraphError):
         )
 
 
-class MissingImplementationError(GraphError):
+class MissingImplementationError(GraphResolveError):
     """
     Raised when a type has no implementations.
     """

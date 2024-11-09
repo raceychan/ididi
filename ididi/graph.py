@@ -7,6 +7,7 @@ from .errors import (
     MissingImplementationError,
     NodeCreationError,
     TopLevelBulitinTypeError,
+    UnsolvableNodeError,
 )
 from .node import AbstractDependent, DependentNode
 from .registry import GraphNodes, GraphNodesView, ResolutionRegistry, TypeRegistry
@@ -261,6 +262,8 @@ class DependencyGraph:
     ](self, dependent: type[T] | ty.Callable[P, T]) -> DependentNode[T]:
         try:
             return self.__static_resolve(dependent)
+        except UnsolvableNodeError as de:
+            raise de
         except Exception as e:
             raise NodeCreationError(dependent, error=e, form_message=True) from e
 

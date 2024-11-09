@@ -7,7 +7,7 @@ from ididi import DependencyGraph
 from ididi.errors import (
     ABCNotImplementedError,
     ForwardReferenceNotFoundError,
-    NodeCreationError,
+    ProtocolFacotryNotProvidedError,
     UnsolvableDependencyError,
 )
 
@@ -26,7 +26,7 @@ def test_protocols():
         def __init__(self, cache: Cache):
             self.cache = cache
 
-    with pytest.raises(NodeCreationError):
+    with pytest.raises(ProtocolFacotryNotProvidedError):
         dg.resolve(Registry)
 
     @dg.node
@@ -46,7 +46,7 @@ def test_abc():
         def __init__(self, engine: AbstractEngine):
             self.engine = engine
 
-    with pytest.raises(NodeCreationError):
+    with pytest.raises(ABCNotImplementedError):
         dg.resolve(Database)
 
 
@@ -96,7 +96,7 @@ def test_forward_ref_in_local_scope():
         def __init__(self, a: str = "a"):
             self.a = a
 
-    with pytest.raises(NodeCreationError):
+    with pytest.raises(ForwardReferenceNotFoundError):
         dag.resolve(ServiceA)
 
 
@@ -149,7 +149,7 @@ def test_union_type():
         def __init__(self, a: int | str):
             self.a = a
 
-    with pytest.raises(NodeCreationError):
+    with pytest.raises(UnsolvableDependencyError):
         dg.resolve(Service)
 
     @dg.node

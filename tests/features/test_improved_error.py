@@ -52,7 +52,5 @@ class EventStore:
 
 @pytest.mark.debug
 def test_improved_error():
-    with pytest.raises(NodeCreationError) as e:
+    with pytest.raises(UnsolvableDependencyError) as e:
         dg.resolve(EmailService)
-
-    assert isinstance(e.value.error, UnsolvableDependencyError)

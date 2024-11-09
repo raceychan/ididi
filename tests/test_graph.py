@@ -3,7 +3,11 @@ from abc import ABC, abstractmethod
 
 import pytest
 
-from ididi.errors import NodeCreationError
+from ididi.errors import (
+    ABCNotImplementedError,
+    NodeCreationError,
+    UnsolvableDependencyError,
+)
 from ididi.graph import DependencyGraph
 from ididi.utils.typing_utils import is_closable
 
@@ -91,7 +95,7 @@ def test_missing_implementation(dag: DependencyGraph):
             """Save the repository data."""
             pass
 
-    with pytest.raises(NodeCreationError):
+    with pytest.raises(ABCNotImplementedError):
         dag.resolve(Repository)
 
 
@@ -344,7 +348,7 @@ def test_unsupported_annotation(dag: DependencyGraph):
         def __init__(self, bad: None):  # object is not a proper annotation
             self.bad = bad
 
-    with pytest.raises(NodeCreationError):
+    with pytest.raises(UnsolvableDependencyError):
         dag.resolve(BadService)
 
 

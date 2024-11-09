@@ -23,6 +23,10 @@ debug-cov:
 cov:
 	pixi run -e test pytest tests/ --cov=ididi --cov-report term-missing 
 
+.PHONY: report
+report:
+	pixi run -e test pytest tests/ --cov=ididi --cov-report html
+
 
 .PHONY: visualize
 visualize:

@@ -431,8 +431,12 @@ class DependentNode[T]:
         self.check_for_resolvability()
 
         if not self.signature:
-            breakpoint()
-            return self.factory()
+            try:
+                return self.factory()
+            except TypeError as e:
+                raise UnsolvableDependencyError(
+                    self.dependent.dependent_name, self.dependent_type
+                ) from e
 
         bound_args = self.signature.bound_args(override)
         return self.factory(*bound_args.args, **bound_args.kwargs)
