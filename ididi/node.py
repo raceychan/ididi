@@ -370,6 +370,7 @@ class DependentNode[T]:
         self, param: inspect.Parameter, dep: ForwardDependent
     ) -> "DependentNode[ty.Any]":
         resolved_type = self.resolve_forward_dependency(dep)
+
         resolved_node = DependentNode.from_node(resolved_type, self.config)
         new_dep_param = DependencyParam(
             name=param.name,
@@ -398,7 +399,9 @@ class DependentNode[T]:
             # no factory override
             if is_builtin_type(self.factory):
                 raise UnsolvableDependencyError(
-                    self.dependent.dependent_name, self.factory
+                    dep_name=self.dependent.dependent_name,
+                    required_type=self.dependent_type,
+                    factory=self.factory,
                 )
 
             if getattr(self.factory, "_is_protocol", False):
@@ -415,12 +418,16 @@ class DependentNode[T]:
 
             if dpram.is_builtin:
                 raise UnsolvableDependencyError(
-                    dpram.param.name, dpram.param.annotation
+                    dep_name=dpram.param.name,
+                    factory=dpram.param.annotation,
+                    required_type=self.dependent_type,
                 )
 
             if dpram.param.kind in (Parameter.VAR_POSITIONAL, Parameter.VAR_KEYWORD):
                 raise UnsolvableDependencyError(
-                    dpram.param.name, dpram.param.annotation
+                    dep_name=dpram.param.name,
+                    factory=dpram.param.annotation,
+                    required_type=self.dependent_type,
                 )
 
     def build(self, **override: dict[str, ty.Any]) -> T | ty.Awaitable[T]:
@@ -435,7 +442,9 @@ class DependentNode[T]:
                 return self.factory()
             except TypeError as e:
                 raise UnsolvableDependencyError(
-                    self.dependent.dependent_name, self.dependent_type
+                    dep_name=self.dependent.dependent_name,
+                    factory=self.factory,
+                    required_type=self.dependent_type,
                 ) from e
 
         bound_args = self.signature.bound_args(override)

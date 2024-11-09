@@ -253,7 +253,6 @@ class DependencyGraph:
             self._resolved_nodes[subnode.dependent_type] = resolved_node
 
         node.check_for_resolvability()
-
         self._resolved_nodes[dependent] = node
         return node
 
@@ -432,10 +431,10 @@ class DependencyGraph:
         if return_type is not INSPECT_EMPTY and return_type in self._nodes:
             old_node = self._nodes[return_type]
             self.remove_node(old_node)
-
         try:
             node = DependentNode.from_node(factory_or_class, node_config)
         except NodeCreationError as e:
             raise NodeCreationError(factory_or_class, error=e, form_message=True) from e
+
         self.register_node(node)
         return factory_or_class

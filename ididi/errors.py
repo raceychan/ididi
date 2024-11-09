@@ -37,7 +37,7 @@ class _ErrorChain(ty.NamedTuple):
 
 class NodeCreationError(NodeError):
     """
-    Raised when a node can't be created.
+    Raised when a node can't be created in @dg.node.
     """
 
     def __init__(
@@ -111,7 +111,13 @@ class UnsolvableDependencyError(UnsolvableNodeError):
     Raised when a dependency parameter can't be built.
     """
 
-    def __init__(self, dep_name: str, required_type: ty.Any):
+    def __init__(
+        self,
+        *,
+        dep_name: str,
+        factory: ty.Callable[..., ty.Any] | type,
+        required_type: type,
+    ):
         self.message = f"Unable to resolve dependency for parameter: {dep_name}, value of {required_type} must be provided"
         super().__init__(self.message)
 

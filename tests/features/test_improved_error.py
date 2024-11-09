@@ -8,7 +8,7 @@ dg = DependencyGraph()
 
 @dg.node
 class Config:
-    def __init__(self, env: type | str):
+    def __init__(self, env: str | type[str]):
         self.env = env
 
 
@@ -53,4 +53,4 @@ class EventStore:
 @pytest.mark.debug
 def test_improved_error():
     with pytest.raises(UnsolvableDependencyError) as e:
-        dg.resolve(EmailService)
+        dg.static_resolve(EmailService)
