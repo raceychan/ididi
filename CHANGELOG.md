@@ -109,6 +109,11 @@ Improvements:
 Improvements:
 
 - [x] better error message for node creation error
+NOTE: this would leads to most exception be just NodeCreationError, and the real root cause would be wrapped in NodeCreationError.error.
+
+This is because we build the DependencyNode recursively, and if we only raise the root cause exception without putting it in a error chain, it would be hard to debug and notice the root cause.
+
+e.g.
 
 ```bash
 .pixi/envs/test/lib/python3.12/site-packages/ididi/graph.py:416: in node
@@ -122,3 +127,7 @@ E                       -> MissingAnnotationError: Unable to resolve dependency 
 ======================================================================= short test summary info =======================================================================
 ERROR tests/e2e - ididi.errors.NodeCreationError: token_bucket_factory()
 ```
+
+Features:
+
+- [x] defer the resolve of DependentNode.from_node, perhaps use a FutureDependent

@@ -1,4 +1,5 @@
 import typing as ty
+from inspect import Parameter
 
 
 class IDIDIError(Exception):
@@ -29,6 +30,11 @@ class NodeError(IDIDIError):
     """
 
 
+class _ErrorChain(ty.NamedTuple):
+    prev: "_ErrorChain | None"
+    error: NodeError
+
+
 class NodeCreationError(NodeError):
     """
     Raised when a node can't be created.
@@ -37,23 +43,34 @@ class NodeCreationError(NodeError):
     def __init__(
         self,
         dependent: type | ty.Callable[..., ty.Any],
-        param: str,
+        *,
         error: Exception,
+        param: Parameter | None = None,
         form_message: bool = False,
     ):
         self.dependent = dependent
         self.param = param
-        self.errors = [error]
-        self.root_cause = None
+        self._root_cause = error
 
-        # Collect all errors in the chain
+        # Build error chain using _ErrorNode
         if isinstance(error, NodeCreationError):
-            self.errors.extend(error.errors)  # Add all nested errors
-            self.root_cause = error.root_cause
+            self.error_chain = _ErrorChain(error.error_chain, self)
+            self._root_cause = error._root_cause
         else:
-            self.root_cause = error
+            self.error_chain = _ErrorChain(None, self)
 
         super().__init__(self.form_error_chain() if form_message else "")
+
+    @property
+    def error(self) -> Exception:
+        return self._root_cause
+
+    def _make_error(self) -> str:
+        if not self.param:
+            return ""
+
+        err = f"-> {self.dependent.__name__}({self.param.name}: {self.param.annotation.__class__.__name__})\n"
+        return err
 
     def form_error_chain(self) -> str:
         """
@@ -63,26 +80,27 @@ class NodeCreationError(NodeError):
         TokenBucketFactory(aiocache: RedisCache[str])
             -> RedisCache[str](redis: Redis)
                 -> Redis(connection_pool: Optional[ConnectionPool])
-                    -> MissingAnnotationError: Unable to resolve dependency...
+                -> MissingAnnotationError: Unable to resolve dependency...
         """
-        chain = [f"{self.dependent.__name__}({self.param})"]
-        indent = " " * 4
+        chain: list[str] = ["\n"]
+        current_node = self.error_chain
+        level = 0
+        tab = " " * 4
 
-        # Process all errors in the chain
-        for error in self.errors:
-            if isinstance(error, NodeCreationError):
-                msg = f"{indent}-> {error.dependent.__name__}"
-                msg += f"({error.param})" if error.param else ""
-                chain.append(msg)
-                indent += " " * 4
+        # Walk the linked list to build the chain
+        while current_node:
+            if isinstance(current_node.error, NodeCreationError):
+                indent = tab * level
+                chain.append(indent + current_node.error._make_error())
+                level += 1
+            current_node = current_node.prev
 
-        # Add the root cause at the end
-        if self.root_cause:
-            chain.append(
-                f"{indent}-> {self.root_cause.__class__.__name__}: {str(self.root_cause)}"
-            )
+        # Add root cause at the end
+        chain.append(
+            tab * level + f"{self._root_cause.__class__.__name__}: {self._root_cause}"
+        )
 
-        return "\n".join(chain)
+        return "".join(chain)
 
 
 class UnsolvableParameterError(NodeError):

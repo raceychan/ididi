@@ -6,6 +6,8 @@ Ididi is a pythonic dependency injection lib, with ergonomic apis, without boilp
 
 It allows you to define dependencies in a declarative way without any boilerplate code.
 
+ididi is written and tested under strict type checking, you can exepct very good typing support.
+
 ## Source Code
 
 [Github-ididi](https://github.com/raceychan/ididi)

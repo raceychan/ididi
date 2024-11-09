@@ -21,7 +21,8 @@ class UserService:
         self.repo = repo
 
 
-assert isinstance(ididi.solve(UserService), UserService)
+def test_ididi_solve():
+    assert isinstance(ididi.solve(UserService), UserService)
 
 
 @ididi.entry

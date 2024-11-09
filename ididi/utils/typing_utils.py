@@ -13,7 +13,7 @@ type BuiltinSingleton = type[None]
 
 
 def is_builtin_primitive(t: ty.Any) -> ty.TypeGuard[PrimitiveBuiltins]:
-    return t in {int, float, complex, str, bool, bytes, bytearray}
+    return t in {int, float, complex, str, bool, bytes, bytearray, type}
 
 
 def is_builtin_container(t: ty.Any) -> ty.TypeGuard[ContainerBuiltins[ty.Any]]:
@@ -65,7 +65,9 @@ def eval_type(
     *,
     lenient: bool = False,
 ) -> ty.Any:
-    """Evaluate the annotation using the provided namespaces.
+    """
+    # NOTE: copy from pydantic, credit to them.
+    Evaluate the annotation using the provided namespaces.
 
     Args:
         value: The value to evaluate. If `None`, it will be replaced by `type[None]`. If an instance
@@ -93,6 +95,7 @@ def get_typed_annotation(annotation: ty.Any, globalns: dict[str, ty.Any]) -> ty.
 def get_typed_params[T](call: ty.Callable[..., T]) -> list[inspect.Parameter]:
     signature = inspect.signature(call)
     globalns = getattr(call, "__globals__", {})
+    globalns.pop("copyright", None)  #
     typed_params = [
         inspect.Parameter(
             name=param.name,
@@ -197,7 +200,7 @@ def is_class_with_empty_init(cls: type) -> bool:
     """
     is_undefined_init = cls.__init__ is object.__init__
     is_protocol = cls.__init__ is EmptyInitProtocol.__init__
-    return is_undefined_init or is_protocol
+    return cls is type or is_undefined_init or is_protocol
 
 
 class EmptyInitProtocol(ty.Protocol): ...

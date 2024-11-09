@@ -3,14 +3,9 @@ from abc import ABC, abstractmethod
 
 import pytest
 
-from ididi.errors import (
-    ABCNotImplementedError,
-    TopLevelBulitinTypeError,
-    UnsolvableDependencyError,
-)
+from ididi.errors import NodeCreationError
 from ididi.graph import DependencyGraph
 from ididi.utils.typing_utils import is_closable
-
 
 
 # Replace global dag with a fixture
@@ -82,7 +77,7 @@ def test_get_dependent_types(dag: DependencyGraph):
 
 
 def test_top_level_builtin_dependency(dag: DependencyGraph):
-    with pytest.raises(TopLevelBulitinTypeError):
+    with pytest.raises(NodeCreationError):
         dag.resolve(int)
 
 
@@ -96,7 +91,7 @@ def test_missing_implementation(dag: DependencyGraph):
             """Save the repository data."""
             pass
 
-    with pytest.raises(ABCNotImplementedError):
+    with pytest.raises(NodeCreationError):
         dag.resolve(Repository)
 
 
@@ -264,7 +259,6 @@ def test_graph_repr(dag: DependencyGraph):
     str(dag)
 
 
-@pytest.mark.debug
 def test_node_removal_cleanup(dag: DependencyGraph):
     dag.reset(clear_resolved=True)
 
@@ -350,7 +344,7 @@ def test_unsupported_annotation(dag: DependencyGraph):
         def __init__(self, bad: None):  # object is not a proper annotation
             self.bad = bad
 
-    with pytest.raises(UnsolvableDependencyError):
+    with pytest.raises(NodeCreationError):
         dag.resolve(BadService)
 
 

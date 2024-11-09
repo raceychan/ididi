@@ -1,8 +1,14 @@
-# this is used as a template for complex class relationships
+import pytest
+
+from ididi import DependencyGraph
+from ididi.errors import NodeCreationError, UnsolvableDependencyError
+
+dg = DependencyGraph()
 
 
+@dg.node
 class Config:
-    def __init__(self, env: str = "test"):
+    def __init__(self, env: type | str):
         self.env = env
 
 
@@ -42,3 +48,11 @@ class EmailService:
 class EventStore:
     def __init__(self, db: DataBase):
         self.db = db
+
+
+@pytest.mark.debug
+def test_improved_error():
+    with pytest.raises(NodeCreationError) as e:
+        dg.resolve(EmailService)
+
+    assert isinstance(e.value.error, UnsolvableDependencyError)

@@ -1,6 +1,6 @@
 import pytest
 
-from ididi.errors import ForwardReferenceNotFoundError, UnsolvableDependencyError
+from ididi.errors import NodeCreationError, UnsolvableDependencyError
 from ididi.graph import DependencyGraph
 
 # Create test classes with various dependency patterns
@@ -118,7 +118,7 @@ def test_forward_ref_in_local_scope():
         def __init__(self, a: str = "a"):
             self.a = a
 
-    with pytest.raises(ForwardReferenceNotFoundError):
+    with pytest.raises(NodeCreationError):
         dag.static_resolve(ServiceA)
 
 
@@ -135,5 +135,5 @@ def test_static_resolve_would_raise_error(dg: DependencyGraph):
         def __init__(self, repository: Repository):
             self.repository = repository
 
-    with pytest.raises(UnsolvableDependencyError):
-        node = dg.static_resolve(UserService)
+    with pytest.raises(NodeCreationError):
+        dg.static_resolve(UserService)

@@ -19,7 +19,8 @@ from .errors import (
     UnsolvableDependencyError,
 )
 from .types import EMPTY_SIGNATURE, INSPECT_EMPTY, IFactory, NodeConfig
-from .utils.param_utils import NULL, Nullable, is_not_null
+
+# from .utils.param_utils import NULL, Nullable, is_not_null
 from .utils.typing_utils import (
     eval_type,
     get_factory_sig_from_cls,
@@ -33,21 +34,49 @@ from .utils.typing_utils import (
 )
 
 
+class _Null:
+    """
+    Sentinel object to represent a null value.
+    bool(NULL) is False.
+    """
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "NULL"
+
+    def __bool__(self) -> bool:
+        return False
+
+
+NULL = _Null()
+
+
+type Nullable[T] = T | _Null
+"""
+Nullable[int] == int | NULL
+"""
+
+
+def is_not_null[T](value: Nullable[T]) -> ty.TypeGuard[T]:
+    """
+    Check if the value is not NULL.
+    """
+    return value is not NULL
+
+
 def factory_placeholder() -> None:
     raise NotSupportedError("Factory placeholder should not be called")
 
 
-from abc import ABC, abstractmethod
-
-
 @dataclass(slots=True)
-class AbstractDependent[T](ABC):
+class AbstractDependent[T](abc.ABC):
     """Base class for all dependent types."""
 
     dependent_type: type[T] = field(init=False)
 
     @property
-    @abstractmethod
+    @abc.abstractmethod
     def dependent_name(self) -> str: ...
 
 
@@ -335,7 +364,6 @@ class DependentNode[T]:
                 raise CircularDependencyDetectedError(
                     [self.dependent.dependent_type, resolved_type]
                 )
-
         return resolved_type
 
     def actualize_forward_dep(
@@ -403,6 +431,7 @@ class DependentNode[T]:
         self.check_for_resolvability()
 
         if not self.signature:
+            breakpoint()
             return self.factory()
 
         bound_args = self.signature.bound_args(override)
@@ -488,7 +517,7 @@ class DependentNode[T]:
 
         # === Solvable dependency, NOTE: order matters!===
 
-        if annotation is types.UnionType:
+        if annotation in (types.UnionType, ty.Union):
             union_types = ty.get_args(param.annotation)
             # we do care which type is correct, it would be provided by the factory
             annotation = union_types[0]
@@ -499,7 +528,7 @@ class DependentNode[T]:
             try:
                 node = DependentNode.from_node(annotation, config)
             except Exception as e:
-                raise NodeCreationError(dependent, param_name, e) from e
+                raise NodeCreationError(dependent, param=param, error=e) from e
         return node
 
     @classmethod
@@ -517,6 +546,17 @@ class DependentNode[T]:
         )
 
     @classmethod
+    def _create_empty_init_node(
+        cls, dependent: type[ty.Any], config: NodeConfig
+    ) -> "DependentNode[ty.Any]":
+        return cls.create(
+            dependent=dependent,
+            factory=dependent,
+            signature=EMPTY_SIGNATURE,
+            config=config,
+        )
+
+    @classmethod
     def from_class[
         I
     ](cls, *, dependent: type[I], config: NodeConfig) -> "DependentNode[I]":
@@ -525,12 +565,8 @@ class DependentNode[T]:
                 dependent = res
 
         if is_class_with_empty_init(dependent):
-            return cls.create(
-                dependent=dependent,
-                factory=ty.cast(ty.Callable[..., I], dependent),
-                signature=EMPTY_SIGNATURE,
-                config=config,
-            )
+            return cls._create_empty_init_node(dependent, config)
+
         signature = get_factory_sig_from_cls(dependent)
         return cls.create(
             dependent=dependent, factory=dependent, signature=signature, config=config
@@ -544,7 +580,6 @@ class DependentNode[T]:
         cls, node: IFactory[I, P] | type[I], config: NodeConfig | None = None
     ) -> "DependentNode[I]":
         config = config or NodeConfig()
-
         if is_class(node):
             return cls.from_class(dependent=node, config=config)
         else:

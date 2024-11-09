@@ -226,7 +226,7 @@ class DependencyGraph:
         self.remove_node(old_node)
         self.register_node(new_node)
 
-    def static_resolve[
+    def __static_resolve[
         T, **P
     ](self, dependent_factory: type[T] | ty.Callable[P, T]) -> DependentNode[T]:
         """
@@ -247,7 +247,7 @@ class DependencyGraph:
         node = self._resolve_concrete_node(dependent)
 
         for subnode in node.iter_dependencies():
-            resolved_node = self.static_resolve(subnode.dependent_type)
+            resolved_node = self.__static_resolve(subnode.dependent_type)
             self.register_node(resolved_node)
             self._resolved_nodes[subnode.dependent_type] = resolved_node
 
@@ -255,6 +255,14 @@ class DependencyGraph:
 
         self._resolved_nodes[dependent] = node
         return node
+
+    def static_resolve[
+        T, **P
+    ](self, dependent: type[T] | ty.Callable[P, T]) -> DependentNode[T]:
+        try:
+            return self.__static_resolve(dependent)
+        except Exception as e:
+            raise NodeCreationError(dependent, error=e, form_message=True) from e
 
     @ty.overload
     def resolve[**P, T](self, dependent: ty.Callable[P, T], /) -> T: ...
@@ -296,6 +304,7 @@ class DependencyGraph:
             resolved_dep = self.resolve(sub_node_dep_type)
             resolved_deps[dep_name] = resolved_dep
 
+        # TODO: in case of asynccontextmanager, we would need to await the instance
         instance = node.build(**resolved_deps)
         if node.config.reuse:
             self._resolution_registry.register(node_dep_type, instance)
@@ -305,7 +314,14 @@ class DependencyGraph:
     @lru_cache
     def factory[T](self, dependent: type[T]) -> IFactory[T, ...]:
         """
-        A helper function that creates a resolver for a given type.
+        A helper function that creates a resolver(a factory) for a given type.
+
+        Example:
+        ```python
+        dg = DependencyGraph()
+        resolver = dg.factory(AuthService)
+        auth_service = resolver()
+        ```
         """
         if dependent not in self._resolved_nodes:
             self.static_resolve(dependent)
@@ -417,6 +433,6 @@ class DependencyGraph:
         try:
             node = DependentNode.from_node(factory_or_class, node_config)
         except NodeCreationError as e:
-            raise NodeCreationError(factory_or_class, "", e, form_message=True) from e
+            raise NodeCreationError(factory_or_class, error=e, form_message=True) from e
         self.register_node(node)
         return factory_or_class

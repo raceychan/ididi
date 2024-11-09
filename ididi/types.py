@@ -22,7 +22,17 @@ type IFactory[I, **P] = ty.Callable[P, I]
 #     ](self, dep: ty.Callable[P, T], /, *args: ty.Any, **kwargs: ty.Any) -> T: ...
 
 
-class TDecor:
+@ty.runtime_checkable
+class Closable(ty.Protocol):
+    def close(self) -> None: ...
+
+
+@ty.runtime_checkable
+class AsyncClosable(ty.Protocol):
+    async def close(self) -> None: ...
+
+
+class TDecor(ty.Protocol):
     @ty.overload
     def __call__[I](self, factory: type[I]) -> type[I]: ...
 
