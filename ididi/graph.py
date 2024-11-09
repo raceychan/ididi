@@ -3,7 +3,11 @@ import typing as ty
 from functools import lru_cache, partial
 from types import MappingProxyType, TracebackType
 
-from .errors import MissingImplementationError, TopLevelBulitinTypeError
+from .errors import (
+    MissingImplementationError,
+    NodeCreationError,
+    TopLevelBulitinTypeError,
+)
 from .node import AbstractDependent, DependentNode
 from .registry import GraphNodes, GraphNodesView, ResolutionRegistry, TypeRegistry
 from .types import INSPECT_EMPTY, GraphConfig, IFactory, INodeConfig, NodeConfig, TDecor
@@ -410,6 +414,9 @@ class DependencyGraph:
             old_node = self._nodes[return_type]
             self.remove_node(old_node)
 
-        node = DependentNode.from_node(factory_or_class, node_config)
+        try:
+            node = DependentNode.from_node(factory_or_class, node_config)
+        except NodeCreationError as e:
+            raise NodeCreationError(factory_or_class, "", e, form_message=True) from e
         self.register_node(node)
         return factory_or_class

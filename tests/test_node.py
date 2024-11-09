@@ -6,7 +6,7 @@ from ididi.errors import (
     GenericDependencyNotSupportedError,
     MissingAnnotationError,
     MissingReturnTypeError,
-    NotSupportedError,
+    NodeCreationError,
     UnsolvableDependencyError,
 )
 from ididi.node import DependentNode
@@ -141,7 +141,7 @@ def test_not_supported_annotation():
         def __init__(self, exc: Exception):
             self.exc = exc
 
-    with pytest.raises(MissingAnnotationError):
+    with pytest.raises(NodeCreationError):
         DependentNode.from_node(Unsupported)
 
 
@@ -253,3 +253,6 @@ def test_build_node_with_override():
     assert isinstance(instance.repository.db, DataBase)
     assert instance.repository.db.engine == "sqlite"
     assert instance.repository.db.driver == "aiomysql"
+
+
+def test_node_repr(): ...

@@ -12,6 +12,7 @@ from ididi.graph import DependencyGraph
 from ididi.utils.typing_utils import is_closable
 
 
+
 # Replace global dag with a fixture
 @pytest.fixture(scope="module")
 def dag():

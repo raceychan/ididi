@@ -103,3 +103,22 @@ Improvements:
 - resolve / static resolve now supports factory
 - better typing support for DependentNode.resolve
 - dag.reset now supports clear resolved nodes
+
+## version 0.2.5
+
+Improvements:
+
+- [x] better error message for node creation error
+
+```bash
+.pixi/envs/test/lib/python3.12/site-packages/ididi/graph.py:416: in node
+    raise NodeCreationError(factory_or_class, "", e, form_message=True) from e
+E   ididi.errors.NodeCreationError: token_bucket_factory()
+E       -> TokenBucketFactory(aiocache)
+E           -> RedisCache(redis)
+E               -> Redis(connection_pool)
+E                   -> ConnectionPool(connection_class)
+E                       -> MissingAnnotationError: Unable to resolve dependency for parameter: args in <class 'type'>, annotation for `args` must be provided
+======================================================================= short test summary info =======================================================================
+ERROR tests/e2e - ididi.errors.NodeCreationError: token_bucket_factory()
+```

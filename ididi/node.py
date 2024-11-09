@@ -13,6 +13,7 @@ from .errors import (
     GenericDependencyNotSupportedError,
     MissingAnnotationError,
     MissingReturnTypeError,
+    NodeCreationError,
     NotSupportedError,
     ProtocolFacotryNotProvidedError,
     UnsolvableDependencyError,
@@ -295,6 +296,16 @@ class DependentNode[T]:
     in this case:
     - dependent: the dependent type that this node represents, e.g AuthService
     - factory: the factory function that creates the dependent, e.g AuthService.__init__
+
+    ## [config]
+
+    lazy: bool
+    ---
+    whether this node is lazy, default is False
+
+    reuse: bool
+    ---
+    whether this node is reusable, default is True
     """
 
     dependent: AbstractDependent[T]
@@ -485,7 +496,10 @@ class DependentNode[T]:
         if is_builtin_type(annotation):
             node = _create_holder_node(Dependent(annotation), default, config)
         else:
-            node = DependentNode.from_node(annotation, config)
+            try:
+                node = DependentNode.from_node(annotation, config)
+            except Exception as e:
+                raise NodeCreationError(dependent, param_name, e) from e
         return node
 
     @classmethod

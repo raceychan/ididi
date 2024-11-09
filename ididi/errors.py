@@ -29,6 +29,62 @@ class NodeError(IDIDIError):
     """
 
 
+class NodeCreationError(NodeError):
+    """
+    Raised when a node can't be created.
+    """
+
+    def __init__(
+        self,
+        dependent: type | ty.Callable[..., ty.Any],
+        param: str,
+        error: Exception,
+        form_message: bool = False,
+    ):
+        self.dependent = dependent
+        self.param = param
+        self.errors = [error]
+        self.root_cause = None
+
+        # Collect all errors in the chain
+        if isinstance(error, NodeCreationError):
+            self.errors.extend(error.errors)  # Add all nested errors
+            self.root_cause = error.root_cause
+        else:
+            self.root_cause = error
+
+        super().__init__(self.form_error_chain() if form_message else "")
+
+    def form_error_chain(self) -> str:
+        """
+        Forms an error chain showing the dependency path that led to the error.
+
+        Example output:
+        TokenBucketFactory(aiocache: RedisCache[str])
+            -> RedisCache[str](redis: Redis)
+                -> Redis(connection_pool: Optional[ConnectionPool])
+                    -> MissingAnnotationError: Unable to resolve dependency...
+        """
+        chain = [f"{self.dependent.__name__}({self.param})"]
+        indent = " " * 4
+
+        # Process all errors in the chain
+        for error in self.errors:
+            if isinstance(error, NodeCreationError):
+                msg = f"{indent}-> {error.dependent.__name__}"
+                msg += f"({error.param})" if error.param else ""
+                chain.append(msg)
+                indent += " " * 4
+
+        # Add the root cause at the end
+        if self.root_cause:
+            chain.append(
+                f"{indent}-> {self.root_cause.__class__.__name__}: {str(self.root_cause)}"
+            )
+
+        return "\n".join(chain)
+
+
 class UnsolvableParameterError(NodeError):
     """
     Raised when a parameter is unsolveable.
@@ -148,4 +204,3 @@ class MissingImplementationError(GraphError):
 
     def __init__(self, dependency_type: type):
         super().__init__(f"No implementations found for {dependency_type}")
-

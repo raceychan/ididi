@@ -62,13 +62,23 @@ def second_entry(email: EmailService) -> str:
     return "hello"
 
 
+@entry
+async def third_entry(
+    notification: NotificationService, name: str = "hello", age: int = 18
+) -> str:
+    assert isinstance(notification, NotificationService)
+    return f"{name} is {age} years old"
+
+
 # @partial
 # def third_entry(notification: NotificationService, name: str, age: int) -> str: ...
 
 
-def test_graph_entry():
+@pytest.mark.asyncio
+async def test_graph_entry():
     assert main() == "ok"
     assert second_entry() == "hello"
+    assert await third_entry() == "hello is 18 years old"
 
 
 @pytest.mark.benchmark(group="graph-entry")
@@ -103,7 +113,6 @@ def test_performance():
     end = time.perf_counter()
     time2 = end - start
     print(f"Time taken: {round(end - start, 6)} seconds")
-
     print(f"hardcoded: {round(time2 / time1, 2)} times faster")
 
 
