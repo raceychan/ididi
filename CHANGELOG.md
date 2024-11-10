@@ -119,21 +119,19 @@ e.g.
 .pixi/envs/test/lib/python3.12/site-packages/ididi/graph.py:416: in node
     raise NodeCreationError(factory_or_class, "", e, form_message=True) from e
 E   ididi.errors.NodeCreationError: token_bucket_factory()
-E       -> TokenBucketFactory(aiocache)
-E           -> RedisCache(redis)
-E               -> Redis(connection_pool)
-E                   -> ConnectionPool(connection_class)
-E                       -> MissingAnnotationError: Unable to resolve dependency for parameter: args in <class 'type'>, annotation for `args` must be provided
-======================================================================= short test summary info =======================================================================
-ERROR tests/e2e - ididi.errors.NodeCreationError: token_bucket_factory()
+E   -> TokenBucketFactory(aiocache)
+E   -> RedisCache(redis)
+E   -> Redis(connection_pool)
+E   -> ConnectionPool(connection_class)
+E   -> MissingAnnotationError: Unable to resolve dependency for parameter: args in <class 'type'>, annotation for `args` must be provided
 ```
 
 Features:
-
-- [x] defer the resolve of DependentNode.from_node, perhaps use a FutureDependent
 
 ## version 0.2.6
 
 - adding graph to node as an attribute so that it can check if a subnode is already resolved
 - config max recursion limit in graph
 - yield factory
+- defer the resolve of DependentNode.from_node, perhaps use a FutureDependent
+

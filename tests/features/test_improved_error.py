@@ -1,7 +1,8 @@
 import pytest
 
 from ididi import DependencyGraph
-from ididi.errors import NodeCreationErrorChain, UnsolvableDependencyError
+
+# from ididi.errors import NodeCreationErrorChain, UnsolvableDependencyError
 
 dg = DependencyGraph()
 
@@ -73,8 +74,8 @@ class EventStore:
         self.db = db
 
 
-# @pytest.mark.debug
-# def test_improved_error():
-#     # BUG: this should not raise Error when config is overridden
-#     # with factory
-#     dg.static_resolve(EmailService)
+@pytest.mark.debug
+def test_improved_error():
+    # BUG: this should not raise Error when config is overridden
+    # with factory
+    dg.static_resolve(EmailService)
