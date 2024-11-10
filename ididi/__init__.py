@@ -22,4 +22,5 @@ from .api import entry as entry
 from .api import solve as solve
 from .graph import DependencyGraph as DependencyGraph
 from .node import DependentNode as DependentNode
+from .types import INodeConfig as INodeConfig
 from .visual import Visualizer as Visualizer

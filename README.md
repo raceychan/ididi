@@ -1,5 +1,25 @@
 # ididi
 
+- [ididi](#ididi)
+  - [Introduction](#introduction)
+  - [Source Code](#source-code)
+  - [Install](#install)
+  - [Usage](#usage)
+    - [Decorate your top level dependencies and leave the rest to ididi](#decorate-your-top-level-dependencies-and-leave-the-rest-to-ididi)
+    - [Automatic dependencies injection](#automatic-dependencies-injection)
+    - [Usage with FastAPI](#usage-with-fastapi)
+    - [Visualize the dependency graph(beta)](#visualize-the-dependency-graphbeta)
+    - [Lazy Dependency(Beta)](#lazy-dependencybeta)
+    - [Runtime override](#runtime-override)
+    - [Advanced Usage](#advanced-usage)
+      - [ABC](#abc)
+        - [Register ABC implementation with `dg.node`](#register-abc-implementation-with-dgnode)
+        - [Multiple Implementations of ABC](#multiple-implementations-of-abc)
+    - [Resolve Rules](#resolve-rules)
+    - [FAQ:](#faq)
+      - [How do I override, or provide a default value for a dependency?](#how-do-i-override-or-provide-a-default-value-for-a-dependency)
+      - [How do I make ididi reuse a dependencies across different dependent?](#how-do-i-make-ididi-reuse-a-dependencies-across-different-dependent)
+
 ## Introduction
 
 Ididi is a pythonic dependency injection lib, with ergonomic apis, without boilplate code, works out of the box.
@@ -280,3 +300,25 @@ assert isinstance(repo, Repo1)
   - Parent's `__init__` will be called if no `__init__` is defined in the node.
 - bulitin types are not resolvable by nature, it requires default value to be provided.
 - runtime override with `dg.resolve`
+
+### FAQ:
+
+#### How do I override, or provide a default value for a dependency?
+
+you can use `dg.node` to create a factory to override the value.
+you can also have dependencies in your factory, and they will be resolved recursively.
+
+```python
+class Config:
+    def __init__(self, env: str = "prod"):
+        self.env = env
+
+@dg.node
+def config_factory() -> Config:
+    return Config(env="test")
+```
+
+#### How do I make ididi reuse a dependencies across different dependent?
+
+by default, ididi will reuse the dependencies across different dependent,
+you can change this behavior by setting `reuse=False` in `dg.node`.

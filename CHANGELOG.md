@@ -134,4 +134,3 @@ Features:
 - config max recursion limit in graph
 - yield factory
 - defer the resolve of DependentNode.from_node, perhaps use a FutureDependent
-
