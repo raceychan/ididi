@@ -1,6 +1,6 @@
 import pytest
 
-from ididi.errors import NotSupportedError
+from ididi.errors import NodeCreationErrorChain
 from ididi.graph import DependencyGraph
 from ididi.node import LazyDependent
 
@@ -95,7 +95,7 @@ def test_lazyfactory():
         def __init__(self, name: str):
             self._name = name
 
-    with pytest.raises(NotSupportedError):
+    with pytest.raises(NodeCreationErrorChain):
 
         @dg.node(lazy=True)
         def service_factory() -> Service:

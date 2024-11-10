@@ -1,7 +1,7 @@
 import pytest
 
 from ididi import DependencyGraph
-from ididi.errors import CircularDependencyDetectedError, NodeCreationError
+from ididi.errors import CircularDependencyDetectedError, NodeCreationErrorChain
 
 dag = DependencyGraph()
 
@@ -19,7 +19,7 @@ class CircleServiceB:
 
 
 def test_cycle_detection():
-    with pytest.raises(NodeCreationError) as e:
+    with pytest.raises(NodeCreationErrorChain) as e:
         dag.resolve(CircleServiceA)
 
     assert e.value.error.cycle_path == [CircleServiceA, CircleServiceB]

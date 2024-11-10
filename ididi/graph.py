@@ -5,7 +5,7 @@ from types import MappingProxyType, TracebackType
 
 from .errors import (
     MissingImplementationError,
-    NodeCreationError,
+    NodeCreationErrorChain,
     TopLevelBulitinTypeError,
     UnsolvableNodeError,
 )
@@ -212,7 +212,7 @@ class DependencyGraph:
         try:
             concrete_type = self._resolve_concrete_type(dependent)
         except MissingImplementationError:
-            node = DependentNode.from_node(dependent, NodeConfig())
+            node = DependentNode.from_node(dependent, config=NodeConfig())
             self.register_node(node)
         else:
             node = self._nodes[concrete_type]
@@ -245,6 +245,7 @@ class DependencyGraph:
         if is_builtin_type(dependent):
             raise TopLevelBulitinTypeError(dependent)
 
+        # we need to check if the node is already registered and its factory.
         node = self._resolve_concrete_node(dependent)
 
         for subnode in node.iter_dependencies():
@@ -264,7 +265,9 @@ class DependencyGraph:
         except UnsolvableNodeError as de:
             raise de
         except Exception as e:
-            raise NodeCreationError(dependent, error=e, form_message=True) from e
+            raise NodeCreationErrorChain(
+                dependent, error=e, form_message=True
+            )  # from None
 
     @ty.overload
     def resolve[**P, T](self, dependent: ty.Callable[P, T], /) -> T: ...
@@ -281,8 +284,8 @@ class DependencyGraph:
     ](self, dependent: ty.Callable[P, T], /, **overrides: ty.Any) -> T:
         """
         Resolve a dependency and bild its complete dependency graph.
-        Supports dependency overrides for testing.
-        Overrides are only applied to the requested type, not its dependencies.
+        Supports dependency overrides, overrides are only applied to the requested type, not its dependencies.
+        ```
         """
         node_dep_type = dependent
 
@@ -306,11 +309,26 @@ class DependencyGraph:
             resolved_dep = self.resolve(sub_node_dep_type)
             resolved_deps[dep_name] = resolved_dep
 
-        # TODO: in case of asynccontextmanager, we would need to await the instance
+        """
+        node.build would create an instance of the class using factory
+        if the factory is an asynccontextmanager, it would return
+        _AsyncGeneratorContextManager, which is an instance of  
+        contextlib.AbstractAsyncContextManager.
+
+        instance = node.build(**resolved_deps)
+        stack = self._scope_registry[node]
+        if isinstance(instance, contextlib.AbstractAsyncContextManager):
+            await astack.enter_async_context(resolved_deps[dep])
+        
+
+        async def wrapper():
+            await instance()
+            await astack.aclose()
+        """
+
         instance = node.build(**resolved_deps)
         if node.config.reuse:
             self._resolution_registry.register(node_dep_type, instance)
-
         return ty.cast(T, instance)
 
     @lru_cache
@@ -338,6 +356,9 @@ class DependencyGraph:
     ](self, func: ty.Callable[P, R], /, **kwargs: ty.Unpack[INodeConfig]) -> (
         ty.Callable[[], R] | ty.Callable[[], ty.Awaitable[R]]
     ):
+        """
+        we would need IOC to implement scope
+        """
         Dummy = type("Dummy", (object,), {})
         dep = ty.cast(type[R], Dummy)
         sig = get_full_typed_signature(func)
@@ -351,6 +372,13 @@ class DependencyGraph:
             return r
 
         async def async_resolve(*args: P.args, **kwargs: P.kwargs) -> R:
+            """
+            acm = self._scope_registry[dep]
+            await stack.enter_async_context(acm(**kwargs))
+            # we might return a coroutine with asynccontext manager
+            r = self.resolve(dep, *args, **kwargs)
+            """
+
             r = await ty.cast(ty.Awaitable[R], self.resolve(dep, *args, **kwargs))
             return r
 
@@ -431,10 +459,14 @@ class DependencyGraph:
         if return_type is not INSPECT_EMPTY and return_type in self._nodes:
             old_node = self._nodes[return_type]
             self.remove_node(old_node)
+
+        # TODO: provide a solved type for from_node
         try:
-            node = DependentNode.from_node(factory_or_class, node_config)
-        except NodeCreationError as e:
-            raise NodeCreationError(factory_or_class, error=e, form_message=True) from e
+            node = DependentNode.from_node(factory_or_class, config=node_config)
+        except Exception as e:
+            raise NodeCreationErrorChain(
+                factory_or_class, error=e, form_message=True
+            ) from None
 
         self.register_node(node)
         return factory_or_class

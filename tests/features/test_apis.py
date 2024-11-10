@@ -31,4 +31,5 @@ def main(user_service: UserService):
     return user_service
 
 
-assert isinstance(main(), UserService)
+def test_ididi_entry():
+    assert isinstance(main(), UserService)

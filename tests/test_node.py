@@ -6,7 +6,7 @@ from ididi.errors import (
     GenericDependencyNotSupportedError,
     MissingAnnotationError,
     MissingReturnTypeError,
-    NodeCreationError,
+    NodeCreationErrorChain,
     UnsolvableDependencyError,
 )
 from ididi.node import DependentNode
@@ -93,7 +93,7 @@ def test_factory_function():
 
 
 def test_generic_service_not_supported():
-    with pytest.raises(GenericDependencyNotSupportedError):
+    with pytest.raises(NodeCreationErrorChain):
         DependentNode.from_node(GenericService[str])
 
 
@@ -132,7 +132,7 @@ def test_node_without_annotation():
         def __init__(self, a):
             self.a = a
 
-    with pytest.raises(MissingAnnotationError):
+    with pytest.raises(NodeCreationErrorChain):
         DependentNode.from_node(Service)
 
 
@@ -141,7 +141,7 @@ def test_not_supported_annotation():
         def __init__(self, exc: Exception):
             self.exc = exc
 
-    with pytest.raises(NodeCreationError):
+    with pytest.raises(NodeCreationErrorChain):
         DependentNode.from_node(Unsupported)
 
 

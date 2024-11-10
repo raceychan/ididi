@@ -131,3 +131,9 @@ ERROR tests/e2e - ididi.errors.NodeCreationError: token_bucket_factory()
 Features:
 
 - [x] defer the resolve of DependentNode.from_node, perhaps use a FutureDependent
+
+## version 0.2.6
+
+- adding graph to node as an attribute so that it can check if a subnode is already resolved
+- config max recursion limit in graph
+- yield factory

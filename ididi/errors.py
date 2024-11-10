@@ -30,55 +30,80 @@ class NodeError(IDIDIError):
     """
 
 
-class _ErrorChain(ty.NamedTuple):
+class _ErrorChain:
+    __slots__ = ("error", "next", "head", "length")
+
+    error: Exception
     next: "_ErrorChain | None"
-    error: NodeError
+    head: "_ErrorChain"
+    length: int
+
+    def __init__(self, *, error: Exception):
+        self.error = error
+        if isinstance(error, NodeCreationErrorChain):
+            self.next = error.error_chain
+            self.length = error.error_chain.length + 1
+            self.head = error.error_chain.head
+        else:
+            self.next = None
+            self.length = 0
+            self.head = self
+
+    def __str__(self) -> str:
+        return self.form_repr()
+
+    def _make_error(self) -> str:
+        """Format the current error node's message."""
+        # TODO: skip middle traceback
+        if not isinstance(self.error, NodeCreationErrorChain):
+            return ""
+
+        if not self.error.param:
+            return ""
+
+        param_type = self.error.param.annotation
+        if param_type is Parameter.empty:
+            param_type = "unannotated"
+        else:
+            param_type = param_type.__name__
+
+        return f"-> {self.error.dependent.__name__}({self.error.param.name}: {param_type})\n"
+
+    def form_repr(self) -> str:
+        """
+        Forms an error chain showing the dependency path that led to the error.
+
+        Example output:
+        TokenBucketFactory(aiocache: RedisCache[str])
+        -> RedisCache[str](redis: Redis)
+        -> Redis(connection_pool: Optional[ConnectionPool])
+        -> MissingAnnotationError: Unable to resolve dependency...
+        """
+        chain: list[str] = ["\n"]
+        current_node = self
+        level = 0
+
+        # Walk the linked list to build the chain
+        while current_node:
+            msg = current_node._make_error()
+            if msg:
+                chain.append(msg)
+                level += 1
+            current_node = current_node.next
+
+        # Add root cause at the end
+        chain.append(f"{self.head.error.__class__.__name__}: {self.head.error}")
+        return "".join(chain)
 
 
-# class LinkedExceptionBase(IDIDIError):
-#     """
-#     Base class for all linked exceptions.
-
-#     def create_engine(sql_client: Client) -> Engine:
-#         ...
-#     Here dependent is create_engine,
-#     dep_name is sql_client,
-#     dep_type is Client
-#     """
-
-#     chain: "_ErrorChain"
-
-#     # the dependent, a callable, that cause the error
-#     # either a factory or a class __init__
-#     dependent: type | ty.Callable[..., ty.Any]
-#     # the name of the dependency that caused the error
-#     dep_name: str
-#     # the type of the dependency that caused the error
-#     dep_type: type
-#     # the exception that caused the error
-#     cause: Exception | None = None
-
-#     def _make_error(self) -> str:
-#         if not self.dep_name:
-#             return ""
-
-#         dep_repr = {str(self.dependent)}
-#         param_repr = f"{self.dep_name}: {self.dep_type.__name__}"
-#         err = f"-> {dep_repr}({param_repr})\n"
-#         return err
-
-#     def add_to_chain(self, error: "LinkedExceptionBase | NodeCreationError"):
-#         if isinstance(error, NodeCreationError):
-#             self.chain = _ErrorChain(error.error_chain, self)
-#         else:
-#             self.cause = error
-
-#     def raise_with_chain(self):
-#         msg = self.chain.build_error()
-class NodeCreationError(NodeError):
+class NodeCreationErrorChain(NodeError):
     """
-    Raised when a node can't be created in @dg.node.
+    Raised when a node can't be created.
+    This chain up the errors happened in a deep recursion stack.
+    the root cause can be found in the .error attribute.
     """
+
+    __slots__ = ("dependent", "param", "_root_cause", "error_chain")
 
     def __init__(
         self,
@@ -90,57 +115,26 @@ class NodeCreationError(NodeError):
     ):
         self.dependent = dependent
         self.param = param
-        self._root_cause = error
+        self.error_chain = _ErrorChain(error=error)
+        self._root_cause = self.error_chain.head.error
+        message = ""
+        if form_message:
+            message = str(self.error_chain)
 
-        # Build error chain using _ErrorNode
-        if isinstance(error, NodeCreationError):
-            self.error_chain = _ErrorChain(error.error_chain, self)
-            self._root_cause = error._root_cause
-        else:
-            self.error_chain = _ErrorChain(None, self)
-
-        super().__init__(self.form_error_chain() if form_message else "")
+        super().__init__(message)
 
     @property
     def error(self) -> Exception:
         return self._root_cause
 
-    def _make_error(self) -> str:
-        if not self.param:
-            return ""
-
-        err = f"-> {self.dependent.__name__}({self.param.name}: {self.param.annotation.__class__.__name__})\n"
-        return err
-
-    def form_error_chain(self) -> str:
-        """
-        Forms an error chain showing the dependency path that led to the error.
-
-        Example output:
-        TokenBucketFactory(aiocache: RedisCache[str])
-            -> RedisCache[str](redis: Redis)
-                -> Redis(connection_pool: Optional[ConnectionPool])
-                -> MissingAnnotationError: Unable to resolve dependency...
-        """
-        chain: list[str] = ["\n"]
-        current_node = self.error_chain
-        level = 0
-        tab = " " * 4
-
-        # Walk the linked list to build the chain
-        while current_node:
-            if isinstance(current_node.error, NodeCreationError):
-                indent = tab * level
-                chain.append(indent + current_node.error._make_error())
-                level += 1
-            current_node = current_node.next
-
-        # Add root cause at the end
-        chain.append(
-            tab * level + f"{self._root_cause.__class__.__name__}: {self._root_cause}"
+    def with_error_chain(self) -> "NodeCreationErrorChain":
+        """Returns a new instance with the error chain formatted in the message."""
+        return NodeCreationErrorChain(
+            dependent=self.dependent,
+            error=self.error,
+            param=self.param,
+            form_message=True,
         )
-
-        return "".join(chain)
 
 
 class UnsolvableNodeError(NodeError): ...
@@ -158,7 +152,7 @@ class UnsolvableDependencyError(UnsolvableNodeError):
         factory: ty.Callable[..., ty.Any] | type,
         required_type: type,
     ):
-        self.message = f"Unable to resolve dependency for parameter: {dep_name}, value of {required_type} must be provided"
+        self.message = f"Unable to resolve dependency for parameter: {dep_name} in {factory}, value of {required_type} must be provided"
         super().__init__(self.message)
 
 

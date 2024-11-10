@@ -5,7 +5,7 @@ import pytest
 
 from ididi.errors import (
     ABCNotImplementedError,
-    NodeCreationError,
+    NodeCreationErrorChain,
     UnsolvableDependencyError,
 )
 from ididi.graph import DependencyGraph
@@ -81,7 +81,7 @@ def test_get_dependent_types(dag: DependencyGraph):
 
 
 def test_top_level_builtin_dependency(dag: DependencyGraph):
-    with pytest.raises(NodeCreationError):
+    with pytest.raises(NodeCreationErrorChain):
         dag.resolve(int)
 
 
