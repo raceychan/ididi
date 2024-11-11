@@ -5,7 +5,7 @@ from dataclasses import dataclass
 EMPTY_SIGNATURE = inspect.Signature()
 INSPECT_EMPTY = inspect.Signature.empty
 
-type IFactory[I, **P] = ty.Callable[P, I]
+type IFactory[I, **P] = ty.Callable[P, I | ty.Awaitable[I]]
 
 
 # class Override[T](ty.Protocol):

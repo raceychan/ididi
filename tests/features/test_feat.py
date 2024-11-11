@@ -36,34 +36,40 @@ async def get_db() -> ty.AsyncGenerator[DataBase, None]:
         await db.close()
 
 
-# @pytest.mark.debug
-# @pytest.mark.asyncio
-# async def test_async_gen_factory():
-#     db = dg.resolve(get_db)
+@dg.entry_node
+async def main(db: DataBase):
+    assert not db.is_closed
 
 
-#     dg = DependencyGraph()
+@pytest.mark.debug
+@pytest.mark.asyncio
+async def test_async_gen_factory():
+    await main()
+    # db = dg.resolve(get_db)
+    # breakpoint()
 
-#     class DataBase:
-#         def __init__(self, url: str = ""):
-#             self.url = url
-#             self._is_closed = False
+    # dg = DependencyGraph()
 
-#         async def close(self) -> None:
-#             self._is_closed = True
+    # class DataBase:
+    #     def __init__(self, url: str = ""):
+    #         self.url = url
+    #         self._is_closed = False
 
-#         @property
-#         def is_closed(self) -> bool:
-#             return self._is_closed
+    #     async def close(self) -> None:
+    #         self._is_closed = True
 
-#     @dg.node(reuse=False)
-#     @asynccontextmanager
-#     async def get_db() -> ty.AsyncGenerator[DataBase, None]:
-#         db = DataBase(url="sqlite://")
-#         try:
-#             yield db
-#         finally:
-#             await db.close()
+    #     @property
+    #     def is_closed(self) -> bool:
+    #         return self._is_closed
 
-#     async def main():
-#         dg.static_resolve(get_db)
+    # @dg.node(reuse=False)
+    # @asynccontextmanager
+    # async def get_db() -> ty.AsyncGenerator[DataBase, None]:
+    #     db = DataBase(url="sqlite://")
+    #     try:
+    #         yield db
+    #     finally:
+    #         await db.close()
+
+    # async def main():
+    #     dg.static_resolve(get_db)

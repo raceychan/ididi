@@ -3,8 +3,6 @@ import types
 import typing as ty
 from typing import _eval_type as ty_eval_type  # type: ignore
 
-from ..errors import MissingReturnTypeError
-
 type PrimitiveBuiltins = type[int | float | complex | str | bool | bytes | bytearray]
 type ContainerBuiltins[T] = type[
     list[T] | tuple[T, ...] | dict[ty.Any, T] | set[T] | frozenset[T]
@@ -33,29 +31,14 @@ def is_builtin_type(
     typing.Any is also ignored at type resolving.
     """
 
-    # TODO: we might name this as unresolved_type as corner cases increase.
+    # TODO: we might name this as 'is_unresolved_type' as corner cases increase.
     is_primitive = is_builtin_primitive(t)
     is_container = is_builtin_container(t)
     is_singleton = is_builtin_singleton(t)
     return is_primitive or is_container or is_singleton or (t is ty.Any)
 
 
-def is_unresolved_type(t: ty.Any) -> ty.TypeGuard[ty.Any]:
-    """
-    Types that are not resolved at type resolving.
-    Builtin types are unresolvable, but we might have other cases.
 
-    Every unsolved type is a leaf node in the dependency graph.
-    they don't have any dependencies, and can't be built with direct call to factory.
-
-    Examples:
-    - builtin types
-    - `typing.Any`
-    - `typing.Union[typing.Any, int]`
-    - `typing.Optional[typing.Any]`
-    - `typing.Callable[[], int]`
-    """
-    raise NotImplementedError
 
 
 def eval_type(
@@ -108,9 +91,7 @@ def get_typed_params[T](call: ty.Callable[..., T]) -> list[inspect.Parameter]:
     return typed_params
 
 
-def get_full_typed_signature[
-    T
-](call: ty.Callable[..., T], check_return: bool = False) -> inspect.Signature:
+def get_full_typed_signature[T](call: ty.Callable[..., T]) -> inspect.Signature:
     """
     Get a full typed signature from a callable.
     check_return: bool
@@ -119,13 +100,10 @@ def get_full_typed_signature[
     """
     signature = inspect.signature(call)
     globalns = getattr(call, "__globals__", {})
-    typed_signature = inspect.Signature(
+    return inspect.Signature(
         parameters=get_typed_params(call),
         return_annotation=get_typed_annotation(signature.return_annotation, globalns),
     )
-    if check_return and typed_signature.return_annotation is inspect.Signature.empty:
-        raise MissingReturnTypeError(call)
-    return typed_signature
 
 
 def get_factory_sig_from_cls[T](cls: type[T]) -> inspect.Signature:

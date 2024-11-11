@@ -12,22 +12,20 @@ from .errors import (
     ForwardReferenceNotFoundError,
     GenericDependencyNotSupportedError,
     MissingAnnotationError,
-    MissingReturnTypeError,
     NodeCreationErrorChain,
     NotSupportedError,
     ProtocolFacotryNotProvidedError,
     UnsolvableDependencyError,
 )
+from .type_resolve import get_typed_signature, is_unresolved_type
 from .types import EMPTY_SIGNATURE, INSPECT_EMPTY, IFactory, NodeConfig
 
 # from .utils.param_utils import NULL, Nullable, is_not_null
 from .utils.typing_utils import (
     eval_type,
     get_factory_sig_from_cls,
-    get_full_typed_signature,
     get_typed_annotation,
     get_typed_params,
-    is_builtin_type,
     is_class,
     is_class_or_method,
     is_class_with_empty_init,
@@ -162,7 +160,7 @@ class DependencyParam[T]:
 
     name: str
     param: Parameter
-    is_builtin: bool
+    unresolvable: bool
     node: "DependentNode[T]"
     """
     NOTE: we might need to get rid of the node, to make it non-recursive,
@@ -193,7 +191,7 @@ class DependencyParam[T]:
         - builtin type
         Builtin type can't be instantiated without arguments, so it should not be resolved
         """
-        return self.node.config.lazy or self.is_builtin
+        return self.node.config.lazy or self.unresolvable
 
     def build(self, override: T | dict[str, ty.Any]) -> T | ty.Awaitable[T]:
         """Build the dependency if needed, handling defaults and overrides."""
@@ -289,15 +287,15 @@ def _create_sig[
     globalns: dict[str, ty.Any] = getattr(dependent.__init__, "__globals__", {})
 
     for param in params:
-        if is_builtin_type(dependent):
+        if is_unresolved_type(dependent):
             dep = Dependent(dependent)
             dependency = _create_holder_node(dep, NULL, config)
-            is_builtin = True
+            unresolvable = True
         elif isinstance(param.annotation, ty.ForwardRef):
             dependency = DependentNode.from_forwardref(
                 forwardref=param.annotation, globalns=globalns, config=config
             )
-            is_builtin = False
+            unresolvable = False
         else:
             dependency = DependentNode.from_param(
                 dependent=dependent,
@@ -305,17 +303,17 @@ def _create_sig[
                 globalns=globalns,
                 config=config,
             )
-            is_builtin = is_builtin_type(dependency.dependent.dependent_type)
+            unresolvable = is_unresolved_type(dependency.dependent.dependent_type)
 
         dep_param = DependencyParam(
             name=param.name,
             param=param,
             node=dependency,
-            is_builtin=is_builtin,
+            unresolvable=unresolvable,
         )
         dep_params[param.name] = dep_param
 
-    return DependentSignature(dprams=dep_params, dependent=ty.cast(type[T], dependent))
+    return DependentSignature(dprams=dep_params, dependent=dependent)
 
 
 @dataclass(kw_only=True, slots=True)
@@ -391,14 +389,14 @@ class DependentNode[T]:
             name=param.name,
             param=param,
             node=resolved_node,
-            is_builtin=False,
+            unresolvable=False,
         )
         self.signature.update(param.name, new_dep_param)
         return resolved_node
 
     def iter_dependencies(self) -> ty.Generator["DependentNode[ty.Any]", None, None]:
         for dep_param in self.signature:
-            if dep_param.is_builtin:
+            if dep_param.unresolvable:
                 continue
 
             if isinstance(dep_param.node.dependent, ForwardDependent):
@@ -412,7 +410,7 @@ class DependentNode[T]:
     def check_for_resolvability(self) -> None:
         if isinstance(self.factory, type):
             # no factory override
-            if is_builtin_type(self.factory):
+            if is_unresolved_type(self.factory):
                 raise UnsolvableDependencyError(
                     dep_name=self.dependent.dependent_name,
                     required_type=self.dependent_type,
@@ -431,7 +429,7 @@ class DependentNode[T]:
             if dpram.default is not NULL:
                 continue
 
-            if dpram.is_builtin:
+            if dpram.unresolvable:
                 raise UnsolvableDependencyError(
                     dep_name=dpram.param.name,
                     factory=dpram.param.annotation,
@@ -445,20 +443,12 @@ class DependentNode[T]:
                     required_type=self.dependent_type,
                 )
 
-    def async_gen_hook(self, factory: IFactory[T, ...]) -> IFactory[T, ...]:
-        """
-        Hook for async generator factories
-        """
-        return factory
-
     def build(self, **override: dict[str, ty.Any]) -> T | ty.Awaitable[T]:
         """
         Build the dependent, resolving dependencies and applying defaults.
         kwargs override any dependencies or defaults.
         """
         self.check_for_resolvability()
-
-        factory = self.async_gen_hook(self.factory)
 
         if not self.signature:
             try:
@@ -556,7 +546,7 @@ class DependentNode[T]:
                 # we don't care which type is correct, it would be provided by the factory
                 annotation = union_types[0]
 
-            if is_builtin_type(annotation):
+            if is_unresolved_type(annotation):
                 node = _create_holder_node(Dependent(annotation), default, config)
             else:
                 node = DependentNode.from_node(annotation, config=config)
@@ -587,7 +577,7 @@ class DependentNode[T]:
 
         Now, this would raise an error, since redis might contain missing annotations
         """
-        signature = get_full_typed_signature(factory, check_return=True)
+        signature = get_typed_signature(factory, check_return=True)
         dependent: type[I] = signature.return_annotation
 
         return cls.create(
