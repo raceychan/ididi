@@ -53,6 +53,16 @@ def get_typed_signature[
     return sig
 
 
+# def get_sig_origin_return[T](sig_return: ty.Any) -> ty.Any:
+#     if ty.get_origin(sig_return) in (
+#         collections.abc.AsyncGenerator,
+#         collections.abc.Generator,
+#     ):
+#         dependent, *_ = ty.get_args(sig_return)
+#         return dependent
+#     return sig_return
+
+
 def is_unresolved_type(t: ty.Any) -> bool:
     """
     Types that are not resolved at type resolving.

@@ -25,6 +25,47 @@ from .types import INSPECT_EMPTY, GraphConfig, IFactory, INodeConfig, NodeConfig
 from .utils.param_utils import MISSING, Maybe, is_provided
 
 
+class ResolveScope:
+    _scope: Maybe[ExitStack | AsyncExitStack]
+
+    def __init__(self, graph: "DependencyGraph"):
+        self.graph = graph
+        self._scope = MISSING
+
+    def __enter__(self) -> "ResolveScope":
+        self._scope = ExitStack()
+        return self
+
+    def __exit__(
+        self, exc_type: type | None, exc_value: ty.Any, traceback: TracebackType | None
+    ) -> None:
+        assert is_provided(self._scope)
+
+        ty.cast(ExitStack, self._scope).__exit__(exc_type, exc_value, traceback)
+
+    async def __aenter__(self) -> "ResolveScope":
+        self._scope = AsyncExitStack()
+        return self
+
+    async def __aexit__(
+        self, exc_type: type | None, exc_value: ty.Any, traceback: TracebackType | None
+    ) -> None:
+        assert is_provided(self._scope)
+
+        await ty.cast(AsyncExitStack, self._scope).__aexit__(
+            exc_type, exc_value, traceback
+        )
+
+    def resolve[T](self, dependent: type[T], /, **overrides: ty.Any) -> T:
+        if not is_provided(self._scope):
+            raise RuntimeError("Scope not entered")
+        node = self.graph.static_resolve(dependent)
+        if inspect.isgeneratorfunction(node.factory):
+            ...
+
+        return self.graph.resolve(dependent, self._scope, **overrides)
+
+
 class DependencyGraph:
     """
     ### Description:
@@ -245,7 +286,6 @@ class DependencyGraph:
         """
         if is_function(dependent_factory):
             sig = get_typed_signature(dependent_factory)
-            # raise NotImplementedError(sig)
             dependent: type[T] = sig.return_annotation
         else:
             dependent = ty.cast(type[T], dependent_factory)
@@ -384,7 +424,6 @@ class DependencyGraph:
             resolved_deps[dep_name] = resolved_dep
 
         resolved = node.build(**resolved_deps)
-
         if is_async_context_manager(resolved):
             assert is_provided(scope)
             instance = await scope.enter_async_context(resolved)
@@ -452,7 +491,6 @@ class DependencyGraph:
         Dummy = type(f"entry_node_{func.__name__}", (object,), {})
         dep = ty.cast(type[R], Dummy)
         sig = get_typed_signature(func)
-
         try:
             node = DependentNode.create(
                 dependent=dep, factory=func, signature=sig, config=NodeConfig(**kwargs)
@@ -468,6 +506,9 @@ class DependencyGraph:
             f = func_wrapper
 
         return ty.cast(IFactory[[], R], f)
+
+    def scope(self) -> ResolveScope:
+        return ResolveScope(self)
 
     def register_node(self, node: DependentNode[ty.Any]) -> None:
         """
@@ -539,7 +580,9 @@ class DependencyGraph:
 
         node_config = NodeConfig(**config)
 
-        return_type: type[R] = get_typed_signature(factory_or_class).return_annotation
+        sig = get_typed_signature(factory_or_class)
+        return_type: type[R] = sig.return_annotation
+
         if return_type is not INSPECT_EMPTY and return_type in self._nodes:
             old_node = self._nodes[return_type]
             self.remove_node(old_node)

@@ -1,5 +1,3 @@
-import abc
-
 import pytest
 
 from ididi.graph import DependencyGraph
@@ -24,6 +22,10 @@ class ArbitraryResource:
     async def __aexit__(self, exc_type, exc_value, traceback):
         await self.close()
 
+    @property
+    def is_closed(self) -> bool:
+        return self._closed
+
 
 @pytest.mark.asyncio
 async def test_close_graph_with_resources():
@@ -32,16 +34,17 @@ async def test_close_graph_with_resources():
 
 @pytest.mark.asyncio
 async def test_resource():
-    resource = dag.resolve(ArbitraryResource)
-    assert not resource._closed
-    await resource.close()
-    assert resource._closed
+    async with dag:
+        resource = dag.resolve(ArbitraryResource)
+        assert not resource.is_closed
+    assert resource.is_closed
 
 
 @pytest.mark.asyncio
 async def test_graph_context_manager():
 
     async with dag:
-        async with dag.resolve(ArbitraryResource) as resource:
-            assert not resource._closed
-    assert resource._closed
+        resource = dag.resolve(ArbitraryResource)
+        async with resource:
+            assert not resource.is_closed
+    assert resource.is_closed

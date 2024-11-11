@@ -76,6 +76,10 @@ assert isinstance(ididi.solve(UserService), UserService)
 ### Automatic dependencies injection
 
 You can use generator/async generator to create a resource that needs to be closed.
+NOTE:
+
+1. resources required by a dependent will only be closed when the dependent is exited.
+2. resources can't be reused across different dependent.
 
 ```python
 from ididi import DependencyGraph
@@ -85,6 +89,7 @@ dg = DependencyGraph()
 async def get_client() -> ty.AsyncGenerator[Client, None]:
     client = Client()
     try:
+        client.open()
         yield client
     finally:
         await client.close()
@@ -93,15 +98,20 @@ async def get_client() -> ty.AsyncGenerator[Client, None]:
 @dg.node
 async def get_db(client: Client) -> ty.AsyncGenerator[DataBase, None]:
     db = DataBase(client)
+    assert client.is_opened
     try:
+        db.open()
         yield db
     finally:
         await db.close()
 
 
-@dg.entry_node
-async def main(db: DataBase):
-    assert not db.is_closed
+@dg.entry
+async def main(db: DataBase) -> str:
+    assert db.is_opened
+    return "ok"
+
+assert await main() == "ok"
 ```
 
 ### Usage with FastAPI
