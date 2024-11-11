@@ -7,6 +7,7 @@
   - [Usage](#usage)
     - [Quick Start](#quick-start)
     - [Automatic dependencies injection](#automatic-dependencies-injection)
+    - [Using Scope to manage resources](#using-scope-to-manage-resources)
     - [Usage with FastAPI](#usage-with-fastapi)
     - [Visualize the dependency graph(beta)](#visualize-the-dependency-graphbeta)
     - [Lazy Dependency(Beta)](#lazy-dependencybeta)
@@ -112,6 +113,22 @@ async def main(db: DataBase) -> str:
     return "ok"
 
 assert await main() == "ok"
+```
+
+### Using Scope to manage resources
+
+you might use combination of `with` or `async with` statement and `dg.scope()` to manage resources.
+resources will be automatically closed when the scope is exited.
+
+```python
+@dg.node
+def get_resource() -> Resource:
+    return Resource()
+
+# async with for async resource
+with dg.scope() as scope:
+    resource = scope.resolve(Resource)
+    assert resource.is_opened
 ```
 
 ### Usage with FastAPI

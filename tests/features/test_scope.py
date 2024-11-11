@@ -149,31 +149,31 @@ def test_sync_func_requires_async_factory():
 
 
 
-# @pytest.mark.asyncio
-# async def test_scope():
-#     dg = DependencyGraph()
+@pytest.mark.asyncio
+async def test_scope():
+    dg = DependencyGraph()
 
-#     class Resource(ResourceBase): ...
+    class Resource(ResourceBase): ...
 
-#     class AsyncResource(AsyncResourceBase): ...
+    class AsyncResource(AsyncResourceBase): ...
 
-#     @dg.node
-#     def get_resource() -> ty.Generator[Resource, None, None]:
-#         resource = Resource()
-#         resource.open()
-#         yield resource  
+    @dg.node
+    def get_resource() -> ty.Generator[Resource, None, None]:
+        resource = Resource()
+        resource.open()
+        yield resource  
 
-#     @dg.node
-#     async def get_async_resource() -> ty.AsyncGenerator[AsyncResource, None]:
-#         resource = AsyncResource()
-#         await resource.open()
-#         yield resource
+    @dg.node
+    async def get_async_resource() -> ty.AsyncGenerator[AsyncResource, None]:
+        resource = AsyncResource()
+        await resource.open()
+        yield resource
 
-#     with dg.scope() as scope:
-#         resource = scope.resolve(Resource)
-#         assert resource.is_opened
+    with dg.scope() as scope:
+        resource = scope.resolve(Resource)
+        assert resource.is_opened
 
-#     async with dg.scope() as scope:
-#         resource = await scope.resolve(AsyncResource)
-#         assert resource.is_opened
+    async with dg.scope() as scope:
+        resource = await scope.resolve(AsyncResource)
+        assert resource.is_opened
 

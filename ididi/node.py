@@ -18,6 +18,7 @@ from .errors import (
     UnsolvableDependencyError,
 )
 from .type_resolve import (
+    get_sig_origin_return,
     get_typed_signature,
     is_class,
     is_class_or_method,
@@ -563,8 +564,9 @@ class DependentNode[T]:
 
         Now, this would raise an error, since redis might contain missing annotations
         """
+
         signature = get_typed_signature(factory, check_return=True)
-        dependent: type[I] = signature.return_annotation
+        dependent: type[I] = get_sig_origin_return(signature.return_annotation)
 
         node = cls.create(
             dependent=dependent, factory=factory, signature=signature, config=config

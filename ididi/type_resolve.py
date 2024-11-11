@@ -34,7 +34,7 @@ def is_closable(type_: object) -> ty.TypeGuard[AsyncClosable]:
 
 def get_typed_signature[
     T
-](call: ty.Callable[..., T], check_return: bool = False) -> inspect.Signature:
+](call: ty.Callable[..., T], check_return: bool = False,) -> inspect.Signature:
     """
     Get a typed signature from a factory.
     """
@@ -42,25 +42,17 @@ def get_typed_signature[
     sig_return = sig.return_annotation
     if check_return and sig_return is inspect.Signature.empty:
         raise MissingReturnTypeError(call)
+    return sig
 
+
+def get_sig_origin_return[T](sig_return: ty.Any) -> ty.Any:
     if ty.get_origin(sig_return) in (
         collections.abc.AsyncGenerator,
         collections.abc.Generator,
     ):
         dependent, *_ = ty.get_args(sig_return)
-        sig = sig.replace(return_annotation=dependent)
-
-    return sig
-
-
-# def get_sig_origin_return[T](sig_return: ty.Any) -> ty.Any:
-#     if ty.get_origin(sig_return) in (
-#         collections.abc.AsyncGenerator,
-#         collections.abc.Generator,
-#     ):
-#         dependent, *_ = ty.get_args(sig_return)
-#         return dependent
-#     return sig_return
+        return dependent
+    return sig_return
 
 
 def is_unresolved_type(t: ty.Any) -> bool:
@@ -75,6 +67,14 @@ def is_unresolved_type(t: ty.Any) -> bool:
     - builtin types
     """
     return is_builtin_type(t)
+
+
+def is_generator[T](t: T) -> ty.TypeGuard[ty.Generator[T, None, None]]:
+    return ty.get_origin(t) is collections.abc.Generator
+
+
+def is_async_generator[T](t: T) -> ty.TypeGuard[ty.AsyncGenerator[T, None]]:
+    return ty.get_origin(t) is collections.abc.AsyncGenerator
 
 
 def is_context_manager[T](t: T) -> ty.TypeGuard[ty.ContextManager[T]]:

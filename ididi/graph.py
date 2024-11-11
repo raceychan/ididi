@@ -17,8 +17,10 @@ from .registry import GraphNodes, GraphNodesView, ResolutionRegistry, TypeRegist
 from .type_resolve import (
     get_typed_signature,
     is_async_context_manager,
+    is_async_generator,
     is_context_manager,
     is_function,
+    is_generator,
     is_unresolved_type,
 )
 from .types import INSPECT_EMPTY, GraphConfig, IFactory, INodeConfig, NodeConfig, TDecor
@@ -56,14 +58,20 @@ class ResolveScope:
             exc_type, exc_value, traceback
         )
 
-    def resolve[T](self, dependent: type[T], /, **overrides: ty.Any) -> T:
+    def resolve[
+        T
+    ](self, dependent: type[T], /, **overrides: ty.Any) -> T | ty.Awaitable[T]:
         if not is_provided(self._scope):
             raise RuntimeError("Scope not entered")
-        node = self.graph.static_resolve(dependent)
-        if inspect.isgeneratorfunction(node.factory):
-            ...
 
-        return self.graph.resolve(dependent, self._scope, **overrides)
+        node = self.graph.static_resolve(dependent)
+        factory_return = get_typed_signature(node.factory).return_annotation
+        if is_async_generator(factory_return):
+            scope = ty.cast(AsyncExitStack, self._scope)
+            return self.graph.aresolve(dependent, scope, **overrides)
+        else:
+            scope = ty.cast(ExitStack, self._scope)
+            return self.graph.resolve(dependent, scope, **overrides)
 
 
 class DependencyGraph:
