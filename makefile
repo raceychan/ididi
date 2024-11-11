@@ -6,10 +6,13 @@ run:
 test:
 	pixi run -e test pytest -sx tests/
 
-
 .PHONY: debug
 debug:
 	pixi run -e test pytest -vx  -m debug  tests/
+
+.PHONY: feat
+feat:
+	pixi run -e test pytest -vx  tests/features/test_feat.py
 
 .PHONY: benchmark
 benchmark:

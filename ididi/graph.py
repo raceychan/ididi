@@ -235,6 +235,7 @@ class DependencyGraph:
         """
         if is_function(dependent_factory):
             sig = get_full_typed_signature(dependent_factory, check_return=True)
+            # raise NotImplementedError(sig)
             dependent: type[T] = sig.return_annotation
         else:
             dependent = ty.cast(type[T], dependent_factory)
@@ -265,9 +266,7 @@ class DependencyGraph:
         except UnsolvableNodeError as de:
             raise de
         except Exception as e:
-            raise NodeCreationErrorChain(
-                dependent, error=e, form_message=True
-            )  # from None
+            raise NodeCreationErrorChain(dependent, error=e, form_message=True)
 
     @ty.overload
     def resolve[**P, T](self, dependent: ty.Callable[P, T], /) -> T: ...
@@ -351,6 +350,11 @@ class DependencyGraph:
 
         return resolver
 
+    """
+    async with dg.scope() as scope:
+        instance = scope.resolve(dependent)
+    """
+
     def entry_node[
         **P, R
     ](self, func: ty.Callable[P, R], /, **kwargs: ty.Unpack[INodeConfig]) -> (
@@ -362,9 +366,12 @@ class DependencyGraph:
         Dummy = type("Dummy", (object,), {})
         dep = ty.cast(type[R], Dummy)
         sig = get_full_typed_signature(func)
-        node = DependentNode.create(
-            dependent=dep, factory=func, signature=sig, config=NodeConfig(**kwargs)
-        )
+        try:
+            node = DependentNode.create(
+                dependent=dep, factory=func, signature=sig, config=NodeConfig(**kwargs)
+            )
+        except Exception as e:
+            raise NodeCreationErrorChain(func, error=e, form_message=True) from e
         self.register_node(node)
 
         def resolve(*args: P.args, **kwargs: P.kwargs) -> R:
@@ -425,6 +432,10 @@ class DependencyGraph:
     ) -> (IFactory[I, P] | type[I] | TDecor):
         """
         ### Decorator to register a node in the dependency graph.
+        NOTE: this does not statically resolve the node, so there are might be case
+        where dg.node is okay but dg.static_resolve raise error.
+
+        # TODO: might make this non-recursive
 
         - Can be used with both factory functions and classes.
         - If decorating a factory function that returns an existing type,
@@ -460,7 +471,6 @@ class DependencyGraph:
             old_node = self._nodes[return_type]
             self.remove_node(old_node)
 
-        # TODO: provide a solved type for from_node
         try:
             node = DependentNode.from_node(factory_or_class, config=node_config)
         except Exception as e:

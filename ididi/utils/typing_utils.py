@@ -111,6 +111,12 @@ def get_typed_params[T](call: ty.Callable[..., T]) -> list[inspect.Parameter]:
 def get_full_typed_signature[
     T
 ](call: ty.Callable[..., T], check_return: bool = False) -> inspect.Signature:
+    """
+    Get a full typed signature from a callable.
+    check_return: bool
+
+    if check_return is True, raise MissingReturnTypeError if the return type is inspect.Signature.empty.
+    """
     signature = inspect.signature(call)
     globalns = getattr(call, "__globals__", {})
     typed_signature = inspect.Signature(
@@ -125,6 +131,7 @@ def get_full_typed_signature[
 def get_factory_sig_from_cls[T](cls: type[T]) -> inspect.Signature:
     """
     Generate a signature from a class via its __init__ method.
+    annotate the return type with the class itself.
     """
     params = get_typed_params(cls.__init__)
     return inspect.Signature(parameters=params, return_annotation=cls)

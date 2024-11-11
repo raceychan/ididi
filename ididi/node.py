@@ -164,6 +164,10 @@ class DependencyParam[T]:
     param: Parameter
     is_builtin: bool
     node: "DependentNode[T]"
+    """
+    NOTE: we might need to get rid of the node, to make it non-recursive,
+    and let DependencyGraph handles the recursive resolution.
+    """
 
     def __repr__(self) -> str:
         return f"{self.param.name}: {self.node}"
@@ -424,7 +428,7 @@ class DependentNode[T]:
                 raise ABCNotImplementedError(self.factory, abstract_methods)
 
         for dpram in self.signature:
-            if dpram.default:
+            if dpram.default is not NULL:
                 continue
 
             if dpram.is_builtin:
@@ -441,12 +445,20 @@ class DependentNode[T]:
                     required_type=self.dependent_type,
                 )
 
+    def async_gen_hook(self, factory: IFactory[T, ...]) -> IFactory[T, ...]:
+        """
+        Hook for async generator factories
+        """
+        return factory
+
     def build(self, **override: dict[str, ty.Any]) -> T | ty.Awaitable[T]:
         """
         Build the dependent, resolving dependencies and applying defaults.
         kwargs override any dependencies or defaults.
         """
         self.check_for_resolvability()
+
+        factory = self.async_gen_hook(self.factory)
 
         if not self.signature:
             try:
@@ -472,9 +484,6 @@ class DependentNode[T]:
         signature: inspect.Signature,
         config: NodeConfig,
     ) -> "DependentNode[N]":
-
-        # TODO: we need to make errors happen within this function much more deatiled,
-        # so that user can see right away what is wrong without having to trace back.
 
         params = tuple(signature.parameters.values())
 
@@ -578,10 +587,8 @@ class DependentNode[T]:
 
         Now, this would raise an error, since redis might contain missing annotations
         """
-        signature = get_full_typed_signature(factory)
+        signature = get_full_typed_signature(factory, check_return=True)
         dependent: type[I] = signature.return_annotation
-        if signature.return_annotation is inspect.Signature.empty:
-            raise MissingReturnTypeError(factory)
 
         return cls.create(
             dependent=dependent, factory=factory, signature=signature, config=config

@@ -74,8 +74,9 @@ class EventStore:
         self.db = db
 
 
-# @pytest.mark.debug
-# def test_improved_error():
-#     # BUG: this should not raise Error when config is overridden
-#     # with factory
-#     dg.static_resolve(EmailService)
+@pytest.mark.skip(reason="TODO: fix the error")
+@pytest.mark.debug
+def test_improved_error():
+    # BUG: this should not raise Error when config is overridden
+    # with factory
+    dg.static_resolve(EmailService)

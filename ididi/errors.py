@@ -65,7 +65,10 @@ class _ErrorChain:
         if param_type is Parameter.empty:
             param_type = "unannotated"
         else:
-            param_type = param_type.__name__
+            try:
+                param_type = param_type.__name__
+            except AttributeError:
+                param_type = str(param_type)
 
         return f"-> {self.error.dependent.__name__}({self.error.param.name}: {param_type})\n"
 

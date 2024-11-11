@@ -2,10 +2,10 @@
 
 - [ididi](#ididi)
   - [Introduction](#introduction)
-  - [Source Code](#source-code)
+    - [Source Code Link](#source-code-link)
   - [Install](#install)
   - [Usage](#usage)
-    - [Decorate your top level dependencies and leave the rest to ididi](#decorate-your-top-level-dependencies-and-leave-the-rest-to-ididi)
+    - [Quick Start](#quick-start)
     - [Automatic dependencies injection](#automatic-dependencies-injection)
     - [Usage with FastAPI](#usage-with-fastapi)
     - [Visualize the dependency graph(beta)](#visualize-the-dependency-graphbeta)
@@ -16,7 +16,10 @@
         - [Register ABC implementation with `dg.node`](#register-abc-implementation-with-dgnode)
         - [Multiple Implementations of ABC](#multiple-implementations-of-abc)
     - [Resolve Rules](#resolve-rules)
-    - [FAQ:](#faq)
+    - [What and why](#what-and-why)
+      - [What is dependency injection?](#what-is-dependency-injection)
+      - [Why do we need it?](#why-do-we-need-it)
+    - [FAQ](#faq)
       - [How do I override, or provide a default value for a dependency?](#how-do-i-override-or-provide-a-default-value-for-a-dependency)
       - [How do I make ididi reuse a dependencies across different dependent?](#how-do-i-make-ididi-reuse-a-dependencies-across-different-dependent)
 
@@ -28,7 +31,7 @@ It allows you to define dependencies in a declarative way without any boilerplat
 
 ididi is written and tested under strict type checking, you can exepct very good typing support.
 
-## Source Code
+### Source Code Link
 
 [Github-ididi](https://github.com/raceychan/ididi)
 
@@ -46,7 +49,7 @@ pip install ididi[graphviz]
 
 ## Usage
 
-### Decorate your top level dependencies and leave the rest to ididi
+### Quick Start
 
 ```python
 import ididi
@@ -301,7 +304,65 @@ assert isinstance(repo, Repo1)
 - bulitin types are not resolvable by nature, it requires default value to be provided.
 - runtime override with `dg.resolve`
 
-### FAQ:
+### What and why
+
+#### What is dependency injection?
+
+If a class requires other classes as its attributes, then these attributes are regarded as dependencies of the class, and the class requiring them is called a dependent.
+
+```python
+class Downloader:
+    def __init__(self, session: requests.Session):
+        self.session = session
+```
+
+Here, `Downloader` is a dependent, with `requests.Session` being its dependency.
+
+Dependency injection means dynamically constructing the instances of these dependency classes and then pass them to the dependent class.
+
+the same class without dependency injection looks like this:
+
+```python
+class Downloader:
+    def __init__(self):
+        self.session = requests.Session(url=configured_url, timeout=configured_timeout)
+```
+
+Now, since `requests.Session` is automatically built with `Downloader`, it would be difficult to change the behavior of `requests.Session` at runtime.
+
+#### Why do we need it?
+
+There are actually a few reasons why you might not need it, the most fundamental one being your code does not need reuseability and flexibility.
+
+1. If you are writing a script that only runs when you menually execute it, and it is often easier to rewrite the whole script than to modify it,
+then it probably more efficient to program everything hard-coded. This is actually a common use case of python,
+DEVOPS, DataAnalysts, etc.
+
+For example, you can actually modify the dependencies of a class at runtime.
+
+```python
+class Downloader:
+    ...
+
+downloader = Downloader()
+downloader.session = requests.Session(url=configured_url, timeout=configured_timeout)
+```
+
+However, this creates a few problems:
+
+- It is error-prone, you might forget to modify the dependencies, or you might modify the dependencies in the wrong order.
+- It is not typesafe, you might pass the wrong type of dependencies to the class.
+- It is hard to track when the dependencies are modified.
+
+
+Dependency injection enables you to extend the dependencies of a class without modifying the class itself, which increases the flexibility and reusability of the class.
+
+Let's see an example that shows how dependency injection can be useful.
+
+Scenario: you want to send email to users.
+
+
+### FAQ
 
 #### How do I override, or provide a default value for a dependency?
 
