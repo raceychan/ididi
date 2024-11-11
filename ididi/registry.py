@@ -3,7 +3,7 @@ from collections import defaultdict
 from types import MappingProxyType
 
 from .node import DependentNode
-from .utils.typing_utils import is_closable
+from .type_resolve import is_closable
 
 type NodeDependent[T] = type[T]
 """

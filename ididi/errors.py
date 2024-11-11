@@ -30,6 +30,10 @@ class NodeError(IDIDIError):
     """
 
 
+# TODO: 1. differentaite node creation and node resolve errors
+# TODO: 2. make NodeErrorChain more generic
+
+
 class _ErrorChain:
     __slots__ = ("error", "next", "head", "length")
 
@@ -52,9 +56,21 @@ class _ErrorChain:
     def __str__(self) -> str:
         return self.form_repr()
 
+    def restart(self) -> None:
+        """
+        Restarts the error chain from the head.
+        """
+
+        head = self.head
+        self.next = head.next
+        self.head = self
+        del head
+
     def _make_error(self) -> str:
         """Format the current error node's message."""
-        # TODO: skip middle traceback
+
+        # TODO: 1. skip middle traceback
+        # TODO: 2. _make_error should be an method of NodeCreationErrorChain
         if not isinstance(self.error, NodeCreationErrorChain):
             return ""
 
@@ -82,7 +98,7 @@ class _ErrorChain:
         -> Redis(connection_pool: Optional[ConnectionPool])
         -> MissingAnnotationError: Unable to resolve dependency...
         """
-        chain: list[str] = ["\n"]
+        messages: list[str] = ["\n"]
         current_node = self
         level = 0
 
@@ -90,13 +106,21 @@ class _ErrorChain:
         while current_node:
             msg = current_node._make_error()
             if msg:
-                chain.append(msg)
+                messages.append(msg)
                 level += 1
             current_node = current_node.next
 
         # Add root cause at the end
-        chain.append(f"{self.head.error.__class__.__name__}: {self.head.error}")
-        return "".join(chain)
+        messages.append(f"{self.head.error.__class__.__name__}: {self.head.error}")
+        return "".join(messages)
+
+
+class AsyncResourceInSyncError(NodeError):
+    def __init__(self, factory: ty.Callable[..., ty.Any]):
+        self.factory = factory
+        super().__init__(
+            f"Requiring async resource {factory} in a sync context is not supported"
+        )
 
 
 class NodeCreationErrorChain(NodeError):
@@ -122,7 +146,7 @@ class NodeCreationErrorChain(NodeError):
         self._root_cause = self.error_chain.head.error
         message = ""
         if form_message:
-            message = str(self.error_chain)
+            message = self.error_chain.form_repr()
 
         super().__init__(message)
 
@@ -140,10 +164,27 @@ class NodeCreationErrorChain(NodeError):
         )
 
 
-class UnsolvableNodeError(NodeError): ...
+class NodeResolveError(IDIDIError):
+    """
+    Base class for all node resolve related exceptions.
+    """
 
 
-class UnsolvableDependencyError(UnsolvableNodeError):
+class PositionalOverrideError(NodeResolveError):
+    """
+    Raised when a positional override is used.
+    """
+
+    def __init__(self, args: tuple[ty.Any, ...]):
+        super().__init__(
+            f"Positional overrides {args} are not supported, use keyword arguments instead"
+        )
+
+
+class UnsolvableNode(NodeResolveError): ...
+
+
+class UnsolvableDependencyError(UnsolvableNode):
     """
     Raised when a dependency parameter can't be built.
     """
@@ -159,7 +200,7 @@ class UnsolvableDependencyError(UnsolvableNodeError):
         super().__init__(self.message)
 
 
-class ProtocolFacotryNotProvidedError(UnsolvableNodeError):
+class ProtocolFacotryNotProvidedError(UnsolvableNode):
     """
     Raised when a protocol is used as a dependency without a factory.
     """
@@ -170,7 +211,7 @@ class ProtocolFacotryNotProvidedError(UnsolvableNodeError):
         )
 
 
-class ABCNotImplementedError(UnsolvableNodeError):
+class ABCNotImplementedError(UnsolvableNode):
     """
     Raised when an ABC is used as a dependency without a factory.
     """
@@ -181,7 +222,7 @@ class ABCNotImplementedError(UnsolvableNodeError):
         )
 
 
-class UnsolvableParameterError(UnsolvableNodeError):
+class UnsolvableParameterError(UnsolvableNode):
     """
     Raised when a parameter is unsolveable.
     """

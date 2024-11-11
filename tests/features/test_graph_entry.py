@@ -70,10 +70,6 @@ async def third_entry(
     return f"{name} is {age} years old"
 
 
-# @partial
-# def third_entry(notification: NotificationService, name: str, age: int) -> str: ...
-
-
 @pytest.mark.asyncio
 async def test_graph_entry():
     assert main() == "ok"

@@ -14,7 +14,7 @@ def entry[
     ty.Callable[..., R] | ty.Callable[..., ty.Awaitable[R]]
 ):
     dg = DependencyGraph()
-    return dg.entry_node(func, **kwargs)
+    return dg.entry(func, **kwargs)
 
 
 @ty.overload

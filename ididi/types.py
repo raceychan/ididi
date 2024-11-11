@@ -5,21 +5,8 @@ from dataclasses import dataclass
 EMPTY_SIGNATURE = inspect.Signature()
 INSPECT_EMPTY = inspect.Signature.empty
 
-type IFactory[I, **P] = ty.Callable[P, I | ty.Awaitable[I]]
-
-
-# class Override[T](ty.Protocol):
-#     @ty.overload
-#     def __call__[**P](self, dep: ty.Callable[P, T], /) -> T: ...
-
-#     @ty.overload
-#     def __call__[
-#         **P
-#     ](self, dep: ty.Callable[P, T], /, *args: P.args, **kwargs: P.kwargs) -> T: ...
-
-#     def __call__[
-#         **P
-#     ](self, dep: ty.Callable[P, T], /, *args: ty.Any, **kwargs: ty.Any) -> T: ...
+type IFactory[**P, R] = ty.Callable[P, R]
+type IAsyncFactory[**P, R] = ty.Callable[P, ty.Awaitable[R]]
 
 
 @ty.runtime_checkable
@@ -37,11 +24,11 @@ class TDecor(ty.Protocol):
     def __call__[I](self, factory: type[I]) -> type[I]: ...
 
     @ty.overload
-    def __call__[I, **P](self, factory: IFactory[I, P]) -> IFactory[I, P]: ...
+    def __call__[**P, *I](self, factory: IFactory[P, I]) -> IFactory[P, I]: ...
 
     def __call__[
-        I, **P
-    ](self, factory: IFactory[I, P] | type[I]) -> IFactory[I, P] | type[I]: ...
+        **P, I
+    ](self, factory: IFactory[P, I] | type[I]) -> IFactory[P, I] | type[I]: ...
 
 
 class INodeConfig(ty.TypedDict, total=False):
@@ -64,3 +51,17 @@ class NodeConfig:
 @dataclass(kw_only=True, frozen=True, slots=True, unsafe_hash=True)
 class GraphConfig:
     static_resolve: bool = True
+
+
+# class Override[T](ty.Protocol):
+#     @ty.overload
+#     def __call__[**P](self, dep: ty.Callable[P, T], /) -> T: ...
+
+#     @ty.overload
+#     def __call__[
+#         **P
+#     ](self, dep: ty.Callable[P, T], /, *args: P.args, **kwargs: P.kwargs) -> T: ...
+
+#     def __call__[
+#         **P
+#     ](self, dep: ty.Callable[P, T], /, *args: ty.Any, **kwargs: ty.Any) -> T: ...

@@ -1,5 +1,4 @@
 import inspect
-import types
 import typing as ty
 from typing import _eval_type as ty_eval_type  # type: ignore
 
@@ -36,9 +35,6 @@ def is_builtin_type(
     is_container = is_builtin_container(t)
     is_singleton = is_builtin_singleton(t)
     return is_primitive or is_container or is_singleton or (t is ty.Any)
-
-
-
 
 
 def eval_type(
@@ -115,77 +111,3 @@ def get_factory_sig_from_cls[T](cls: type[T]) -> inspect.Signature:
     return inspect.Signature(parameters=params, return_annotation=cls)
 
 
-def first_implementation(
-    abstract_type: type, implementations: list[type]
-) -> type | None:
-    """
-    Find the first concrete implementation of param_type in the given dependencies.
-    Returns None if no matching implementation is found.
-    """
-    if issubclass(abstract_type, ty.Protocol):
-        if not abstract_type._is_runtime_protocol:  # type: ignore
-            abstract_type._is_runtime_protocol = True  # type: ignore
-
-    matched_deps = (
-        dep
-        for dep in implementations
-        if isinstance(dep, type)
-        and isinstance(abstract_type, type)
-        and issubclass(dep, abstract_type)
-    )
-    return next(matched_deps, None)
-
-
-@ty.runtime_checkable
-class Closable(ty.Protocol):
-    def close(self) -> None: ...
-
-
-@ty.runtime_checkable
-class AsyncClosable(ty.Protocol):
-    async def close(self) -> ty.Coroutine[ty.Any, ty.Any, None]: ...
-
-
-type Resource = ty.AsyncContextManager[ty.Any] | AsyncClosable
-
-
-def is_closable(type_: object) -> ty.TypeGuard[AsyncClosable]:
-    return isinstance(type_, AsyncClosable)
-
-
-def is_async_context_manager(
-    type_: object,
-) -> ty.TypeGuard[ty.AsyncContextManager[ty.Any]]:
-    return isinstance(type_, ty.AsyncContextManager)
-
-
-def is_class_or_method(obj: ty.Any) -> bool:
-    return isinstance(obj, (type, types.MethodType, classmethod))
-
-
-def is_class[T](obj: type[T] | ty.Callable[..., T]) -> ty.TypeGuard[type[T]]:
-    origin = ty.get_origin(obj) or obj
-    is_type = isinstance(origin, type)
-    is_generic_alias = isinstance(obj, types.GenericAlias)
-    return is_type or is_generic_alias
-
-
-def is_function[
-    T, **P
-](obj: type[T] | ty.Callable[P, T]) -> ty.TypeGuard[ty.Callable[P, T]]:
-    """
-    check if obj is a callable, instead of a class;
-    """
-    return not is_class(obj)
-
-
-def is_class_with_empty_init(cls: type) -> bool:
-    """
-    Check if a class has an empty __init__ method.
-    """
-    is_undefined_init = cls.__init__ is object.__init__
-    is_protocol = cls.__init__ is EmptyInitProtocol.__init__
-    return cls is type or is_undefined_init or is_protocol
-
-
-class EmptyInitProtocol(ty.Protocol): ...

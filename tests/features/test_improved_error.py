@@ -12,7 +12,6 @@ class Config:
         self.env = env
 
 
-@dg.node
 def config_factory() -> Config:
     return Config("dev")
 
