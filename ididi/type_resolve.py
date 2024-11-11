@@ -3,6 +3,7 @@ This module separates the type resolution logic between utils.typing_utils and t
 """
 
 import collections.abc
+import contextlib
 import inspect
 import typing as ty
 
@@ -43,5 +44,9 @@ def is_unresolved_type(t: ty.Any) -> bool:
     return is_builtin_type(t)
 
 
-def is_async_gen[T](t: T) -> ty.TypeGuard[ty.AsyncGenerator[T, ty.Any]]:
-    return isinstance(t, collections.abc.AsyncGenerator)
+def is_context_manager[T](t: T) -> ty.TypeGuard[ty.ContextManager[T]]:
+    return isinstance(t, contextlib.AbstractContextManager)
+
+
+def is_async_context_manager[T](t: T) -> ty.TypeGuard[ty.AsyncContextManager[T]]:
+    return isinstance(t, contextlib.AbstractAsyncContextManager)

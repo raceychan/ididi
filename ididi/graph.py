@@ -1,6 +1,6 @@
 import inspect
 import typing as ty
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager, contextmanager
 from functools import lru_cache, partial
 from types import MappingProxyType, TracebackType
 
@@ -14,12 +14,12 @@ from .node import AbstractDependent, DependentNode
 from .registry import GraphNodes, GraphNodesView, ResolutionRegistry, TypeRegistry
 from .type_resolve import (
     get_typed_signature,
-    is_async_gen,
+    is_async_context_manager,
     is_function,
     is_unresolved_type,
 )
 from .types import INSPECT_EMPTY, GraphConfig, IFactory, INodeConfig, NodeConfig, TDecor
-from .utils.param_utils import NULL, Nullable
+from .utils.param_utils import MISSING, Maybe, is_provided
 
 
 class DependencyGraph:
@@ -211,7 +211,9 @@ class DependencyGraph:
         last_implementations = implementations[-1]
         return last_implementations
 
-    def _resolve_concrete_node[T](self, dependent: type[T]) -> DependentNode[T]:
+    def _resolve_concrete_node[
+        T
+    ](self, dependent: type[T]) -> DependentNode[T | ty.Awaitable[T]]:
         if registered_node := self._nodes.get(dependent):
             if is_function(registered_node.factory):
                 return registered_node
@@ -236,7 +238,9 @@ class DependencyGraph:
 
     def __static_resolve[
         T, **P
-    ](self, dependent_factory: type[T] | ty.Callable[P, T]) -> DependentNode[T]:
+    ](self, dependent_factory: type[T] | ty.Callable[P, T]) -> DependentNode[
+        T | ty.Awaitable[T]
+    ]:
         """
         Resolve a dependency without building its instance.
         """
@@ -267,7 +271,9 @@ class DependencyGraph:
 
     def static_resolve[
         T, **P
-    ](self, dependent: type[T] | ty.Callable[P, T]) -> DependentNode[T]:
+    ](self, dependent: type[T] | ty.Callable[P, T]) -> DependentNode[
+        T | ty.Awaitable[T]
+    ]:
         try:
             return self.__static_resolve(dependent)
         except UnsolvableNodeError as de:
@@ -279,7 +285,7 @@ class DependencyGraph:
     def resolve[
         **P, T
     ](
-        self, dependent: ty.Callable[P, T], /, scope: Nullable[AsyncExitStack] = NULL
+        self, dependent: ty.Callable[P, T], scope: Maybe[AsyncExitStack] = MISSING, /
     ) -> (T | ty.Awaitable[T]): ...
 
     @ty.overload
@@ -288,8 +294,8 @@ class DependencyGraph:
     ](
         self,
         dependent: ty.Callable[P, T],
+        scope: Maybe[AsyncExitStack] = MISSING,
         /,
-        scope: Nullable[AsyncExitStack] = NULL,
         *args: P.args,
         **overrides: P.kwargs,
     ) -> (T | ty.Awaitable[T]): ...
@@ -299,8 +305,8 @@ class DependencyGraph:
     ](
         self,
         dependent: ty.Callable[P, T],
+        scope: Maybe[AsyncExitStack] = MISSING,
         /,
-        scope: Nullable[AsyncExitStack] = NULL,
         **overrides: ty.Any,
     ) -> (T | ty.Awaitable[T]):
         """
@@ -313,7 +319,7 @@ class DependencyGraph:
         if node_dep_type in self._resolution_registry:
             return self._resolution_registry[node_dep_type]
 
-        node: DependentNode[T] = self.static_resolve(node_dep_type)
+        node: DependentNode[T | ty.Awaitable[T]] = self.static_resolve(node_dep_type)
 
         resolved_deps: dict[str, ty.Any] = overrides.copy()
 
@@ -334,6 +340,49 @@ class DependencyGraph:
 
         if node.config.reuse:
             self._resolution_registry.register(node_dep_type, instance)
+        return instance
+
+    async def aresolve[
+        **P, T
+    ](
+        self,
+        dependent: ty.Callable[P, T],
+        /,
+        scope: Maybe[AsyncExitStack] = MISSING,
+        **overrides: ty.Any,
+    ) -> T:
+        """
+        Async version of resolve that handles async context managers and coroutines.
+        """
+        node_dep_type = dependent
+
+        if node_dep_type in self._resolution_registry:
+            return self._resolution_registry[node_dep_type]
+
+        node: DependentNode[T | ty.Awaitable[T]] = self.static_resolve(node_dep_type)
+        resolved_deps: dict[str, ty.Any] = overrides.copy()
+
+        for dep_param in node.signature:
+            dep_name = dep_param.name
+            if dep_param.should_not_resolve:
+                continue
+
+            if dep_name in overrides:
+                continue
+
+            sub_node_dep_type = dep_param.node.dependent_type
+            resolved_dep = await self.aresolve(sub_node_dep_type, scope)
+            resolved_deps[dep_name] = resolved_dep
+
+        coro = ty.cast(ty.Awaitable[T], node.build(**resolved_deps))
+
+        if is_async_context_manager(coro):
+            assert is_provided(scope)
+            instance = ty.cast(T, await scope.enter_async_context(coro))
+        else:
+            instance = await coro
+            if node.config.reuse:
+                self._resolution_registry.register(node_dep_type, instance)
         return instance
 
     @lru_cache
@@ -369,6 +418,22 @@ class DependencyGraph:
         """
         we would need IOC to implement scope
         """
+
+        def func_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+            scope = AsyncExitStack()
+            r = ty.cast(R, self.resolve(dep, scope, *args, **kwargs))
+            return r
+
+        async def async_func_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+            scope = AsyncExitStack()
+            await scope.__aenter__()
+
+            try:
+                r: R = await self.aresolve(dep, scope, *args, **kwargs)
+                return r
+            finally:
+                await scope.__aexit__(None, None, None)
+
         Dummy = type("Dummy", (object,), {})
         dep = ty.cast(type[R], Dummy)
         sig = get_typed_signature(func)
@@ -380,24 +445,6 @@ class DependencyGraph:
             raise NodeCreationErrorChain(func, error=e, form_message=True) from e
 
         self.register_node(node)
-
-        def func_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
-            scope = AsyncExitStack()
-            r = ty.cast(R, self.resolve(dep, scope, *args, **kwargs))
-            return r
-
-        async def async_func_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
-            """
-            acm = self._scope_registry[dep]
-            await stack.enter_async_context(acm(**kwargs))
-            # we might return a coroutine with asynccontext manager
-            r = self.resolve(dep, *args, **kwargs)
-            """
-            scope = AsyncExitStack()
-
-            async with scope:
-                r = await self.aresolve(dep, scope, *args, **kwargs)
-            return r
 
         if inspect.iscoroutinefunction(func):
             f = async_func_wrapper
@@ -443,10 +490,8 @@ class DependencyGraph:
     ) -> (IFactory[I, P] | type[I] | TDecor):
         """
         ### Decorator to register a node in the dependency graph.
-        NOTE: this does not statically resolve the node, so there are might be case
-        where dg.node is okay but dg.static_resolve raise error.
 
-        # TODO: might make this non-recursive
+        This does NOT statically resolve the node
 
         - Can be used with both factory functions and classes.
         - If decorating a factory function that returns an existing type,
@@ -470,17 +515,23 @@ class DependencyGraph:
         def auth_service_factory() -> AuthService: ...
         ```
         """
+
+        # TODO: might make this non-recursive
         if not factory_or_class:
             configed = ty.cast(TDecor, partial(self.node, **config))
             return configed
 
         node_config = NodeConfig(**config)
 
-        return_type = get_typed_signature(factory_or_class).return_annotation
-
+        return_type: type[I] = get_typed_signature(factory_or_class).return_annotation
         if return_type is not INSPECT_EMPTY and return_type in self._nodes:
             old_node = self._nodes[return_type]
             self.remove_node(old_node)
+
+        if inspect.isasyncgenfunction(factory_or_class):
+            factory_or_class = asynccontextmanager(factory_or_class)
+        elif inspect.isgeneratorfunction(factory_or_class):
+            factory_or_class = contextmanager(factory_or_class)
 
         try:
             node = DependentNode.from_node(factory_or_class, config=node_config)
@@ -489,50 +540,3 @@ class DependencyGraph:
 
         self.register_node(node)
         return factory_or_class
-
-    async def aresolve[
-        **P, T
-    ](
-        self,
-        dependent: ty.Callable[P, T],
-        /,
-        scope: Nullable[AsyncExitStack] = NULL,
-        **overrides: ty.Any,
-    ) -> T:
-        """
-        Async version of resolve that handles async context managers and coroutines.
-        """
-        node_dep_type = dependent
-
-        if node_dep_type in self._resolution_registry:
-            return self._resolution_registry[node_dep_type]
-
-        node: DependentNode[T] = self.static_resolve(node_dep_type)
-        resolved_deps: dict[str, ty.Any] = overrides.copy()
-
-        for dep_param in node.signature:
-            dep_name = dep_param.name
-            if dep_param.should_not_resolve:
-                continue
-
-            if dep_name in overrides:
-                continue
-
-            sub_node_dep_type = dep_param.node.dependent_type
-            resolved_dep = await self.aresolve(sub_node_dep_type, scope)
-            resolved_deps[dep_name] = resolved_dep
-
-        instance = ty.cast(ty.Awaitable[T], node.build(**resolved_deps))
-
-        if is_async_gen(instance):
-            # For async generators, automatically wrap with asynccontextmanager
-            acm = asynccontextmanager(lambda: instance)()
-            instance = await scope.enter_async_context(acm)
-        elif inspect.iscoroutine(instance):
-            # For regular coroutines, await them
-            instance = await instance
-
-        if node.config.reuse:
-            self._resolution_registry.register(node_dep_type, instance)
-
-        return instance

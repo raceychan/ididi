@@ -1,9 +1,9 @@
 import typing as ty
 
-__all__ = ["NULL", "Nullable", "is_not_null"]
+# __all__ = ["NULL", "Nullable", "is_not_null"]
 
 
-class _Null:
+class _Missed:
     """
     Sentinel object to represent a null value.
     bool(NULL) is False.
@@ -18,17 +18,17 @@ class _Null:
         return False
 
 
-NULL = _Null()
+MISSING = _Missed()
 
 
-type Nullable[T] = T | _Null
+type Maybe[T] = T | _Missed
 """
 Nullable[int] == int | NULL
 """
 
 
-def is_not_null[T](value: Nullable[T]) -> ty.TypeGuard[T]:
+def is_provided[T](value: Maybe[T]) -> ty.TypeGuard[T]:
     """
-    Check if the value is not NULL.
+    Check if the value is not MISSING.
     """
-    return value is not NULL
+    return value is not MISSING

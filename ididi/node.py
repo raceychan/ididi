@@ -19,8 +19,7 @@ from .errors import (
 )
 from .type_resolve import get_typed_signature, is_unresolved_type
 from .types import EMPTY_SIGNATURE, INSPECT_EMPTY, IFactory, NodeConfig
-
-# from .utils.param_utils import NULL, Nullable, is_not_null
+from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import (
     eval_type,
     get_factory_sig_from_cls,
@@ -30,37 +29,6 @@ from .utils.typing_utils import (
     is_class_or_method,
     is_class_with_empty_init,
 )
-
-
-class _Null:
-    """
-    Sentinel object to represent a null value.
-    bool(NULL) is False.
-    """
-
-    __slots__ = ()
-
-    def __repr__(self) -> str:
-        return "NULL"
-
-    def __bool__(self) -> bool:
-        return False
-
-
-NULL = _Null()
-
-
-type Nullable[T] = T | _Null
-"""
-Nullable[int] == int | NULL
-"""
-
-
-def is_not_null[T](value: Nullable[T]) -> ty.TypeGuard[T]:
-    """
-    Check if the value is not NULL.
-    """
-    return value is not NULL
 
 
 def factory_placeholder() -> None:
@@ -115,7 +83,7 @@ class LazyDependent[T](AbstractDependent[T]):
     dependent_type: type[T]
     factory: IFactory[T, ...]
     signature: "DependentSignature[T]"
-    cached_instance: Nullable[T] = NULL
+    cached_instance: Maybe[T | ty.Awaitable[T]] = MISSING
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.dependent_type})"
@@ -132,7 +100,7 @@ class LazyDependent[T](AbstractDependent[T]):
             dpram = self.signature[attrname]
             return dpram.node.dependent
         except KeyError:
-            if self.cached_instance is NULL:
+            if self.cached_instance is MISSING:
                 bound_args = self.signature.bound_args({})
                 self.cached_instance = self.factory(
                     *bound_args.args, **bound_args.kwargs
@@ -175,10 +143,10 @@ class DependencyParam[T]:
         return self.node.dependent_type
 
     @property
-    def default(self) -> Nullable[T]:
+    def default(self) -> Maybe[T]:
         default_val = self.param.default
         if default_val is INSPECT_EMPTY:
-            return NULL
+            return MISSING
         return default_val
 
     @property
@@ -201,7 +169,7 @@ class DependencyParam[T]:
             elif self.dependent_type is dict:
                 return ty.cast(T, override)
 
-        if is_not_null(self.default):
+        if is_provided(self.default):
             return self.default
 
         return self.node.build(**(ty.cast(dict[str, ty.Any], override)))
@@ -259,7 +227,7 @@ class DependentSignature[T]:
 def _create_holder_node[
     I
 ](
-    dependent: AbstractDependent[I], default: Nullable[I], config: NodeConfig
+    dependent: AbstractDependent[I], *, default: Maybe[I] = MISSING, config: NodeConfig
 ) -> "DependentNode[ty.Any]":
     """
     Create a holder node for certain dependent types.
@@ -289,7 +257,7 @@ def _create_sig[
     for param in params:
         if is_unresolved_type(dependent):
             dep = Dependent(dependent)
-            dependency = _create_holder_node(dep, NULL, config)
+            dependency = _create_holder_node(dep, config=config)
             unresolvable = True
         elif isinstance(param.annotation, ty.ForwardRef):
             dependency = DependentNode.from_forwardref(
@@ -347,7 +315,7 @@ class DependentNode[T]:
 
     dependent: AbstractDependent[T]
     factory: ty.Callable[..., T]
-    default: Nullable[T] = NULL
+    default: Maybe[T] = MISSING
     signature: DependentSignature[T]
     config: NodeConfig
 
@@ -426,7 +394,7 @@ class DependentNode[T]:
                 raise ABCNotImplementedError(self.factory, abstract_methods)
 
         for dpram in self.signature:
-            if dpram.default is not NULL:
+            if is_provided(dpram.default):
                 continue
 
             if dpram.unresolvable:
@@ -443,7 +411,7 @@ class DependentNode[T]:
                     required_type=self.dependent_type,
                 )
 
-    def build(self, **override: dict[str, ty.Any]) -> T | ty.Awaitable[T]:
+    def build(self, **override: dict[str, ty.Any]) -> T:
         """
         Build the dependent, resolving dependencies and applying defaults.
         kwargs override any dependencies or defaults.
@@ -503,18 +471,20 @@ class DependentNode[T]:
         cls, forwardref: ty.ForwardRef, globalns: dict[str, ty.Any], config: NodeConfig
     ) -> "DependentNode[ty.Any]":
         dep = ForwardDependent(forwardref, globalns)
-        node = _create_holder_node(dependent=dep, default=NULL, config=config)
+        node = _create_holder_node(dependent=dep, default=MISSING, config=config)
         return node
 
     @classmethod
-    def from_param(
+    def from_param[
+        I
+    ](
         cls,
         *,
-        dependent: type[ty.Any],
+        dependent: type[I],
         param: inspect.Parameter,
         globalns: dict[str, ty.Any],
         config: NodeConfig,
-    ) -> "DependentNode[ty.Any]":
+    ) -> "DependentNode[I | ty.Awaitable[I]]":
         """
         Process a parameter to create a dependency node.
         like def __init__(self, a: int, b: str):
@@ -526,7 +496,7 @@ class DependentNode[T]:
         """
 
         param_name = param.name
-        default = param.default if param.default != inspect.Parameter.empty else NULL
+        default = param.default if param.default != inspect.Parameter.empty else MISSING
         annotation = get_typed_annotation(param.annotation, globalns)
         annotation = ty.get_origin(annotation) or annotation
 
@@ -547,7 +517,9 @@ class DependentNode[T]:
                 annotation = union_types[0]
 
             if is_unresolved_type(annotation):
-                node = _create_holder_node(Dependent(annotation), default, config)
+                node = _create_holder_node(
+                    Dependent(annotation), default=default, config=config
+                )
             else:
                 node = DependentNode.from_node(annotation, config=config)
         except Exception as e:
@@ -557,7 +529,9 @@ class DependentNode[T]:
     @classmethod
     def from_factory[
         I, **P
-    ](cls, *, factory: IFactory[I, P], config: NodeConfig) -> "DependentNode[I]":
+    ](
+        cls, *, factory: IFactory[I, P], config: NodeConfig
+    ) -> "DependentNode[I | ty.Awaitable[I]]":
         """
         TODO: we need to fix the error generated by DependentNode.from_param
         consider such case:
@@ -616,8 +590,11 @@ class DependentNode[T]:
     def from_node[
         I, **P
     ](
-        cls, node: IFactory[I, P] | type[I], *, config: NodeConfig | None = None
-    ) -> "DependentNode[I]":
+        cls,
+        node: IFactory[I, P] | type[I],
+        *,
+        config: NodeConfig | None = None,
+    ) -> "DependentNode[I | ty.Awaitable[I]]":
         config = config or NodeConfig()
         if is_class(node):
             return cls.from_class(dependent=node, config=config)

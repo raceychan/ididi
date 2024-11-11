@@ -75,22 +75,33 @@ assert isinstance(ididi.solve(UserService), UserService)
 
 ### Automatic dependencies injection
 
+You can use generator/async generator to create a resource that needs to be closed.
+
 ```python
-from ididi import entry
+from ididi import DependencyGraph
+dg = DependencyGraph()
 
-class EmailService: ...
+@dg.node
+async def get_client() -> ty.AsyncGenerator[Client, None]:
+    client = Client()
+    try:
+        yield client
+    finally:
+        await client.close()
 
 
-class EventStore: ...
+@dg.node
+async def get_db(client: Client) -> ty.AsyncGenerator[DataBase, None]:
+    db = DataBase(client)
+    try:
+        yield db
+    finally:
+        await db.close()
 
-@entry
-def main(email: EmailService, es: EventStore) -> str:
-    assert isinstance(email, EmailService)
-    assert isinstance(es, EventStore)
-    assert email.user.auth.db.config.env == es.db.config.env
-    return "ok"
 
-assert main() == "ok"
+@dg.entry_node
+async def main(db: DataBase):
+    assert not db.is_closed
 ```
 
 ### Usage with FastAPI

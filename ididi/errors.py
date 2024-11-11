@@ -63,7 +63,7 @@ class _ErrorChain:
 
         param_type = self.error.param.annotation
         if param_type is Parameter.empty:
-            param_type = "unannotated"
+            param_type = "ididi.Missing"
         else:
             try:
                 param_type = param_type.__name__

@@ -119,10 +119,10 @@ e.g.
 .pixi/envs/test/lib/python3.12/site-packages/ididi/graph.py:416: in node
     raise NodeCreationError(factory_or_class, "", e, form_message=True) from e
 E   ididi.errors.NodeCreationError: token_bucket_factory()
-E   -> TokenBucketFactory(aiocache)
-E   -> RedisCache(redis)
-E   -> Redis(connection_pool)
-E   -> ConnectionPool(connection_class)
+E   -> TokenBucketFactory(aiocache: Cache)
+E   -> RedisCache(redis: Redis)
+E   -> Redis(connection_pool: ConnectionPool)
+E   -> ConnectionPool(connection_class: idid.Missing)
 E   -> MissingAnnotationError: Unable to resolve dependency for parameter: args in <class 'type'>, annotation for `args` must be provided
 ```
 
@@ -130,7 +130,33 @@ Features:
 
 ## version 0.2.6
 
-- adding graph to node as an attribute so that it can check if a subnode is already resolved
-- config max recursion limit in graph
-- yield factory
-- defer the resolve of DependentNode.from_node, perhaps use a FutureDependent
+Feature:
+
+- you can now use async/sync generator to create a resource that needs to be closed
+
+```python
+from ididi import DependencyGraph
+dg = DependencyGraph()
+
+@dg.node
+async def get_client() -> ty.AsyncGenerator[Client, None]:
+    client = Client()
+    try:
+        yield client
+    finally:
+        await client.close()
+
+
+@dg.node
+async def get_db(client: Client) -> ty.AsyncGenerator[DataBase, None]:
+    db = DataBase(client)
+    try:
+        yield db
+    finally:
+        await db.close()
+
+
+@dg.entry_node
+async def main(db: DataBase):
+    assert not db.is_closed
+```
