@@ -97,6 +97,16 @@ class ResolutionRegistry:
     def __getitem__[T](self, dependent_type: type[T] | ty.Callable[..., T]) -> T:
         return self._mappings[dependent_type]
 
+    def get[
+        T
+    ](
+        self,
+        dependent_type: type[T] | ty.Callable[..., ty.Any],
+        /,
+        default: T | None = None,
+    ) -> (T | None):
+        return self._mappings.get(dependent_type, default)
+
     def remove(self, dependent_type: type) -> None:
         self._mappings.pop(dependent_type, None)
 

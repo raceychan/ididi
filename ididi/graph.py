@@ -1,10 +1,10 @@
 import inspect
 import typing as ty
-from collections import defaultdict
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager, contextmanager
 from functools import lru_cache, partial
 from types import MappingProxyType, TracebackType
 
+from ._ds import GraphNodes, GraphNodesView, ResolutionRegistry, TypeRegistry
 from .errors import (
     AsyncResourceInSyncError,
     MissingImplementationError,
@@ -14,7 +14,6 @@ from .errors import (
     UnsolvableNode,
 )
 from .node import AbstractDependent, DependentNode
-from .registry import GraphNodes, GraphNodesView, ResolutionRegistry, TypeRegistry
 from .type_resolve import (
     get_typed_signature,
     is_async_context_manager,
@@ -25,60 +24,90 @@ from .type_resolve import (
 from .types import INSPECT_EMPTY, GraphConfig, IFactory, INodeConfig, NodeConfig, TDecor
 from .utils.param_utils import MISSING, Maybe, is_provided
 
-# TODO: separate scope and async scope for better typing support
-"""
-with dg.scope() as scope: # return sync scope
-    resource = scope.resolve(Resource)
-    assert resource.is_opened
 
-async with dg.scope() as scope: # return async scope
-    resource = await scope.resolve(AsyncResource)
-    assert resource.is_opened
-"""
+class AbstractScope[Stack: ExitStack | AsyncExitStack]:
+    _stack: Stack
+    _graph: "DependencyGraph"
+    resolutions: ResolutionRegistry
+
+    def cache_result[T](self, dependent: ty.Callable[..., T], result: T) -> None:
+        self.resolutions.register(dependent, result)
+
+    def enter_context[T](self, context: ty.ContextManager[T]) -> T:
+        return self._stack.enter_context(context)
 
 
-class SyncScope:
-    _scope: ExitStack
-
-    __slots__ = ("_graph", "_scope")
+class SyncScope(AbstractScope[ExitStack]):
+    __slots__ = ("_graph", "_stack", "resolutions")
 
     def __init__(self, graph: "DependencyGraph"):
         self._graph = graph
-        self._scope = ExitStack()
+        self._stack = ExitStack()
+        self.resolutions = ResolutionRegistry()
 
     def __enter__(self) -> "SyncScope":
         return self
 
     def __exit__(
-        self, exc_type: type | None, exc_value: ty.Any, traceback: TracebackType | None
+        self,
+        exc_type: type[Exception] | None,
+        exc_value: Exception | None,
+        traceback: TracebackType | None,
     ) -> None:
-        self._scope.__exit__(exc_type, exc_value, traceback)
-        self._graph.remove_scope(self._scope)
+        self._stack.__exit__(exc_type, exc_value, traceback)
 
-    def resolve[T](self, dependent: type[T], /, **overrides: ty.Any) -> T:
-        return self._graph.resolve(dependent, self._scope, **overrides)
+    @ty.overload
+    def resolve[R](self, dependent: ty.Callable[..., R], /) -> R: ...
+
+    @ty.overload
+    def resolve[
+        **P, R
+    ](
+        self, dependent: ty.Callable[P, R], /, *args: P.args, **overrides: P.kwargs
+    ) -> R: ...
+
+    def resolve[
+        **P, R
+    ](self, dependent: ty.Callable[P, R], /, *args: P.args, **overrides: P.kwargs) -> R:
+        return self._graph.resolve(dependent, self, *args, **overrides)
 
 
-class AsyncScope:
-    _scope: AsyncExitStack
-
-    __slots__ = ("_graph", "_scope")
+class AsyncScope(AbstractScope[AsyncExitStack]):
+    __slots__ = ("_graph", "_stack", "resolutions")
 
     def __init__(self, graph: "DependencyGraph"):
         self._graph = graph
-        self._scope = AsyncExitStack()
+        self._stack = AsyncExitStack()
+        self.resolutions = ResolutionRegistry()
 
     async def __aenter__(self) -> "AsyncScope":
         return self
 
     async def __aexit__(
-        self, exc_type: type | None, exc_value: ty.Any, traceback: TracebackType | None
+        self,
+        exc_type: type[Exception] | None,
+        exc_value: Exception | None,
+        traceback: TracebackType | None,
     ) -> None:
-        await self._scope.__aexit__(exc_type, exc_value, traceback)
-        self._graph.remove_scope(self._scope)
+        await self._stack.__aexit__(exc_type, exc_value, traceback)
 
-    async def resolve[T](self, dependent: type[T], /, **overrides: ty.Any) -> T:
-        return await self._graph.aresolve(dependent, self._scope, **overrides)
+    @ty.overload
+    async def resolve[R](self, dependent: ty.Callable[..., R], /) -> R: ...
+
+    @ty.overload
+    async def resolve[
+        **P, R
+    ](
+        self, dependent: ty.Callable[P, R], /, *args: P.args, **overrides: P.kwargs
+    ) -> R: ...
+
+    async def resolve[
+        **P, R
+    ](self, dependent: ty.Callable[P, R], /, *args: P.args, **overrides: P.kwargs) -> R:
+        return await self._graph.aresolve(dependent, self, *args, **overrides)
+
+    async def enter_async_context[T](self, context: ty.AsyncContextManager[T]) -> T:
+        return await self._stack.enter_async_context(context)
 
 
 class ScopeProxy:
@@ -109,11 +138,6 @@ class ScopeProxy:
         await ty.cast(AsyncScope, self._scope).__aexit__(exc_type, exc_value, traceback)
 
 
-type ScopedResolution = defaultdict[
-    ExitStack | AsyncExitStack, dict[type | ty.Callable[..., ty.Any], ty.Any]
-]
-
-
 class DependencyGraph:
     """
     ### Description:
@@ -129,7 +153,6 @@ class DependencyGraph:
         self._nodes: GraphNodes[ty.Any] = {}
         self._resolved_nodes: GraphNodes[ty.Any] = {}
         self._resolution_registry = ResolutionRegistry()
-        self._scoped_resolution: ScopedResolution = defaultdict(dict)
         self._type_registry = TypeRegistry()
         self._config = GraphConfig(static_resolve=static_resolve)
 
@@ -283,9 +306,6 @@ class DependencyGraph:
             self._resolved_nodes.clear()
             self._nodes.clear()
 
-    def remove_scope(self, scope: ExitStack | AsyncExitStack) -> None:
-        self._scoped_resolution.pop(scope, None)
-
     async def aclose(self) -> None:
         """
         Close any resources held by resolved instances.
@@ -374,7 +394,7 @@ class DependencyGraph:
     def resolve[
         **P, T
     ](
-        self, dependent: ty.Callable[P, T], scope: Maybe[ExitStack] = MISSING, /
+        self, dependent: ty.Callable[P, T], scope: Maybe[SyncScope] = MISSING, /
     ) -> T: ...
 
     @ty.overload
@@ -383,7 +403,7 @@ class DependencyGraph:
     ](
         self,
         dependent: ty.Callable[P, T],
-        scope: Maybe[ExitStack] = MISSING,
+        scope: Maybe[SyncScope] = MISSING,
         /,
         *args: P.args,
         **overrides: P.kwargs,
@@ -394,7 +414,7 @@ class DependencyGraph:
     ](
         self,
         dependent: ty.Callable[P, T],
-        scope: Maybe[ExitStack] = MISSING,
+        scope: Maybe[SyncScope] = MISSING,
         /,
         *args: ty.Any,
         **overrides: ty.Any,
@@ -412,9 +432,7 @@ class DependencyGraph:
         if node_dep_type in self._resolution_registry:
             return self._resolution_registry[node_dep_type]
 
-        if is_provided(scope) and (
-            solution := self._scoped_resolution[scope].get(node_dep_type)
-        ):
+        if is_provided(scope) and (solution := scope.resolutions.get(node_dep_type)):
             return solution
 
         node: DependentNode[T] = self.static_resolve(node_dep_type)
@@ -440,7 +458,7 @@ class DependencyGraph:
         if is_context_manager(resolved):
             assert is_provided(scope)
             instance = scope.enter_context(resolved)
-            self._scoped_resolution[scope][node_dep_type] = instance
+            scope.resolutions.register(node_dep_type, instance)
             return ty.cast(T, instance)
         elif is_async_context_manager(resolved):
             # since we support ACM class.
@@ -457,20 +475,21 @@ class DependencyGraph:
         self,
         dependent: ty.Callable[P, T],
         /,
-        scope: Maybe[AsyncExitStack] = MISSING,
-        **overrides: ty.Any,
+        scope: Maybe[AsyncScope] = MISSING,
+        *args: P.args,
+        **overrides: P.kwargs,
     ) -> T:
         """
         Async version of resolve that handles async context managers and coroutines.
         """
+        if args:
+            raise PositionalOverrideError(args)
         node_dep_type = dependent
 
         if node_dep_type in self._resolution_registry:
             return self._resolution_registry[node_dep_type]
 
-        if is_provided(scope) and (
-            solution := self._scoped_resolution[scope].get(node_dep_type)
-        ):
+        if is_provided(scope) and (solution := scope.resolutions.get(node_dep_type)):
             return solution
 
         node: DependentNode[T] = self.static_resolve(node_dep_type)
@@ -493,14 +512,16 @@ class DependencyGraph:
         if is_async_context_manager(resolved):
             assert is_provided(scope)
             instance = await scope.enter_async_context(resolved)
-            self._scoped_resolution[scope][node_dep_type] = instance
+            scope.cache_result(node_dep_type, instance)
             return ty.cast(T, instance)
-        elif is_context_manager(resolved):
+
+        if is_context_manager(resolved):
             assert is_provided(scope)
             instance = scope.enter_context(resolved)
-            self._scoped_resolution[scope][node_dep_type] = instance
+            scope.cache_result(node_dep_type, instance)
             return ty.cast(T, instance)
-        elif inspect.iscoroutine(resolved):
+
+        if inspect.isawaitable(resolved):
             instance = await resolved
         else:
             instance = resolved
@@ -534,23 +555,14 @@ class DependencyGraph:
         [], R
     ]:
         def func_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
-            scope = ExitStack()
-
-            try:
-                r = ty.cast(R, self.resolve(dep, scope, *args, **kwargs))
+            with self.scope() as scope:
+                r = self.resolve(dep, scope, *args, **kwargs)
                 return r
-            finally:
-                scope.__exit__(None, None, None)
 
         async def async_func_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
-            scope = AsyncExitStack()
-            await scope.__aenter__()
-
-            try:
-                r: R = await self.aresolve(dep, scope, *args, **kwargs)
+            async with self.scope() as scope:
+                r = await self.aresolve(dep, scope, *args, **kwargs)
                 return r
-            finally:
-                await scope.__aexit__(None, None, None)
 
         entry_type = type(f"entry_node_{func.__name__}", (object,), {})
         dep = ty.cast(type[R], entry_type)
