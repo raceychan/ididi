@@ -80,7 +80,8 @@ You can use generator/async generator to create a resource that needs to be clos
 NOTE:
 
 1. resources required by a dependent will only be closed when the dependent is exited.
-2. resources can't be reused across different dependent.
+2. resources will be shared across different dependents only within the same scope, and destroyed when the scope is exited.
+3. error raised when trying to get a async resource in a sync dependent, but sync resource in a async dependent is supported.  
 
 ```python
 from ididi import DependencyGraph
