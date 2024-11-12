@@ -69,12 +69,12 @@ def is_unresolved_type(t: ty.Any) -> bool:
     return is_builtin_type(t)
 
 
-def is_generator[T](t: T) -> ty.TypeGuard[ty.Generator[T, None, None]]:
-    return ty.get_origin(t) is collections.abc.Generator
+# def is_generator[T](t: T) -> ty.TypeGuard[ty.Generator[T, None, None]]:
+#     return ty.get_origin(t) is collections.abc.Generator
 
 
-def is_async_generator[T](t: T) -> ty.TypeGuard[ty.AsyncGenerator[T, None]]:
-    return ty.get_origin(t) is collections.abc.AsyncGenerator
+# def is_async_generator[T](t: T) -> ty.TypeGuard[ty.AsyncGenerator[T, None]]:
+#     return ty.get_origin(t) is collections.abc.AsyncGenerator
 
 
 def is_context_manager[T](t: T) -> ty.TypeGuard[ty.ContextManager[T]]:

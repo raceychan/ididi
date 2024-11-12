@@ -148,7 +148,6 @@ def test_sync_func_requires_async_factory():
         main()
 
 
-
 @pytest.mark.asyncio
 async def test_scope():
     dg = DependencyGraph()
@@ -161,7 +160,7 @@ async def test_scope():
     def get_resource() -> ty.Generator[Resource, None, None]:
         resource = Resource()
         resource.open()
-        yield resource  
+        yield resource
 
     @dg.node
     async def get_async_resource() -> ty.AsyncGenerator[AsyncResource, None]:
@@ -176,4 +175,3 @@ async def test_scope():
     async with dg.scope() as scope:
         resource = await scope.resolve(AsyncResource)
         assert resource.is_opened
-
