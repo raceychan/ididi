@@ -193,8 +193,4 @@ class Service:
 dg.resolve(Service)
 ```
 
-This would previously raise `NodeCreationError`, with root cause being `MissingAnnotationError`.
-This is because currently when we create a node, the node recursively build its sub dependencies into nodes as well. 
-
-In cases where a dependency is unsolvable by nature, and requires a factory to be provided, this would cause the node creation to fail, even if user did provide the factory.
-Since there is no way to tell if the unsolvable dependency is being provided with a factory or not, given the toppest level node does not know about the graph during its creation.
+This would previously raise `NodeCreationError`, with root cause being `MissingAnnotationErro`, now being fixed.
