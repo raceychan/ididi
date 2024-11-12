@@ -4,6 +4,7 @@ from types import MappingProxyType
 
 from .node import DependentNode
 from .type_resolve import is_closable
+from .utils.param_utils import MISSING, Maybe
 
 type NodeDependent[T] = type[T]
 """
@@ -30,7 +31,7 @@ type TypeMappings[T] = dict[NodeDependent[T], list[NodeDependent[T]]]
 ### mapping a type to its dependencies
 """
 
-# TODO: NodeRegistry
+# TODO: NodeRegistry, move sorting logic here
 
 
 class TypeRegistry:
@@ -69,9 +70,11 @@ class TypeRegistry:
 
         del self._mappings[dependent_type]
 
-    def get(
-        self, dependent_type: type, /, default: list[type] | None = None
-    ) -> list[type] | None:
+    def get[
+        T
+    ](
+        self, dependent_type: type[T], /, default: Maybe[list[type[T]]] = MISSING
+    ) -> Maybe[list[type[T]]]:
         return self._mappings.get(dependent_type, default)
 
     def clear(self) -> None:
@@ -101,10 +104,10 @@ class ResolutionRegistry:
         T
     ](
         self,
-        dependent_type: type[T] | ty.Callable[..., ty.Any],
+        dependent_type: type[T] | ty.Callable[..., T],
         /,
-        default: T | None = None,
-    ) -> (T | None):
+        default: Maybe[T] = MISSING,
+    ) -> Maybe[T]:
         return self._mappings.get(dependent_type, default)
 
     def remove(self, dependent_type: type) -> None:
