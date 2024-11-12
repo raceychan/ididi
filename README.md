@@ -123,8 +123,10 @@ resources will be automatically closed when the scope is exited.
 
 ```python
 @dg.node
-def get_resource() -> Resource:
-    return Resource()
+def get_resource() -> ty.Generator[Resource, None, None]:
+    res =  Resource()
+    yield res
+    res.close()
 
 # async with for async resource
 with dg.scope() as scope:
