@@ -183,9 +183,6 @@ class DependencyGraph:
         )
 
     async def __aenter__(self) -> "DependencyGraph":
-        """
-        should we reopen closed resources when entering a graph?
-        """
         if not self._config.static_resolve:
             return self
 
@@ -245,18 +242,21 @@ class DependencyGraph:
         """
         Get all types that depend on the given type.
         """
+        # TODO: remove to node registry
         dependents: list[type[T]] = []
         for node_type, node in self._nodes.items():
             for dep_param in node.signature:
                 sub_dependent: AbstractDependent[ty.Any] = dep_param.node.dependent
-                if sub_dependent.dependent_type == dependent:
-                    dependents.append(node_type)
+                if sub_dependent.dependent_type != dependent:
+                    continue
+                dependents.append(node_type)
         return dependents
 
     def get_dependency_types[T](self, dependent: type[T]) -> list[type[T]]:
         """
         Get all types that the given type depends on.
         """
+        # TODO: remove to node registry
         node = self._nodes[dependent]
         deps: list[type[T]] = []
         for param in node.signature:
@@ -319,9 +319,9 @@ class DependencyGraph:
         """
         Resolve abstract type to concrete implementation.
         """
-        implementations: list[type] | None = self._type_registry.get(abstract_type)
+        implementations: Maybe[list[type[T]]] = self._type_registry.get(abstract_type)
 
-        if not implementations:
+        if not is_provided(implementations):
             raise MissingImplementationError(abstract_type)
 
         last_implementations = implementations[-1]
@@ -432,7 +432,9 @@ class DependencyGraph:
         if node_dep_type in self._resolution_registry:
             return self._resolution_registry[node_dep_type]
 
-        if is_provided(scope) and (solution := scope.resolutions.get(node_dep_type)):
+        if is_provided(scope) and is_provided(
+            solution := scope.resolutions.get(node_dep_type)
+        ):
             return solution
 
         node: DependentNode[T] = self.static_resolve(node_dep_type)
@@ -489,7 +491,9 @@ class DependencyGraph:
         if node_dep_type in self._resolution_registry:
             return self._resolution_registry[node_dep_type]
 
-        if is_provided(scope) and (solution := scope.resolutions.get(node_dep_type)):
+        if is_provided(scope) and is_provided(
+            solution := scope.resolutions.get(node_dep_type)
+        ):
             return solution
 
         node: DependentNode[T] = self.static_resolve(node_dep_type)
@@ -664,10 +668,10 @@ class DependencyGraph:
             old_node = self._nodes[return_type]
             self.remove_node(old_node)
 
-        if inspect.isasyncgenfunction(factory_or_class):
-            factory_or_class = asynccontextmanager(factory_or_class)
-        elif inspect.isgeneratorfunction(factory_or_class):
+        if inspect.isgeneratorfunction(factory_or_class):
             factory_or_class = contextmanager(factory_or_class)
+        elif inspect.isasyncgenfunction(factory_or_class):
+            factory_or_class = asynccontextmanager(factory_or_class)
 
         try:
             node = DependentNode.from_node(factory_or_class, config=node_config)
@@ -676,3 +680,11 @@ class DependencyGraph:
 
         self.register_node(node)
         return factory_or_class
+
+
+
+    
+
+
+
+
