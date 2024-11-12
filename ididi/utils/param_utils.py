@@ -12,7 +12,7 @@ class _Missed:
     __slots__ = ()
 
     def __repr__(self) -> str:
-        return "NULL"
+        return "MISSING"
 
     def __bool__(self) -> bool:
         return False
@@ -31,4 +31,4 @@ def is_provided[T](value: Maybe[T]) -> ty.TypeGuard[T]:
     """
     Check if the value is not MISSING.
     """
-    return value is not MISSING
+    return not isinstance(value, _Missed)

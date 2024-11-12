@@ -132,7 +132,7 @@ class DependencyParam[T]:
 
     name: str
     param: Parameter
-    unresolvable: bool
+    unresolvable: bool  # mostly builtin-types without default value
     node: "DependentNode[T]"
     """
     NOTE: we might need to get rid of the node, to make it non-recursive,
@@ -155,19 +155,11 @@ class DependencyParam[T]:
 
     @property
     def should_not_resolve(self) -> bool:
-        """
-        Conditions that make this dependency param not be resolved at DependencyGraph.resolve()
-
-        - lazy dependency
-        Lazy Dependency should be resolved at runtime, not at graph resolution time
-        - builtin type
-        Builtin type can't be instantiated without arguments, so it should not be resolved
-        """
         return self.node.config.lazy or self.unresolvable
 
     def build(self, override: T | dict[str, ty.Any]) -> T | ty.Awaitable[T]:
         """Build the dependency if needed, handling defaults and overrides."""
-        if override:
+        if override and override.__class__ is not dict:
             if override.__class__ is not dict:
                 return ty.cast(T, override)
             elif self.dependent_type is dict:
@@ -176,7 +168,15 @@ class DependencyParam[T]:
         if is_provided(self.default):
             return self.default
 
-        return self.node.build(**(ty.cast(dict[str, ty.Any], override)))
+        if not is_provided(override):
+            raise UnsolvableDependencyError(
+                dep_name=self.param.name,
+                factory=self.node.factory,
+                required_type=self.dependent_type,
+            )
+
+        val = self.node.build(**(ty.cast(dict[str, ty.Any], override)))
+        return val
 
 
 @dataclass(slots=True, frozen=True, kw_only=True)
@@ -218,7 +218,20 @@ class DependentSignature[T]:
                 value = dpram.node.dependent
             else:
                 param_override = override.pop(dpram.param.name, {})
+                if not is_provided(param_override):
+                    raise UnsolvableDependencyError(
+                        dep_name=dpram.param.name,
+                        factory=self.dependent,
+                        required_type=dpram.dependent_type,
+                    )
                 value = dpram.build(param_override)
+                if not is_provided(value):
+                    raise UnsolvableDependencyError(
+                        dep_name=dpram.param.name,
+                        factory=self.dependent,
+                        required_type=dpram.dependent_type,
+                    )
+
             bound_args.arguments[dpram.param.name] = value
 
         bound_args.apply_defaults()
@@ -442,7 +455,8 @@ class DependentNode[T]:
                 ) from e
 
         bound_args = self.signature.bound_args(override)
-        return self.factory(*bound_args.args, **bound_args.kwargs)
+        instance = self.factory(*bound_args.args, **bound_args.kwargs)
+        return instance
 
     @classmethod
     def create[
@@ -515,7 +529,8 @@ class DependentNode[T]:
 
         try:
             if annotation is inspect.Signature.empty:
-                raise MissingAnnotationError(dependent, param_name)
+                annotation = type(MISSING)
+                # raise MissingAnnotationError(dependent, param_name)
 
             if isinstance(annotation, ty.TypeVar):
                 # we would need to support generic types in the future
