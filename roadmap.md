@@ -36,3 +36,11 @@ class Registry:
 
 Here Config depends on env, where it can't not be built, but user provide a factory for env.
 But since dg.node would build node recursively, it would build env anyway, which cause error.
+
+In cases where a dependency is unsolvable by nature, and requires a factory to be provided, this would cause the node creation to fail, even if user did provide the factory.
+Since there is no way to tell if the unsolvable dependency is being provided with a factory or not, given the toppest level node does not know about the graph during its creation.
+
+In the near future, dg.node will only create a node without recursively resolving its sub dependencies, 
+it only resolve the dependent and the dependencies of the dependent, nothing more.
+
+Node would be fully resolved when `dg.static_resolve` is called.
