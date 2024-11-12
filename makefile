@@ -62,6 +62,7 @@ release: check-branch check-version update-version git-commit git-merge git-tag 
 check-branch:
 	@if [ "$$(git rev-parse --abbrev-ref HEAD)" != "$(BRANCH)" ]; then \
 		echo "Error: You must be on branch $(BRANCH) to release."; \
+		echo "Did you forget to provide VERSION?"; \
 		exit 1; \
 	fi
 
