@@ -77,8 +77,8 @@ class AsyncScope:
         await self._scope.__aexit__(exc_type, exc_value, traceback)
         self._graph.remove_scope(self._scope)
 
-    def resolve[T](self, dependent: type[T], /, **overrides: ty.Any) -> ty.Awaitable[T]:
-        return self._graph.aresolve(dependent, self._scope, **overrides)
+    async def resolve[T](self, dependent: type[T], /, **overrides: ty.Any) -> T:
+        return await self._graph.aresolve(dependent, self._scope, **overrides)
 
 
 class ScopeProxy:
@@ -437,14 +437,15 @@ class DependencyGraph:
         # TODO: make NodeResolveErrorChain
         resolved = node.build(**resolved_deps)
 
-        if (is_function(node.factory)) and is_async_context_manager(resolved):
-            raise AsyncResourceInSyncError(node.factory)
-
         if is_context_manager(resolved):
             assert is_provided(scope)
             instance = scope.enter_context(resolved)
             self._scoped_resolution[scope][node_dep_type] = instance
             return ty.cast(T, instance)
+        elif is_async_context_manager(resolved):
+            # since we support ACM class.
+            if is_function(node.factory):
+                raise AsyncResourceInSyncError(node.factory)
 
         if node.config.reuse:
             self._resolution_registry.register(node_dep_type, resolved)
@@ -488,13 +489,18 @@ class DependencyGraph:
             resolved_deps[dep_name] = resolved_dep
 
         resolved = node.build(**resolved_deps)
+
         if is_async_context_manager(resolved):
             assert is_provided(scope)
             instance = await scope.enter_async_context(resolved)
             self._scoped_resolution[scope][node_dep_type] = instance
             return ty.cast(T, instance)
-
-        if inspect.iscoroutine(resolved):
+        elif is_context_manager(resolved):
+            assert is_provided(scope)
+            instance = scope.enter_context(resolved)
+            self._scoped_resolution[scope][node_dep_type] = instance
+            return ty.cast(T, instance)
+        elif inspect.iscoroutine(resolved):
             instance = await resolved
         else:
             instance = resolved

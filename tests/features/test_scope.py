@@ -68,28 +68,50 @@ class AsyncDataBase(AsyncResourceBase):
         self.client = client
 
 
+async def async_get_client() -> ty.AsyncGenerator[AsyncClient, None]:
+    client = AsyncClient()
+    try:
+        await client.open()
+        yield client
+    finally:
+        await client.close()
+
+
+async def async_get_db(client: AsyncClient) -> ty.AsyncGenerator[AsyncDataBase, None]:
+    db = AsyncDataBase(client)
+    assert client.is_opened
+    try:
+        await db.open()
+        yield db
+    finally:
+        await db.close()
+
+
+def get_client() -> ty.Generator[Client, None, None]:
+    client = Client()
+    try:
+        client.open()
+        yield client
+    finally:
+        client.close()
+
+
+def get_db(client: Client) -> ty.Generator[DataBase, None, None]:
+    db = DataBase(client)
+    assert client.is_opened
+    try:
+        db.open()
+        yield db
+    finally:
+        db.close()
+
+
 @pytest.mark.asyncio
 async def test_async_gen_factory():
     dg = DependencyGraph()
 
-    @dg.node
-    async def get_client() -> ty.AsyncGenerator[AsyncClient, None]:
-        client = AsyncClient()
-        try:
-            await client.open()
-            yield client
-        finally:
-            await client.close()
-
-    @dg.node
-    async def get_db(client: AsyncClient) -> ty.AsyncGenerator[AsyncDataBase, None]:
-        db = AsyncDataBase(client)
-        assert client.is_opened
-        try:
-            await db.open()
-            yield db
-        finally:
-            await db.close()
+    dg.node(async_get_client)
+    dg.node(async_get_db)
 
     @dg.entry
     async def main(db: AsyncDataBase) -> str:
@@ -102,24 +124,8 @@ async def test_async_gen_factory():
 def test_gen_factory():
     dg = DependencyGraph()
 
-    @dg.node
-    def get_client() -> ty.Generator[Client, None, None]:
-        client = Client()
-        try:
-            client.open()
-            yield client
-        finally:
-            client.close()
-
-    @dg.node
-    def get_db(client: Client) -> ty.Generator[DataBase, None, None]:
-        db = DataBase(client)
-        assert client.is_opened
-        try:
-            db.open()
-            yield db
-        finally:
-            db.close()
+    dg.node(get_client)
+    dg.node(get_db)
 
     @dg.entry
     def main(db: DataBase) -> str:
@@ -175,3 +181,31 @@ async def test_scope():
     async with dg.scope() as scope:
         resource = await scope.resolve(AsyncResource)
         assert resource.is_opened
+
+
+@pytest.mark.debug
+@pytest.mark.asyncio
+async def test_resource_shared_within_scope():
+    dg = DependencyGraph()
+
+    dg.node(get_db)
+    dg.node(get_client)
+    dg.node(async_get_client)
+    dg.node(async_get_db)
+
+    class FirstResource(AsyncResourceBase):
+        def __init__(self, database: AsyncDataBase):
+            self.database = database
+
+    class SecondResource(AsyncResourceBase):
+        def __init__(self, database: AsyncDataBase):
+            self.database = database
+
+    async with dg.scope() as scope:
+        first_resource = await scope.resolve(FirstResource)
+        second_resource = await scope.resolve(SecondResource)
+
+        assert first_resource.database is second_resource.database
+        assert first_resource.database.is_opened
+
+    assert first_resource.database.is_closed
