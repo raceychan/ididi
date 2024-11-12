@@ -12,6 +12,7 @@ class Config:
         self.env = env
 
 
+@dg.node
 def config_factory() -> Config:
     return Config("dev")
 
@@ -73,9 +74,8 @@ class EventStore:
         self.db = db
 
 
-@pytest.mark.skip(reason="TODO: fix the error")
-@pytest.mark.debug
+# @pytest.mark.skip(reason="TODO: fix the error")
 def test_improved_error():
     # BUG: this should not raise Error when config is overridden
     # with factory
-    dg.static_resolve(EmailService)
+    email = dg.resolve(EmailService)

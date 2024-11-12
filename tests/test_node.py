@@ -2,9 +2,7 @@ import typing as ty
 
 import pytest
 
-from ididi.errors import (
-    GenericDependencyNotSupportedError,
-    MissingAnnotationError,
+from ididi.errors import (  # GenericDependencyNotSupportedError,; MissingAnnotationError,
     MissingReturnTypeError,
     NodeCreationErrorChain,
     UnsolvableDependencyError,
@@ -126,14 +124,16 @@ def test_factory_without_return_type():
         DependentNode.from_node(bad_factory)
 
 
+@pytest.mark.debug
 def test_node_without_annotation():
 
     class Service:
         def __init__(self, a):
             self.a = a
 
-    with pytest.raises(NodeCreationErrorChain):
-        DependentNode.from_node(Service)
+    node = DependentNode.from_node(Service)
+    with pytest.raises(UnsolvableDependencyError):
+        node.build()
 
 
 def test_not_supported_annotation():
@@ -141,8 +141,9 @@ def test_not_supported_annotation():
         def __init__(self, exc: Exception):
             self.exc = exc
 
-    with pytest.raises(NodeCreationErrorChain):
-        DependentNode.from_node(Unsupported)
+    node = DependentNode.from_node(Unsupported)
+    with pytest.raises(UnsolvableDependencyError):
+        node.build()
 
 
 def test_weird_annotation():

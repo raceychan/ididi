@@ -53,9 +53,6 @@ class _ErrorChain:
             self.length = 0
             self.head = self
 
-    def __str__(self) -> str:
-        return self.form_repr()
-
     def restart(self) -> None:
         """
         Restarts the error chain from the head.

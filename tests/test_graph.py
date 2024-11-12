@@ -516,3 +516,26 @@ def test_graph_replace_node(dag: DependencyGraph):
     node = dag.nodes[Service]
 
     dag.replace_node(node, node)
+
+
+@pytest.mark.debug
+def test_resolve_node_without_annotation():
+    dag = DependencyGraph()
+
+    class Config:
+        def __init__(self, a):
+            self.a = a
+
+    class Service:
+        def __init__(self, config: Config):
+            self.config = config
+
+    with pytest.raises(UnsolvableDependencyError):
+        dag.resolve(Service)
+
+    @dag.node
+    def config_factory() -> Config:
+        return Config(a=1)
+
+    service = dag.resolve(Service)
+    assert service.config.a == 1

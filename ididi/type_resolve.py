@@ -114,24 +114,3 @@ def is_class_with_empty_init(cls: type) -> bool:
     is_undefined_init = cls.__init__ is object.__init__
     is_protocol = cls.__init__ is EmptyInitProtocol.__init__
     return cls is type or is_undefined_init or is_protocol
-
-
-def first_implementation(
-    abstract_type: type, implementations: list[type]
-) -> type | None:
-    """
-    Find the first concrete implementation of param_type in the given dependencies.
-    Returns None if no matching implementation is found.
-    """
-    if issubclass(abstract_type, ty.Protocol):
-        if not abstract_type._is_runtime_protocol:  # type: ignore
-            abstract_type._is_runtime_protocol = True  # type: ignore
-
-    matched_deps = (
-        dep
-        for dep in implementations
-        if isinstance(dep, type)
-        and isinstance(abstract_type, type)
-        and issubclass(dep, abstract_type)
-    )
-    return next(matched_deps, None)

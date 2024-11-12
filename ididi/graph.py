@@ -390,6 +390,12 @@ class DependencyGraph:
         except Exception as e:
             raise NodeCreationErrorChain(dependent, error=e, form_message=True)
 
+    def build(self, dependent: ty.Callable[..., ty.Any]):
+        """
+        Build a node
+        """
+        ...
+
     @ty.overload
     def resolve[
         **P, T
@@ -655,7 +661,6 @@ class DependencyGraph:
         ```
         """
 
-        # TODO: might make this non-recursive
         if not factory_or_class:
             configed = ty.cast(TDecor, partial(self.node, **config))
             return configed
