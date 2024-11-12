@@ -421,7 +421,7 @@ class DependencyGraph:
     ) -> T:
         """
         Resolve a dependency and build its instance.
-        NOTE: overrides will only be applied to the requested type, not recursive
+        NOTE: overrides will only be applied to the current dependent.
         """
 
         if args:
@@ -429,12 +429,12 @@ class DependencyGraph:
 
         node_dep_type = dependent
 
-        if node_dep_type in self._resolution_registry:
-            return self._resolution_registry[node_dep_type]
-
         if is_provided(scope) and is_provided(
             solution := scope.resolutions.get(node_dep_type)
         ):
+            return solution
+
+        if is_provided(solution := self._resolution_registry.get(node_dep_type)):
             return solution
 
         node: DependentNode[T] = self.static_resolve(node_dep_type)
@@ -486,14 +486,15 @@ class DependencyGraph:
         """
         if args:
             raise PositionalOverrideError(args)
-        node_dep_type = dependent
 
-        if node_dep_type in self._resolution_registry:
-            return self._resolution_registry[node_dep_type]
+        node_dep_type = dependent
 
         if is_provided(scope) and is_provided(
             solution := scope.resolutions.get(node_dep_type)
         ):
+            return solution
+
+        if is_provided(solution := self._resolution_registry.get(node_dep_type)):
             return solution
 
         node: DependentNode[T] = self.static_resolve(node_dep_type)
@@ -680,11 +681,3 @@ class DependencyGraph:
 
         self.register_node(node)
         return factory_or_class
-
-
-
-    
-
-
-
-
