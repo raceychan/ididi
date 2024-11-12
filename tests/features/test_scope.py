@@ -158,7 +158,9 @@ def test_sync_func_requires_async_factory():
 async def test_scope():
     dg = DependencyGraph()
 
-    class Resource(ResourceBase): ...
+    class Resource(ResourceBase):
+        def __init__(self):
+            super().__init__()
 
     class AsyncResource(AsyncResourceBase): ...
 
@@ -183,7 +185,6 @@ async def test_scope():
         assert resource.is_opened
 
 
-@pytest.mark.debug
 @pytest.mark.asyncio
 async def test_resource_shared_within_scope():
     dg = DependencyGraph()

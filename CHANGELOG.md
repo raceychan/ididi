@@ -160,3 +160,11 @@ async def get_db(client: Client) -> ty.AsyncGenerator[DataBase, None]:
 async def main(db: DataBase):
     assert not db.is_closed
 ```
+
+## version 0.2.7
+
+Improvements:
+
+- support sync resource in async dependent
+- better error message for async resource in sync function
+- resource shared within the same scope, destroyed when scope is exited
