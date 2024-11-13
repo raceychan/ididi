@@ -139,7 +139,6 @@ def test_static_resolve_would_raise_error(dg: DependencyGraph):
         dg.static_resolve(UserService)
 
 
-@pytest.mark.debug
 def test_static_resolve_a_factory(dg: DependencyGraph):
     class DataBase:
         def __init__(self, engine: str):
@@ -150,3 +149,9 @@ def test_static_resolve_a_factory(dg: DependencyGraph):
         return DataBase("test")
 
     db = dg.resolve(db_factory)
+    assert db.engine == "test"
+
+    f = dg.factory(db_factory, use_async=False)
+    db2 = f()
+    assert db2.engine == "test"
+    assert db is db2
