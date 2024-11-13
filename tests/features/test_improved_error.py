@@ -53,7 +53,6 @@ class EventStore:
         self.db = db
 
 
-# @pytest.mark.skip(reason="TODO: fix the error")
 def test_improved_error():
     with pytest.raises(MissingAnnotationError) as e:
         email = dg.resolve(EmailService)

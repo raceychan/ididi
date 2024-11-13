@@ -29,7 +29,15 @@ from .type_resolve import (
     resolve_annotation,
     resolve_forwardref,
 )
-from .types import INSPECT_EMPTY, GraphConfig, IFactory, INodeConfig, NodeConfig, TDecor
+from .types import (
+    INSPECT_EMPTY,
+    GraphConfig,
+    IAsyncFactory,
+    IFactory,
+    INodeConfig,
+    NodeConfig,
+    TDecor,
+)
 from .utils.param_utils import MISSING, Maybe, is_provided
 
 
@@ -594,8 +602,25 @@ class DependencyGraph:
             self._resolution_registry.register(node_dep_type, instance)
         return ty.cast(T, instance)
 
-    @lru_cache
-    def factory[**P, R](self, dependent: type[R]) -> IFactory[..., R]:
+    @ty.overload
+    def factory[
+        R
+    ](
+        self, dependent: ty.Callable[..., R], *, use_async: ty.Literal[True] = True
+    ) -> IAsyncFactory[..., R]: ...
+
+    @ty.overload
+    def factory[
+        R
+    ](
+        self, dependent: ty.Callable[..., R], *, use_async: ty.Literal[False] = False
+    ) -> IFactory[..., R]: ...
+
+    def factory[
+        R
+    ](self, dependent: ty.Callable[..., R], *, use_async: bool = True) -> (
+        IFactory[..., R] | IAsyncFactory[..., R]
+    ):
         """
         A helper function that creates a resolver(a factory) for a given type.
 
@@ -609,9 +634,14 @@ class DependencyGraph:
             self.static_resolve(dependent)
 
         def resolver() -> R:
-            return self.resolve(dependent)
+            with self.scope() as scope:
+                return self.resolve(dependent, scope)
 
-        return resolver
+        async def aresolver() -> R:
+            async with self.scope() as scope:
+                return await self.aresolve(dependent, scope)
+
+        return aresolver if use_async else resolver
 
     def entry[
         **P, R

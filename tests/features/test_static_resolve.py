@@ -137,3 +137,15 @@ def test_static_resolve_would_raise_error(dg: DependencyGraph):
 
     with pytest.raises(UnsolvableDependencyError):
         dg.static_resolve(UserService)
+
+
+# def test_static_resolve_a_factory(dg: DependencyGraph):
+#     class DataBase:
+#         def __init__(self, engine: str):
+#             self.engine = engine
+
+#     def db_factory() -> DataBase:
+#         return DataBase("test")
+
+#     db = dg.static_resolve(db_factory)
+#     breakpoint()

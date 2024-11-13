@@ -461,7 +461,7 @@ def test_type_mapping_cleanup(dag: DependencyGraph):
 
 
 def test_node_factory(dag: DependencyGraph):
-    factory = dag.factory(UserService)
+    factory = dag.factory(UserService, use_async=False)
     assert callable(factory)
     assert isinstance(factory(), UserService)
 
@@ -484,8 +484,14 @@ async def test_graph_without_static_resolve(dag: DependencyGraph):
 
 
 def test_graph_factory_partial(dag: DependencyGraph):
-    factory = dag.factory(UserService)
+    factory = dag.factory(UserService, use_async=False)
     assert isinstance(factory(), UserService)
+
+
+@pytest.mark.asyncio
+async def test_async_graph_factory(dag: DependencyGraph):
+    factory = dag.factory(UserService, use_async=True)
+    assert isinstance(await factory(), UserService)
 
 
 def test_graph_replace_node(dag: DependencyGraph):
