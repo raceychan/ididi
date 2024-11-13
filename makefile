@@ -4,7 +4,7 @@ run:
 
 .PHONY: test
 test:
-	pixi run -e test pytest -sx tests/
+	pixi run -e test pytest -vsx tests/
 
 .PHONY: debug
 debug:

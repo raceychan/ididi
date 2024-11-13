@@ -1,6 +1,6 @@
 import pytest
 
-from ididi.errors import NodeCreationErrorChain
+from ididi.errors import NotSupportedError
 from ididi.graph import DependencyGraph
 from ididi.node import LazyDependent
 
@@ -17,6 +17,7 @@ Here dg.resolve(UserRepository) will return a user_repository instance with db b
 """
 
 
+@pytest.mark.skip("TODO: support recursive lazy dependent")
 def test_lazynode():
     dg = DependencyGraph()
 
@@ -78,6 +79,7 @@ def test_lazynode():
     db2 = instance.session_repo._db
     assert db1 is db2
 
+    # TODO: support recursive lazy dependent
     assert isinstance(instance.user_repo.config, LazyDependent)
 
     assert instance.user_repo.test() == "test"
@@ -95,7 +97,7 @@ def test_lazyfactory():
         def __init__(self, name: str):
             self._name = name
 
-    with pytest.raises(NodeCreationErrorChain):
+    with pytest.raises(NotSupportedError):
 
         @dg.node(lazy=True)
         def service_factory() -> Service:

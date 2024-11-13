@@ -4,22 +4,30 @@ from contextlib import AsyncExitStack, ExitStack, asynccontextmanager, contextma
 from functools import lru_cache, partial
 from types import MappingProxyType, TracebackType
 
-from ._ds import GraphNodes, GraphNodesView, ResolutionRegistry, TypeRegistry
+from ._ds import (
+    GraphNodes,
+    GraphNodesView,
+    GraphVisitor,
+    ResolutionRegistry,
+    TypeRegistry,
+)
 from .errors import (
     AsyncResourceInSyncError,
+    CircularDependencyDetectedError,
     MissingImplementationError,
-    NodeCreationErrorChain,
     PositionalOverrideError,
     TopLevelBulitinTypeError,
-    UnsolvableNode,
+    UnsolvableDependencyError,
 )
-from .node import AbstractDependent, DependentNode
+from .node import DependencyParam, DependentNode, LazyDependent
 from .type_resolve import (
     get_typed_signature,
     is_async_context_manager,
     is_context_manager,
     is_function,
     is_unresolved_type,
+    resolve_annotation,
+    resolve_forwardref,
 )
 from .types import INSPECT_EMPTY, GraphConfig, IFactory, INodeConfig, NodeConfig, TDecor
 from .utils.param_utils import MISSING, Maybe, is_provided
@@ -155,31 +163,13 @@ class DependencyGraph:
         self._resolution_registry = ResolutionRegistry()
         self._type_registry = TypeRegistry()
         self._config = GraphConfig(static_resolve=static_resolve)
+        self._visitor = GraphVisitor[type]()
 
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}("
             f"nodes={len(self._nodes)}, "
             f"resolved={len(self._resolution_registry)})"
-        )
-
-    def __stats__(self) -> str:
-        """
-        Returns a concise statistics of the graph showing:
-        - Total number of nodes
-        - Number of resolved instances
-        - Root nodes (nodes with no dependents)
-        - Leaf nodes (nodes with no dependencies)
-        """
-        roots = {t for t in self._nodes if not self.get_dependent_types(t)}
-        leaves = {t for t in self._nodes if not self.get_dependency_types(t)}
-
-        return (
-            f"{self.__class__.__name__}("
-            f"nodes={len(self._nodes)}, "
-            f"resolved={len(self._resolution_registry)}, "
-            f"roots=[{', '.join(t.__name__ for t in sorted(roots, key=lambda x: x.__name__))}], "
-            f"leaves=[{', '.join(t.__name__ for t in sorted(leaves, key=lambda x: x.__name__))}])"
         )
 
     async def __aenter__(self) -> "DependencyGraph":
@@ -227,6 +217,10 @@ class DependencyGraph:
         """
         return MappingProxyType(self._resolved_nodes)
 
+    @property
+    def visitor(self) -> GraphVisitor[type]:
+        return self._visitor
+
     def remove_node(self, node: DependentNode[ty.Any]) -> None:
         """
         Remove a node from the graph and clean up all its references.
@@ -237,32 +231,6 @@ class DependencyGraph:
         self._type_registry.remove(dependent_type)
         self._resolution_registry.remove(dependent_type)
         self._resolved_nodes.pop(dependent_type, None)
-
-    def get_dependent_types[T](self, dependent: type[T]) -> list[type[T]]:
-        """
-        Get all types that depend on the given type.
-        """
-        # TODO: remove to node registry
-        dependents: list[type[T]] = []
-        for node_type, node in self._nodes.items():
-            for dep_param in node.signature:
-                sub_dependent: AbstractDependent[ty.Any] = dep_param.node.dependent
-                if sub_dependent.dependent_type != dependent:
-                    continue
-                dependents.append(node_type)
-        return dependents
-
-    def get_dependency_types[T](self, dependent: type[T]) -> list[type[T]]:
-        """
-        Get all types that the given type depends on.
-        """
-        # TODO: remove to node registry
-        node = self._nodes[dependent]
-        deps: list[type[T]] = []
-        for param in node.signature:
-            dependent = param.dependent_type
-            deps.append(dependent)
-        return deps
 
     def top_sorted_dependencies(self) -> list[type]:
         """
@@ -278,7 +246,7 @@ class DependencyGraph:
             visited.add(node_type)
             node = self._nodes[node_type]
             for dep_param in node.signature:
-                dependent_type = dep_param.dependent_type
+                dependent_type = dep_param.param_type
                 if dependent_type not in self._nodes:
                     continue
                 visit(dependent_type)
@@ -305,6 +273,7 @@ class DependencyGraph:
             self._type_registry.clear()
             self._resolved_nodes.clear()
             self._nodes.clear()
+            self._visitor.clear()
 
     async def aclose(self) -> None:
         """
@@ -327,7 +296,9 @@ class DependencyGraph:
         last_implementations = implementations[-1]
         return last_implementations
 
-    def _resolve_concrete_node[T](self, dependent: type[T]) -> DependentNode[T]:
+    def _resolve_concrete_node[
+        T
+    ](self, dependent: type[T], node_config: Maybe[NodeConfig]) -> DependentNode[T]:
         if registered_node := self._nodes.get(dependent):
             if is_function(registered_node.factory):
                 return registered_node
@@ -335,7 +306,9 @@ class DependencyGraph:
         try:
             concrete_type = self._resolve_concrete_type(dependent)
         except MissingImplementationError:
-            node = DependentNode.from_node(dependent, config=NodeConfig())
+            node_config = node_config if is_provided(node_config) else NodeConfig()
+            node = DependentNode.from_node(dependent, config=node_config)
+
             self.register_node(node)
         else:
             node = self._nodes[concrete_type]
@@ -350,9 +323,53 @@ class DependencyGraph:
         self.remove_node(old_node)
         self.register_node(new_node)
 
+    def _create_lazy_node[
+        T
+    ](
+        self, node: DependentNode[T], scope: Maybe[SyncScope], node_config: NodeConfig
+    ) -> LazyDependent[T]:
+        """Create a lazy version of a node with appropriate resolver."""
+
+        def resolver(dep_type: type[T]) -> T:
+            self.static_resolve(dep_type, node_config)
+            return self.resolve(dep_type, scope)
+
+        return LazyDependent(
+            dependent_type=node.dependent_type,
+            factory=node.factory,
+            signature=node.signature,
+            resolver=resolver,
+        )
+
+    def _actualize_forwardrefs(self, node: DependentNode[ty.Any]):
+        dependent_type = node.dependent_type
+        for dpram in node.signature:
+            param_type = dpram.param_type
+            if isinstance(param_type, ty.ForwardRef):
+                param_type = resolve_forwardref(node.factory, param_type)
+
+                node.signature.update(
+                    dpram.name,
+                    DependencyParam(
+                        name=dpram.name,
+                        param=dpram.param,
+                        param_annotation=dpram.param_annotation,
+                        param_type=param_type,
+                        default=dpram.default,
+                    ),
+                )
+            self._visitor.add_edge(dependent_type, param_type)
+            circular_path = self._visitor.find_circular_dependency()
+            if circular_path:
+                raise CircularDependencyDetectedError(circular_path)
+
     def __static_resolve[
         T, **P
-    ](self, dependent_factory: type[T] | ty.Callable[P, T]) -> DependentNode[T]:
+    ](
+        self,
+        dependent_factory: type[T] | ty.Callable[P, T],
+        node_config: Maybe[NodeConfig],
+    ) -> DependentNode[T]:
         """
         Resolve a dependency without building its instance.
         """
@@ -365,16 +382,28 @@ class DependencyGraph:
         if dependent in self._resolved_nodes:
             return self._resolved_nodes[dependent]
 
-        if is_unresolved_type(dependent):
-            raise TopLevelBulitinTypeError(dependent)
+        node = self._resolve_concrete_node(dependent, node_config)
+        self._actualize_forwardrefs(node)
 
-        # we need to check if the node is already registered and its factory.
-        node = self._resolve_concrete_node(dependent)
+        for param in node.signature:
+            dep_type = param.param_type
+            if dep_type in self._nodes:
+                continue
 
-        for subnode in node.iter_dependencies():
-            resolved_node = self.__static_resolve(subnode.dependent_type)
-            self.register_node(resolved_node)
-            self._resolved_nodes[subnode.dependent_type] = resolved_node
+            if is_provided(param.default):
+                continue
+
+            if param.unresolvable:
+                raise UnsolvableDependencyError(
+                    dep_name=param.name,
+                    required_type=param.param_type,
+                    factory=node.factory,
+                )
+
+            # Recursively resolve and register dependency
+            dep_node = self.__static_resolve(dep_type, node_config)
+            self.register_node(dep_node)
+            self._resolved_nodes[dep_type] = dep_node
 
         node.check_for_resolvability()
         self._resolved_nodes[dependent] = node
@@ -382,19 +411,25 @@ class DependencyGraph:
 
     def static_resolve[
         T, **P
-    ](self, dependent: type[T] | ty.Callable[P, T]) -> DependentNode[T]:
-        try:
-            return self.__static_resolve(dependent)
-        except UnsolvableNode as de:
-            raise de
-        except Exception as e:
-            raise NodeCreationErrorChain(dependent, error=e, form_message=True)
-
-    def build(self, dependent: ty.Callable[..., ty.Any]):
+    ](
+        self,
+        dependent: type[T] | ty.Callable[P, T],
+        node_config: Maybe[NodeConfig] = MISSING,
+    ) -> DependentNode[T]:
         """
-        Build a node
+        Resolve a dependency without building its instance.
+        Args:
+        dependent: type[T] | ty.Callable[P, T]
+        node_config: NodeConfig
         """
-        ...
+        # try:
+        if is_unresolved_type(dependent):
+            raise TopLevelBulitinTypeError(dependent)
+        return self.__static_resolve(dependent, node_config)
+        # except UnsolvableNode as de:
+        #     raise de
+        # except Exception as e:
+        #     raise NodeCreationErrorChain(dependent, error=e, form_message=True)
 
     @ty.overload
     def resolve[
@@ -445,23 +480,30 @@ class DependencyGraph:
 
         node: DependentNode[T] = self.static_resolve(node_dep_type)
 
-        resolved_deps: dict[str, ty.Any] = overrides.copy()
+        resolved_args: dict[str, ty.Any] = {}
 
-        for dep_param in node.signature:
-            dep_name = dep_param.name
-            if dep_param.should_not_resolve:
+        for dpram in node.signature:
+            param_name = dpram.name
+            param_type = dpram.param_type
+            if param_name in overrides:
+                resolved_args[param_name] = overrides[param_name]
                 continue
 
-            if dep_name in overrides:
+            if is_provided(dpram.default):
+                resolved_args[param_name] = dpram.default
                 continue
 
-            sub_node_dep_type = dep_param.node.dependent_type
+            if node.config.lazy:
+                dep_node = self.static_resolve(param_type, node.config)
+                resolved_args[param_name] = self._create_lazy_node(
+                    dep_node, scope, node.config
+                )
+                continue
 
-            resolved_dep = self.resolve(sub_node_dep_type, scope)
-            resolved_deps[dep_name] = resolved_dep
+            resolved_args[param_name] = self.resolve(param_type, scope)
 
-        # TODO: make NodeResolveErrorChain
-        resolved = node.build(**resolved_deps)
+        bound_args = node.signature.bind_arguments(resolved_args)
+        resolved = node.factory(**bound_args.arguments)
 
         if is_context_manager(resolved):
             assert is_provided(scope)
@@ -504,32 +546,43 @@ class DependencyGraph:
             return solution
 
         node: DependentNode[T] = self.static_resolve(node_dep_type)
-        resolved_deps: dict[str, ty.Any] = overrides.copy()
 
-        for dep_param in node.signature:
-            dep_name = dep_param.name
-            if dep_param.should_not_resolve:
+        resolved_args: dict[str, ty.Any] = {}
+
+        for dpram in node.signature:
+            param_name = dpram.name
+            param_type = dpram.param_type
+            if param_name in overrides:
+                resolved_args[param_name] = overrides[param_name]
                 continue
 
-            if dep_name in overrides:
+            if is_provided(dpram.default):
+                resolved_args[param_name] = dpram.default
                 continue
 
-            sub_node_dep_type = dep_param.node.dependent_type
-            resolved_dep = await self.aresolve(sub_node_dep_type, scope)
-            resolved_deps[dep_name] = resolved_dep
+            if node.config.lazy:
+                dep_node = self.static_resolve(param_type, node.config)
+                resolved_args[param_name] = self._create_lazy_node(
+                    dep_node, scope, node.config
+                )
+                continue
 
-        resolved = node.build(**resolved_deps)
+            resolved_args[param_name] = await self.aresolve(param_type, scope)
+
+        bound_args = node.signature.bind_arguments(resolved_args)
+
+        resolved = node.factory(**bound_args.arguments)
 
         if is_async_context_manager(resolved):
             assert is_provided(scope)
             instance = await scope.enter_async_context(resolved)
-            scope.cache_result(node_dep_type, instance)
+            scope.resolutions.register(node_dep_type, instance)
             return ty.cast(T, instance)
 
         if is_context_manager(resolved):
             assert is_provided(scope)
             instance = scope.enter_context(resolved)
-            scope.cache_result(node_dep_type, instance)
+            scope.resolutions.register(node_dep_type, instance)
             return ty.cast(T, instance)
 
         if inspect.isawaitable(resolved):
@@ -579,12 +632,12 @@ class DependencyGraph:
         dep = ty.cast(type[R], entry_type)
         sig = get_typed_signature(func)
 
-        try:
-            node = DependentNode.create(
-                dependent=dep, factory=func, signature=sig, config=NodeConfig(**kwargs)
-            )
-        except Exception as e:
-            raise NodeCreationErrorChain(func, error=e, form_message=True) from e
+        # try:
+        node = DependentNode.create(
+            dependent=dep, factory=func, signature=sig, config=NodeConfig(**kwargs)
+        )
+        # except Exception as e:
+        #     raise NodeCreationErrorChain(func, error=e, form_message=True) from e
 
         self.register_node(node)
 
@@ -669,20 +722,22 @@ class DependencyGraph:
 
         sig = get_typed_signature(factory_or_class)
         return_type: type[R] = sig.return_annotation
+        resolved_type = resolve_annotation(return_type)
 
-        if return_type is not INSPECT_EMPTY and return_type in self._nodes:
-            old_node = self._nodes[return_type]
+        if return_type is not INSPECT_EMPTY and resolved_type in self._nodes:
+            old_node = self._nodes[resolved_type]
             self.remove_node(old_node)
+            self._visitor.remove_dependent(resolved_type)
 
         if inspect.isgeneratorfunction(factory_or_class):
             factory_or_class = contextmanager(factory_or_class)
         elif inspect.isasyncgenfunction(factory_or_class):
             factory_or_class = asynccontextmanager(factory_or_class)
 
-        try:
-            node = DependentNode.from_node(factory_or_class, config=node_config)
-        except Exception as e:
-            raise NodeCreationErrorChain(factory_or_class, error=e, form_message=True)
+        # try:
+        node = DependentNode.from_node(factory_or_class, config=node_config)
+        # except Exception as e:
+        #     raise NodeCreationErrorChain(factory_or_class, error=e, form_message=True)
 
         self.register_node(node)
         return factory_or_class

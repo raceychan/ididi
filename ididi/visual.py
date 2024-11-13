@@ -48,7 +48,7 @@ class Visualizer:
         for node in self._dg.nodes.values():
             node_repr = str(node.dependent_type.__name__)
             for dependency in node.signature:
-                dependency_repr = str(dependency.node.dependent_type.__name__)
+                dependency_repr = str(dependency.param_type.__name__)
                 dot.node(node_repr, node_repr, **node_attr)
                 dot.edge(node_repr, dependency_repr, **edge_attr)
 
@@ -70,7 +70,7 @@ class Visualizer:
 
         node_repr = str(dep_node.dependent_type.__name__)
         for dependency in dep_node.signature:
-            dependency_repr = str(dependency.node.dependent_type.__name__)
+            dependency_repr = str(dependency.param_type.__name__)
             dot.node(node_repr, node_repr, **node_attr)
             dot.edge(node_repr, dependency_repr, **edge_attr)
 

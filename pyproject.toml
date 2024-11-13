@@ -22,7 +22,7 @@ path = "ididi/__init__.py"
 py-modules = ["ididi"]
 
 [tool.pytest.ini_options]
-addopts = "-vx --strict-markers --capture=no"
+addopts = "--strict-markers --capture=no"
 filterwarnings = ["ignore::DeprecationWarning"]
 markers = [
   "integration_test: marks tests as slow integration tests (deselect with '-m \"not integration_test\"')",

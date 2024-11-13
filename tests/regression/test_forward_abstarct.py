@@ -31,7 +31,7 @@ class ConcreteService(ExtendedService):
     def __init__(self, name: str = "default"):
         self.name = name
 
-
+@pytest.mark.debug
 def test_forward_ref_protocol_inheritance():
     """
     Test that forward references with protocol inheritance don't work

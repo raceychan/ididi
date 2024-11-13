@@ -5,7 +5,8 @@ import pytest
 
 from ididi.errors import (
     ABCNotImplementedError,
-    NodeCreationErrorChain,
+    MissingAnnotationError,
+    TopLevelBulitinTypeError,
     UnsolvableDependencyError,
 )
 from ididi.graph import DependencyGraph
@@ -68,20 +69,20 @@ def test_dag_resolve(dag: DependencyGraph):
 
 
 def test_get_dependency_types(dag: DependencyGraph):
-    database_dependencies = dag.get_dependency_types(Database)
+    database_dependencies = dag.visitor.get_dependencies(Database)
     assert len(database_dependencies) == 1
     assert Config in database_dependencies
 
 
 def test_get_dependent_types(dag: DependencyGraph):
-    database_dependents = dag.get_dependent_types(Database)
+    database_dependents = dag.visitor.get_dependents(Database)
     assert len(database_dependents) == 2
     assert UserRepository in database_dependents
     assert AuthService in database_dependents
 
 
 def test_top_level_builtin_dependency(dag: DependencyGraph):
-    with pytest.raises(NodeCreationErrorChain):
+    with pytest.raises(TopLevelBulitinTypeError):
         dag.resolve(int)
 
 
@@ -240,27 +241,6 @@ def test_graph_reset(dag: DependencyGraph):
 
     # Verify we got a new instance
     assert instance1 is not instance2
-
-
-def test_graph_repr(dag: DependencyGraph):
-    dag.reset(clear_resolved=True)
-
-    @dag.node
-    class LeafService:
-        pass
-
-    @dag.node
-    class RootService:  #  type: ignore
-        def __init__(self, leaf: LeafService):
-            self.leaf = leaf
-
-    repr_str = dag.__stats__()
-    assert "nodes=2" in repr_str
-    assert "resolved=0" in repr_str
-    assert "RootService" in repr_str
-    assert "LeafService" in repr_str
-
-    str(dag)
 
 
 def test_node_removal_cleanup(dag: DependencyGraph):
@@ -530,7 +510,7 @@ def test_resolve_node_without_annotation():
         def __init__(self, config: Config):
             self.config = config
 
-    with pytest.raises(UnsolvableDependencyError):
+    with pytest.raises(MissingAnnotationError):
         dag.resolve(Service)
 
     @dag.node

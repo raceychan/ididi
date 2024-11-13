@@ -8,8 +8,8 @@ import inspect
 import types
 import typing as ty
 
-from .errors import MissingReturnTypeError
-from .utils.typing_utils import get_full_typed_signature, is_builtin_type
+from .errors import ForwardReferenceNotFoundError, MissingReturnTypeError
+from .utils.typing_utils import eval_type, get_full_typed_signature, is_builtin_type
 
 
 class EmptyInitProtocol(ty.Protocol): ...
@@ -114,3 +114,29 @@ def is_class_with_empty_init(cls: type) -> bool:
     is_undefined_init = cls.__init__ is object.__init__
     is_protocol = cls.__init__ is EmptyInitProtocol.__init__
     return cls is type or is_undefined_init or is_protocol
+
+
+def resolve_forwardref(dependent: type | ty.Callable[..., ty.Any], ref: ty.ForwardRef):
+    if is_function(dependent):
+        globalvs = dependent.__globals__
+    else:
+        globalvs = dependent.__init__.__globals__
+
+    try:
+        return eval_type(ref, globalvs, globalvs)
+    except NameError as e:
+        raise ForwardReferenceNotFoundError(ref) from e
+
+def resolve_annotation(annotation: ty.Any) -> type:
+    origin = ty.get_origin(annotation) or annotation
+
+    if isinstance(annotation, ty.TypeVar):
+        raise GenericDependencyNotSupportedError(annotation)
+
+    # === Solvable dependency, NOTE: order matters!===
+
+    if origin in (types.UnionType, ty.Union):
+        union_types = ty.get_args(annotation)
+        # we don't care which type is correct, it would be provided by the factory
+        return union_types[0]
+    return origin

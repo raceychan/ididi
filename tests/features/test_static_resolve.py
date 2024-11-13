@@ -1,9 +1,6 @@
 import pytest
 
-from ididi.errors import (
-    ForwardReferenceNotFoundError,
-    UnsolvableDependencyError,
-)
+from ididi.errors import ForwardReferenceNotFoundError, UnsolvableDependencyError
 from ididi.graph import DependencyGraph
 
 # Create test classes with various dependency patterns
