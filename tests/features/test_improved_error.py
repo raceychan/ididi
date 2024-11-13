@@ -55,7 +55,7 @@ class EventStore:
 
 def test_improved_error():
     with pytest.raises(MissingAnnotationError) as e:
-        email = dg.resolve(EmailService)
+        email = dg.resolve(UserService)
 
 
 def test_factory_override():

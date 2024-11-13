@@ -180,6 +180,7 @@ def _create_sig[
             default=default,
         )
         dep_params[param.name] = dep_param
+
     return DependentSignature(dprams=dep_params, dependent=dependent)
 
 
@@ -279,6 +280,7 @@ class DependentNode[T]:
             params = params[1:]  # skip 'self'
 
         dpram_sig = _create_sig(dependent=dependent, params=params, config=config)
+
         dep = Dependent(dependent_type=dependent)
         node = DependentNode(
             dependent=dep,

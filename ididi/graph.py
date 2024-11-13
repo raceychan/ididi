@@ -1,7 +1,7 @@
 import inspect
 import typing as ty
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager, contextmanager
-from functools import lru_cache, partial
+from functools import partial
 from types import MappingProxyType, TracebackType
 
 from ._ds import (
@@ -18,6 +18,7 @@ from .errors import (
     PositionalOverrideError,
     TopLevelBulitinTypeError,
     UnsolvableDependencyError,
+    UnsolvableNodeError,
 )
 from .node import DependencyParam, DependentNode, LazyDependent
 from .type_resolve import (
@@ -316,7 +317,6 @@ class DependencyGraph:
         except MissingImplementationError:
             node_config = node_config if is_provided(node_config) else NodeConfig()
             node = DependentNode.from_node(dependent, config=node_config)
-
             self.register_node(node)
         else:
             node = self._nodes[concrete_type]
@@ -384,6 +384,8 @@ class DependencyGraph:
         if is_function(dependent_factory):
             sig = get_typed_signature(dependent_factory)
             dependent: type[T] = sig.return_annotation
+            if dependent not in self.nodes:
+                self.node(dependent_factory)
         else:
             dependent = ty.cast(type[T], dependent_factory)
 
@@ -391,6 +393,7 @@ class DependencyGraph:
             return self._resolved_nodes[dependent]
 
         node = self._resolve_concrete_node(dependent, node_config)
+
         self._actualize_forwardrefs(node)
 
         for param in node.signature:
@@ -409,7 +412,12 @@ class DependencyGraph:
                 )
 
             # Recursively resolve and register dependency
-            dep_node = self.__static_resolve(dep_type, node_config)
+            try:
+                dep_node = self.__static_resolve(dep_type, node_config)
+            except UnsolvableNodeError as une:
+                une.add_context(node.dependent_type, param.name, param.param_annotation)
+                raise
+
             self.register_node(dep_node)
             self._resolved_nodes[dep_type] = dep_node
 
@@ -430,14 +438,10 @@ class DependencyGraph:
         dependent: type[T] | ty.Callable[P, T]
         node_config: NodeConfig
         """
-        # try:
         if is_unresolved_type(dependent):
             raise TopLevelBulitinTypeError(dependent)
+
         return self.__static_resolve(dependent, node_config)
-        # except UnsolvableNode as de:
-        #     raise de
-        # except Exception as e:
-        #     raise NodeCreationErrorChain(dependent, error=e, form_message=True)
 
     @ty.overload
     def resolve[

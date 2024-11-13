@@ -1,5 +1,4 @@
 import typing as ty
-from inspect import Parameter
 
 
 class IDIDIError(Exception):
@@ -41,126 +40,6 @@ class AsyncResourceInSyncError(NodeError):
             f"Requiring async resource {factory} in a sync context is not supported"
         )
 
-# class _ErrorChain:
-#     __slots__ = ("error", "next", "head", "length")
-
-#     error: Exception
-#     next: "_ErrorChain | None"
-#     head: "_ErrorChain"
-#     length: int
-
-#     def __init__(self, *, error: Exception):
-#         self.error = error
-#         if isinstance(error, NodeCreationErrorChain):
-#             self.next = error.error_chain
-#             self.length = error.error_chain.length + 1
-#             self.head = error.error_chain.head
-#         else:
-#             self.next = None
-#             self.length = 0
-#             self.head = self
-
-#     def restart(self) -> None:
-#         """
-#         Restarts the error chain from the head.
-#         """
-
-#         head = self.head
-#         self.next = head.next
-#         self.head = self
-#         del head
-
-#     def _make_error(self) -> str:
-#         """Format the current error node's message."""
-
-#         # TODO: 1. skip middle traceback
-#         # TODO: 2. _make_error should be an method of NodeCreationErrorChain
-#         if not isinstance(self.error, NodeCreationErrorChain):
-#             return ""
-
-#         if not self.error.param:
-#             return ""
-
-#         param_type = self.error.param.annotation
-#         if param_type is Parameter.empty:
-#             param_type = "ididi.Missing"
-#         else:
-#             try:
-#                 param_type = param_type.__name__
-#             except AttributeError:
-#                 param_type = str(param_type)
-
-#         return f"-> {self.error.dependent.__name__}({self.error.param.name}: {param_type})\n"
-
-#     def form_repr(self) -> str:
-#         """
-#         Forms an error chain showing the dependency path that led to the error.
-
-#         Example output:
-#         TokenBucketFactory(aiocache: RedisCache[str])
-#         -> RedisCache[str](redis: Redis)
-#         -> Redis(connection_pool: Optional[ConnectionPool])
-#         -> MissingAnnotationError: Unable to resolve dependency...
-#         """
-#         messages: list[str] = ["\n"]
-#         current_node = self
-#         level = 0
-
-#         # Walk the linked list to build the chain
-#         while current_node:
-#             msg = current_node._make_error()
-#             if msg:
-#                 messages.append(msg)
-#                 level += 1
-#             current_node = current_node.next
-
-#         # Add root cause at the end
-#         messages.append(f"{self.head.error.__class__.__name__}: {self.head.error}")
-#         return "".join(messages)
-
-
-
-
-# class NodeCreationErrorChain(NodeError):
-#     """
-#     Raised when a node can't be created.
-#     This chain up the errors happened in a deep recursion stack.
-#     the root cause can be found in the .error attribute.
-#     """
-
-#     __slots__ = ("dependent", "param", "_root_cause", "error_chain")
-
-#     def __init__(
-#         self,
-#         dependent: type | ty.Callable[..., ty.Any],
-#         *,
-#         error: Exception,
-#         param: Parameter | None = None,
-#         form_message: bool = False,
-#     ):
-#         self.dependent = dependent
-#         self.param = param
-#         self.error_chain = _ErrorChain(error=error)
-#         self._root_cause = self.error_chain.head.error
-#         message = ""
-#         if form_message:
-#             message = self.error_chain.form_repr()
-
-#         super().__init__(message)
-
-#     @property
-#     def error(self) -> Exception:
-#         return self._root_cause
-
-#     def with_error_chain(self) -> "NodeCreationErrorChain":
-#         """Returns a new instance with the error chain formatted in the message."""
-#         return NodeCreationErrorChain(
-#             dependent=self.dependent,
-#             error=self.error,
-#             param=self.param,
-#             form_message=True,
-#         )
-
 
 class NodeResolveError(IDIDIError):
     """
@@ -179,10 +58,14 @@ class PositionalOverrideError(NodeResolveError):
         )
 
 
-class UnsolvableNode(NodeResolveError): ...
+class UnsolvableNodeError(NodeResolveError):
+    def add_context(self, dependent: type, param_name: str, param_annotation: type):
+        self.add_note(
+            f"-> {dependent.__name__}({param_name}: {param_annotation.__name__})"
+        )
 
 
-class UnsolvableDependencyError(UnsolvableNode):
+class UnsolvableDependencyError(UnsolvableNodeError):
     """
     Raised when a dependency parameter can't be built.
     """
@@ -198,7 +81,7 @@ class UnsolvableDependencyError(UnsolvableNode):
         super().__init__(self.message)
 
 
-class ProtocolFacotryNotProvidedError(UnsolvableNode):
+class ProtocolFacotryNotProvidedError(UnsolvableNodeError):
     """
     Raised when a protocol is used as a dependency without a factory.
     """
@@ -209,7 +92,7 @@ class ProtocolFacotryNotProvidedError(UnsolvableNode):
         )
 
 
-class ABCNotImplementedError(UnsolvableNode):
+class ABCNotImplementedError(UnsolvableNodeError):
     """
     Raised when an ABC is used as a dependency without a factory.
     """
@@ -220,7 +103,7 @@ class ABCNotImplementedError(UnsolvableNode):
         )
 
 
-class UnsolvableParameterError(UnsolvableNode):
+class UnsolvableParameterError(UnsolvableNodeError):
     """
     Raised when a parameter is unsolveable.
     """
@@ -260,15 +143,15 @@ class MissingReturnTypeError(UnsolvableParameterError):
         super().__init__(msg)
 
 
-class GenericDependencyNotSupportedError(NodeError):
-    """
-    Raised when attempting to use a generic type that is not yet supported.
-    """
+# class GenericDependencyNotSupportedError(NodeError):
+#     """
+#     Raised when attempting to use a generic type that is not yet supported.
+#     """
 
-    def __init__(self, generic_type: type | ty.TypeVar):
-        super().__init__(
-            f"Using generic a type as a dependency is not yet supported: {generic_type}"
-        )
+#     def __init__(self, generic_type: type | ty.TypeVar):
+#         super().__init__(
+#             f"Using generic a type as a dependency is not yet supported: {generic_type}"
+#         )
 
 
 # =============== Graph Errors ===============
