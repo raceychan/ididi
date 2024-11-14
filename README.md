@@ -78,9 +78,11 @@ assert isinstance(ididi.solve(UserService), UserService)
 
 ### Terminology
 
-dependent: a class, or a function that requires arguments to be built/called.
-dependency: an object that is required by a dependent.
-resource: if a dependent implements the Async/ContextManager, or it has an async/sync generator as its factory, it is considered a resource.
+`dependent`: a class, or a function that requires arguments to be built/called.
+
+`dependency`: an object that is required by a dependent.
+
+`resource`: a dependent that implements the Async/ContextManager, or has an async/sync generator as its factory, it is considered a resource.
 
 ### Automatic dependencies injection
 
