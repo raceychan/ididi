@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 
 import pytest
 
+from ididi._type_resolve import is_closable
 from ididi.errors import (
     ABCNotImplementedError,
     GenericDependencyNotSupportedError,
@@ -11,7 +12,6 @@ from ididi.errors import (
     UnsolvableDependencyError,
 )
 from ididi.graph import DependencyGraph
-from ididi._type_resolve import is_closable
 
 
 # Replace global dag with a fixture

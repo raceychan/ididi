@@ -1,8 +1,7 @@
-import time
 
 import pytest
 
-from ididi import DependencyGraph, entry, solve
+from ididi import entry, solve
 
 
 class Config:
@@ -76,45 +75,6 @@ async def test_graph_entry():
     assert second_entry() == "hello"
     assert await third_entry() == "hello is 18 years old"
 
-
-@pytest.mark.benchmark(group="graph-entry")
-def test_performance():
-    dg = DependencyGraph()
-
-    def hard_coded_factory():
-        config = Config()
-        email = EmailService(
-            notification=NotificationService(config=config),
-            user=UserService(
-                auth=AuthService(
-                    db=DataBase(config=config), cache=CacheService(config=config)
-                ),
-                db=DataBase(config=config),
-            ),
-        )
-        return email
-
-    times = int((10**2))
-    start = time.perf_counter()
-    for _ in range(times):
-        hard_coded_factory()
-    end = time.perf_counter()
-    print(f"Time taken: {round(end - start, 6)} seconds")
-    time1 = end - start
-
-    static_pre = time.perf_counter()
-    dg.static_resolve(EmailService)
-    static_aft = time.perf_counter()
-    static_cost = round(static_aft - static_pre, 6)
-    print(f"static resolve cost {static_cost} seconds")
-
-    start = time.perf_counter()
-    for _ in range(times):
-        dg.resolve(EmailService)
-    end = time.perf_counter()
-    time2 = end - start
-    print(f"Time taken: {round(end - start, 6)} seconds")
-    print(f"hardcoded: {round(time2 / time1, 2)} times faster")
 
 
 def test_solve():

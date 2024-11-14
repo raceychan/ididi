@@ -91,12 +91,13 @@ class ResolutionRegistry(BaseRegistry):
     def register[
         T
     ](self, dependent_type: type[T] | ty.Callable[..., T], instance: T) -> None:
-        if isinstance(dependent_type, type) and issubclass(dependent_type, ty.Protocol):
+        if isinstance(dependent_type, type):
             instance_type: type[T] = type(instance)
             for base in get_bases(instance_type):
+                if base in self._mappings:
+                    continue
                 self._mappings[base] = instance
-        else:
-            self._mappings[dependent_type] = instance
+        self._mappings[dependent_type] = instance
 
     def get[
         T

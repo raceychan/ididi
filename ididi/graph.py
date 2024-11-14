@@ -182,14 +182,18 @@ class DependencyGraph:
             f"resolved={len(self._resolution_registry)})"
         )
 
-    async def __aenter__(self) -> "DependencyGraph":
+    def static_resolve_all(self) -> None:
         if not self._config.static_resolve:
-            return self
+            return None
 
         for node_type in self._nodes.copy():
             if node_type in self._resolved_nodes:
                 continue
             self.static_resolve(node_type)
+        return None
+
+    async def __aenter__(self) -> "DependencyGraph":
+        self.static_resolve_all()
         return self
 
     async def __aexit__(

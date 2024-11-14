@@ -1,4 +1,4 @@
-## Introduction
+# Introduction
 
 ididi is a pythonic dependency injection lib, with ergonomic apis, without boilplate code, works out of the box.
 
@@ -6,11 +6,12 @@ ididi is designed to be non-intrusive, it stays out of your existing code, and i
 
 ididi is 100% strictly typed and well-tested, you can expect excellent typing support.
 
-### Source Code
+## Information
 
+Source Code
 [ididi-github](https://github.com/raceychan/ididi)
 
-### Docs
+Docs
 [ididi-docs](https://raceychan.github.io/ididi/)
 
 ## Install
@@ -54,6 +55,23 @@ class UserService:
 
 assert isinstance(ididi.solve(UserService), UserService)
 ```
+
+### performance
+
+ididi cares about performance, type analysis happens mostly at import time, and intermediate results are cached to avoid duplicate calculation.
+
+with that being said, you might clone the repository and run bench mark yourself by
+`make benchmark`
+
+As a reference:
+
+tests/test_benchmark.py 0.007354 seoncds to statically resolve 122 classes
+
+#### Performance tip
+
+1. use dg.node to decorate your classes
+2. use dg.node to decorate third party classes so that ididi does not need to analyze them
+3. use dg.static_resolve_all when your app starts
 
 ### Automatic dependencies injection
 
@@ -189,6 +207,46 @@ vs.view # use vs.view in jupyter notebook, or use vs.save(path, format) otherwis
 ```
 
 ![image](https://github.com/user-attachments/assets/b86be121-3957-43f3-b75c-3689a855d7fb)
+
+### Circular Dependency Detection
+
+ididi would detect if circular dependency exists, if so, ididi would give you the circular path
+
+For example:
+
+```python
+class A:
+    def __init__(self, b: "B"):
+        self.b = b
+
+
+class B:
+    def __init__(self, a: "C"):
+        self.a = a
+
+
+class C:
+    def __init__(self, d: "D"):
+        pass
+
+
+class D:
+    def __init__(self, a: A):
+        self.a = a
+
+
+def test_advanced_cycle_detection():
+    """
+    DependentNode.resolve_forward_dependency
+    """
+    dag = DependencyGraph()
+
+    with pytest.raises(CircularDependencyDetectedError) as exc_info:
+        dag.resolve(A)
+    assert exc_info.value.cycle_path == [A, B, C, D, A]
+```
+
+This happens when a class is statically resolved
 
 ### Lazy Dependency(Beta)
 
@@ -378,6 +436,63 @@ However, this creates a few problems:
 
 Dependency injection enables you to extend the dependencies of a class without modifying the class itself, which increases the flexibility and reusability of the class.
 
+#### Do we need a DI framework?
+
+It depends on how complicated your dependency graph is,
+for example, you might have something like this in your app,
+where you menually inject dependencies into dependent.
+
+```python
+from .infra import * 
+
+def auth_service_factory(
+    settings: Settings,
+) -> AuthService:
+    connect_args = (
+        settings.db.connect_args.model_dump()
+    )
+    execution_options = (
+        settings.db.execution_options.model_dump()
+    )
+    engine = engine_factory(
+        db_url=settings.db.DB_URL,
+        echo=settings.db.ENGINE_ECHO,
+        isolation_level=settings.db.ISOLATION_LEVEL,
+        pool_pre_ping=True,
+        connect_args=connect_args,
+        execution_options=execution_options,
+    )
+    async_engine = sqlalchemy.ext.asyncio.AsyncEngine(engine)
+    db = AsyncDatabase(async_engine)
+    cahce = RedisCache[str].build(
+        url=config.URL,
+        keyspace=config.keyspaces.APP,
+        socket_timeout=config.SOCKET_TIMEOUT,
+        decode_responses=config.DECODE_RESPONSES,
+        max_connections=config.MAX_CONNECTIONS,
+    )
+    token_registry = TokenRegistry(cahce=cache, 
+        token_bucket=TokenBucket(cache, key=Settings.redis.bucket_key)
+    )
+    uow = UnitOfWork(db)
+    encryptor = Encryptor(
+        secret_key=settings.security.SECRET_KEY.get_secret_value(),
+        algorithm=settings.security.ALGORITHM,  
+    )
+    eventstore =  EventStore(uow)
+    auth_repo = AuthRepository(db)
+    auth_service = AuthService(
+        auth_repo=auth_repo,
+        token_registry=token_registry,
+        encryptor=encryptor,
+        eventstore=eventstore,
+        security_settings=settings.security,
+    )
+    return auth_service
+```
+
+but then you realize that some of these dependencies should be shared across your services, for example, auth repo might be needed by both AuthService and UserService, or even more
+
 ### Terminology
 
 `dependent`: a class, or a function that requires arguments to be built/called.
@@ -446,4 +561,3 @@ you can change this behavior by setting `reuse=False` in `dg.node`.
 @dg.node(reuse=False) # True by default
 class AuthService: ...
 ```
-
