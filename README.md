@@ -84,14 +84,21 @@ assert isinstance(ididi.solve(UserService), UserService)
 
 `resource`: a dependent that implements the Async/ContextManager, or has an async/sync generator as its factory, it is considered a resource.
 
+`static resolve`: resursively build node from dependent, but does not create the instance of the dependent type.
+
+`resolve`: recursively resolve the dependent and its dependencies, then an instance of the dependent.
+
+`solve`: alias for resolve
+
+`entry`: a special type of node, where it has no dependents and its factory is itself.
+
 ### Automatic dependencies injection
 
 You can use generator/async generator to create a resource that needs to be closed.
 NOTE:
 
-1. resources required by a dependent will only be closed when the dependent is exited.
-2. resources will be shared across different dependents only within the same scope, and destroyed when the scope is exited.
-3. error raised when trying to get a async resource in a sync dependent, but sync resource in a async dependent is supported.  
+1. resources, if set to be reused, will be shared across different dependents only within the same scope, and destroyed when the scope is exited.
+2. async resource in a sync dependent is not supported, but sync resource in a async dependent is supported.  
 
 ```python
 from ididi import DependencyGraph
