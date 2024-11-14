@@ -80,7 +80,7 @@ assert isinstance(ididi.solve(UserService), UserService)
 
 dependent: a class, or a function that requires arguments to be built/called.
 dependency: an object that is required by a dependent.
-resource: if a dependent defines an async/sync generator as its factory, it is considered a resource.
+resource: if a dependent implements the Async/ContextManager, or it has an async/sync generator as its factory, it is considered a resource.
 
 ### Automatic dependencies injection
 
@@ -130,6 +130,8 @@ you might use combination of `with` or `async with` statement and `dg.scope()` t
 
 resources will only be shared across dependents only withint the same scope,
 and will be automatically destryoed and closed when the scope is exited.
+
+NOTE: classes that implment `contextlib.AbstractContextManager` or `contextlib.AbstractAsyncContextManager` are also considered to be resources and can be resolved within scope.
 
 ```python
 @dg.node
