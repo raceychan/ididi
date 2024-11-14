@@ -2,7 +2,8 @@
 
 - [ididi](#ididi)
   - [Introduction](#introduction)
-    - [Source Code Link](#source-code-link)
+    - [Source Code](#source-code)
+    - [Docs](#Docs)
   - [Install](#install)
   - [Usage](#usage)
     - [Quick Start](#quick-start)
@@ -34,9 +35,12 @@ ididi is designed to be non-intrusive, it stays out of your existing code, and i
 
 ididi is 100% strictly typed and well-tested, you can expect excellent typing support.
 
-### Source Code Link
+### Source Code
 
-[Github-ididi](https://github.com/raceychan/ididi)
+[ididi-github](https://github.com/raceychan/ididi)
+
+### Docs
+[ididi-docs](https://raceychan.github.io/ididi/)
 
 ## Install
 
