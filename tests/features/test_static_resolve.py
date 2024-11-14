@@ -139,10 +139,14 @@ def test_static_resolve_would_raise_error(dg: DependencyGraph):
         dg.static_resolve(UserService)
 
 
-def test_static_resolve_a_factory(dg: DependencyGraph):
+@pytest.mark.asyncio
+async def test_static_resolve_a_factory(dg: DependencyGraph):
     class DataBase:
         def __init__(self, engine: str):
             self.engine = engine
+
+        def close(self) -> None:
+            return
 
     # @dg.node
     def db_factory() -> DataBase:
@@ -155,3 +159,8 @@ def test_static_resolve_a_factory(dg: DependencyGraph):
     db2 = f()
     assert db2.engine == "test"
     assert db is db2
+
+    len(dg.type_registry)
+
+    async with dg:
+        dg.resolve(DataBase)

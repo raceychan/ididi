@@ -11,6 +11,11 @@ class IDIDIError(Exception):
         super().__init__(self.message)
 
 
+class OutOfScopeError(IDIDIError):
+    def __init__(self):
+        super().__init__("Fail to find any scope")
+
+
 # =============== General Errors ===============
 
 

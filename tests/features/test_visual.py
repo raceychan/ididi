@@ -77,4 +77,6 @@ def test_complex_graph():
             self.user = user
 
     dg.static_resolve(EmailService)
-    vs.make_graph()  # .save("test_visual")
+    vs.dot
+    vs.view
+    # vs.save("test_visual")

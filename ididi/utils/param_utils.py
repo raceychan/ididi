@@ -1,7 +1,5 @@
 import typing as ty
 
-# __all__ = ["NULL", "Nullable", "is_not_null"]
-
 
 class _Missed:
     """
@@ -18,7 +16,6 @@ class _Missed:
         return False
 
 
-MISSING_TYPE = _Missed
 MISSING = _Missed()
 
 
@@ -32,4 +29,4 @@ def is_provided[T](value: Maybe[T]) -> ty.TypeGuard[T]:
     """
     Check if the value is not MISSING.
     """
-    return not isinstance(value, _Missed)
+    return value is not MISSING

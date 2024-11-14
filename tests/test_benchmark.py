@@ -2,7 +2,7 @@ import time
 
 import pytest
 
-from ididi import DependencyGraph
+from ididi import DependencyGraph, Visualizer
 
 dg = DependencyGraph()
 
@@ -751,3 +751,5 @@ def test_static_resolve():
 
     cost = round(aft - pre, 6)
     print(f"{cost} seoncds to statically resolve {len(dg.nodes)} classes")
+
+    # Visualizer(dg).

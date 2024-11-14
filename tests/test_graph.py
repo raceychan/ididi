@@ -8,6 +8,7 @@ from ididi.errors import (
     ABCNotImplementedError,
     GenericDependencyNotSupportedError,
     MissingAnnotationError,
+    PositionalOverrideError,
     TopLevelBulitinTypeError,
     UnsolvableDependencyError,
 )
@@ -332,6 +333,22 @@ def test_unsupported_annotation(dg: DependencyGraph):
     with pytest.raises(UnsolvableDependencyError):
         dg.resolve(BadService)
 
+    class New:
+        def __init__(self, name: str): ...
+
+    with pytest.raises(UnsolvableDependencyError):
+        dg.resolve(New)
+
+    class Old:
+        def __init__(self, age: int = 3): ...
+
+    @dg.node
+    def new_factory(age: int) -> New:
+        return New(age)
+
+    with pytest.raises(UnsolvableDependencyError):
+        dg.resolve(New)
+
 
 def test_resource_type_check(dg: DependencyGraph):
     class NonResource:
@@ -479,6 +496,14 @@ async def test_graph_without_static_resolve(dg: DependencyGraph):
 
         dg.resolve(UserService)
 
+    with pytest.raises(PositionalOverrideError):
+        dg.resolve(UserRepository, 1)  # type: ignore
+
+    with pytest.raises(PositionalOverrideError):
+        await dg.aresolve(UserRepository, 1)
+
+    await dg.aresolve(UserRepository, db="asdf")
+
 
 def test_graph_factory_partial(dg: DependencyGraph):
     factory = dg.factory(UserService, use_async=False)
@@ -541,3 +566,5 @@ def test_generic_service_with_default(dg: DependencyGraph):
     # this should fail, since it is confusing behavior
     with pytest.raises(GenericDependencyNotSupportedError):
         dg.resolve(GenericService[str])
+
+    repr(dg)

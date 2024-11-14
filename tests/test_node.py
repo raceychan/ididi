@@ -1,50 +1,48 @@
+import pytest
 
-# import pytest
-
-# from ididi.errors import (  # GenericDependencyNotSupportedError,; MissingAnnotationError,
-#     MissingReturnTypeError,
-#     UnsolvableDependencyError,
-# )
-# from ididi.node import DependentNode
-
-
-# class A:
-#     def __init__(self, a: int = 5):
-#         self.a = a
+from ididi.errors import (  # GenericDependencyNotSupportedError,; MissingAnnotationError,
+    MissingReturnTypeError,
+    UnsolvableDependencyError,
+)
+from ididi.node import DependentNode
 
 
-# class B:
-#     def __init__(self, b: str = "b"):
-#         self.b = b
+class A:
+    def __init__(self, a: int = 5):
+        self.a = a
 
 
-# class Config:
-#     def __init__(self, env: str = "dev"):
-#         self.env = env
+class B:
+    def __init__(self, b: str = "b"):
+        self.b = b
 
 
-# class Database:
-#     def __init__(self, config: Config):
-#         self.config = config
+class Config:
+    def __init__(self, env: str = "dev"):
+        self.env = env
 
 
-# class Service:
-#     def __init__(self, db: Database):
-#         self.db = db
+class Database:
+    def __init__(self, config: Config):
+        self.config = config
 
 
-# class ComplexDependency:
-#     def __init__(self, a: A, /, b: B, *args: int, config: Config, **kwargs: str):
-#         self.a = a
-#         self.b = b
-#         self.args = args  # This should be a tuple
-#         self.config = config
-#         self.kwargs = kwargs
+class Service:
+    def __init__(self, db: Database):
+        self.db = db
 
 
-# def complex_factory(a: A, b: B, config: Config) -> ComplexDependency:
-#     return ComplexDependency(a, b, 1, 2, 3, config=config, extra="test")
+class ComplexDependency:
+    def __init__(self, a: A, /, b: B, *args: int, config: Config, **kwargs: str):
+        self.a = a
+        self.b = b
+        self.args = args  # This should be a tuple
+        self.config = config
+        self.kwargs = kwargs
 
+
+def complex_factory(a: A, b: B, config: Config) -> ComplexDependency:
+    return ComplexDependency(a, b, 1, 2, 3, config=config, extra="test")
 
 
 # @pytest.fixture
@@ -56,9 +54,9 @@
 #     }
 
 
-# def test_complex_signature():
-#     node = DependentNode.from_node(ComplexDependency)
-#     assert len(node.signature) == 5
+def test_complex_signature():
+    node = DependentNode.from_node(ComplexDependency)
+    node.dependent.dependent_name
 
 
 # def test_factory_function():
@@ -77,25 +75,22 @@
 #     assert factory_obj.kwargs == {"extra": "test"}
 
 
+def test_typed_annotation():
+    # Test forward reference handling
+    class ServiceA:
+        def __init__(self, nums: list[int]):
+            self.nums = nums
 
-# def test_typed_annotation():
-#     # Test forward reference handling
-#     class ServiceA:
-#         def __init__(self, nums: list[int]):
-#             self.nums = nums
-
-#     DependentNode.from_node(ServiceA)
+    DependentNode.from_node(ServiceA)
 
 
-# def test_empty_init():
-#     # Test class with no __init__
-#     class EmptyService:
-#         pass
+def test_empty_init():
+    # Test class with no __init__
+    class EmptyService:
+        pass
 
-#     node = DependentNode.from_node(EmptyService)
-#     instance = node.build()
-#     assert isinstance(instance, EmptyService)
-#     assert not node.signature
+    node = DependentNode.from_node(EmptyService)
+    assert not node.signature
 
 
 # def test_factory_without_return_type():
@@ -119,16 +114,6 @@
 #         node.build()
 
 
-# def test_not_supported_annotation():
-#     class Unsupported:
-#         def __init__(self, exc: Exception):
-#             self.exc = exc
-
-#     node = DependentNode.from_node(Unsupported)
-#     with pytest.raises(UnsolvableDependencyError):
-#         node.build()
-
-
 # def test_weird_annotation():
 #     class Weird:
 #         def __init__(self, a: int | str):
@@ -145,14 +130,15 @@
 #     f.build()
 
 
-# def test_varidc_keyword_args():
-#     class Service:
-#         def __init__(self, **kwargs: int):
-#             self.kwargs = kwargs
+def test_varidc_keyword_args():
+    class Service:
+        def __init__(self, **kwargs: int):
+            self.kwargs = kwargs
 
-#     node = DependentNode.from_node(Service)
-#     with pytest.raises(UnsolvableDependencyError):
-#         node.build()
+    node = DependentNode.from_node(Service)
+    assert node.signature.dprams["kwargs"].unresolvable
+    repr(node)
+
 
 
 # def test_node_repr():

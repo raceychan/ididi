@@ -78,4 +78,8 @@ class Visualizer:
 
     def save(self, output_path: str, format: str = "png") -> None:
         # Render the graph
+        if not self._dot:
+            self.make_graph().save(output_path=output_path, format=format)
+            return
+
         self._dot.render(output_path, format=format, cleanup=True)

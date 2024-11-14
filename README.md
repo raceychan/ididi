@@ -50,10 +50,8 @@ class UserService:
     def __init__(self, repo: UserRepository):
         self.repo = repo
 
-assert isinstance(ididi.solve(UserService), UserService)
+assert isinstance(ididi.resolve(UserService), UserService)
 ```
-
-
 
 ### Automatic dependencies injection
 
@@ -88,7 +86,10 @@ assert await main() == "ok"
 
 ### Using Scope to manage resources
 
-you might use combination of `with` or `async with` statement and `dg.scope()` to manage resources.
+- nested scope is supported.
+- scope can resolve 'normal' dependents as well.
+
+you might use combination of `with` or `async with` statement and `dg.scope()` to manage resources. 
 
 resources will only be shared across dependents only withint the same scope,
 and will be automatically destryoed and closed when the scope is exited.
@@ -108,6 +109,25 @@ with dg.scope() as scope:
 # For async generator
 async with dg.scope() as scope:
     resource = await scope.resolve(Resource)
+```
+
+you can use dg.use_scope to retrive nearest scope, this allows your to have
+access the scope without passing it around, e.g.
+
+```python
+def main():
+    with dg.scope() as scope:
+        global_app = scope.resolve(App)
+```
+
+and somewhere deep in your callstack, you can do
+
+```python
+def somewhere():
+    scope = dg.use_scope()
+    local_app = scope.resolve(App)
+
+assert global_app is local_app
 ```
 
 ### Usage with FastAPI

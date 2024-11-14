@@ -117,6 +117,7 @@ class ResolutionRegistry(BaseRegistry):
 
         if is_async_closable(instance):
             await instance.close()
+
         elif is_closable(instance):
             instance.close()
 

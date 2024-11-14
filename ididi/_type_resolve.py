@@ -25,7 +25,7 @@ type AsyncResource = ty.AsyncContextManager[ty.Any] | AsyncClosable
 
 
 def is_async_closable(type_: object) -> ty.TypeGuard[AsyncClosable]:
-    return isinstance(type_, AsyncClosable)
+    return isinstance(type_, AsyncClosable) and inspect.iscoroutinefunction(type_.close)
 
 
 def is_closable(type_: object) -> ty.TypeGuard[Closable]:

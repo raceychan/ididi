@@ -1,7 +1,6 @@
-
 import pytest
 
-from ididi import entry, solve
+from ididi import entry, resolve
 
 
 class Config:
@@ -76,7 +75,6 @@ async def test_graph_entry():
     assert await third_entry() == "hello is 18 years old"
 
 
-
 def test_solve():
-    email = solve(EmailService)
+    email = resolve(EmailService)
     assert isinstance(email, EmailService)

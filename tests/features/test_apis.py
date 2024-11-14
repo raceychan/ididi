@@ -22,7 +22,7 @@ class UserService:
 
 
 def test_ididi_solve():
-    assert isinstance(ididi.solve(UserService), UserService)
+    assert isinstance(ididi.resolve(UserService), UserService)
 
 
 @ididi.entry

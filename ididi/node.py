@@ -37,7 +37,7 @@ class Dependent[T]:
         return self.dependent_type.__name__
 
 
-# we might make this a descriptor
+# NOTE: we might want to make this a descriptor
 # for dpram in node.signature
 #     setattr(node.dependent_type, LazyDescriptor)
 @dataclass(slots=True)
@@ -240,13 +240,6 @@ class DependentNode[T]:
     def check_for_resolvability(self) -> None:
         if isinstance(self.factory, type):
             # no factory override
-            if is_unresolved_type(self.factory):
-                raise UnsolvableDependencyError(
-                    dep_name=self.dependent.dependent_name,
-                    required_type=self.dependent_type,
-                    factory=self.factory,
-                )
-
             if getattr(self.factory, "_is_protocol", False):
                 raise ProtocolFacotryNotProvidedError(self.factory)
 
@@ -254,14 +247,6 @@ class DependentNode[T]:
                 abstract_methods := getattr(self.factory, "__abstractmethods__", None)
             ):
                 raise ABCNotImplementedError(self.factory, abstract_methods)
-
-        for dpram in self.signature:
-            if dpram.unresolvable:
-                raise UnsolvableDependencyError(
-                    dep_name=dpram.param.name,
-                    factory=dpram.param.annotation,
-                    required_type=self.dependent_type,
-                )
 
     @classmethod
     def create[

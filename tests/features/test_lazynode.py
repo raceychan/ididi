@@ -17,39 +17,44 @@ Here dg.resolve(UserRepository) will return a user_repository instance with db b
 """
 
 
+class Config:
+    def __init__(self, file: str = "config.json"):
+        self.file = file
+
+
+class Database:
+    def __init__(self, config: Config):
+        self.config = config
+
+    def save(self, name: str):
+        return f"saved {name}"
+
+
+class UserRepo:
+    def __init__(self, db: Database, config: Config):
+        self._db = db
+        self.config = config
+
+    def test(self):
+        return "test"
+
+    def save(self, name: str):
+        return self._db.save(name)
+
+    @property
+    def db(self) -> Database:
+        return self._db
+
+
+class SessionRepo:
+    def __init__(self, db: Database):
+        self._db = db
+
+
 def test_lazynode():
     dg = DependencyGraph()
 
-    class Config:
-        def __init__(self, file: str = "config.json"):
-            self.file = file
-
-    class Database:
-        def __init__(self, config: Config):
-            self.config = config
-
-        def save(self, name: str):
-            return f"saved {name}"
-
-    @dg.node(lazy=True)
-    class UserRepo:
-        def __init__(self, db: Database, config: Config):
-            self._db = db
-            self.config = config
-
-        def test(self):
-            return "test"
-
-        def save(self, name: str):
-            return self._db.save(name)
-
-        @property
-        def db(self) -> Database:
-            return self._db
-
-    class SessionRepo:
-        def __init__(self, db: Database):
-            self._db = db
+    dg.node(lazy=True)(UserRepo)
 
     @dg.node(lazy=True)
     class ServiceA:
@@ -72,6 +77,9 @@ def test_lazynode():
     assert isinstance(instance, ServiceA)
 
     assert isinstance(instance.user_repo, LazyDependent)
+
+    repr(instance.user_repo.signature["db"])
+    assert instance.user_repo.dependent_name
     repr(instance.user_repo.db)
     assert isinstance(instance.session_repo, LazyDependent)
 
@@ -81,6 +89,7 @@ def test_lazynode():
 
     assert isinstance(instance.user_repo.db, LazyDependent)
 
+    assert instance.user_repo.config
     assert instance.user_repo.test() == "test"
     repo1 = instance.user_repo
     assert instance.user_repo.save("test") == "saved test"
@@ -102,3 +111,13 @@ def test_lazyfactory():
         @dg.node(lazy=True)
         def service_factory() -> Service:
             return Service(name="test")
+
+
+@pytest.mark.asyncio
+async def aresolve_lazy():
+    dg = DependencyGraph()
+    dg.node(lazy=True)(Database)
+    dg.node(lazy=True)(UserRepo)
+
+    user = await dg.aresolve(UserRepo)
+    user.db.config

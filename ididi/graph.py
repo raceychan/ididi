@@ -1,6 +1,7 @@
 import inspect
 import typing as ty
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager, contextmanager
+from contextvars import ContextVar, Token
 from functools import partial
 from types import MappingProxyType, TracebackType
 
@@ -33,6 +34,7 @@ from .errors import (
     AsyncResourceInSyncError,
     CircularDependencyDetectedError,
     MissingImplementationError,
+    OutOfScopeError,
     PositionalOverrideError,
     ResourceOutsideScopeError,
     TopLevelBulitinTypeError,
@@ -131,7 +133,7 @@ class AsyncScope(AbstractScope[AsyncExitStack]):
 class ScopeProxy:
     _scope: Maybe[SyncScope | AsyncScope]
 
-    __slots__ = ("_graph", "_scope")
+    __slots__ = ("_graph", "_scope", "_token")
 
     def __init__(self, graph: "DependencyGraph"):
         self._graph = graph
@@ -139,21 +141,25 @@ class ScopeProxy:
 
     def __enter__(self) -> SyncScope:
         self._scope = SyncScope(self._graph).__enter__()
+        self._token = self._graph.set_context_scope(self._scope)
         return self._scope
 
     async def __aenter__(self) -> AsyncScope:
         self._scope = await AsyncScope(self._graph).__aenter__()
+        self._token = self._graph.set_context_scope(self._scope)
         return self._scope
 
     def __exit__(
         self, exc_type: type | None, exc_value: ty.Any, traceback: TracebackType | None
     ) -> None:
         ty.cast(SyncScope, self._scope).__exit__(exc_type, exc_value, traceback)
+        self._graph.reset_context_scope(self._token)
 
     async def __aexit__(
         self, exc_type: type | None, exc_value: ty.Any, traceback: TracebackType | None
     ) -> None:
         await ty.cast(AsyncScope, self._scope).__aexit__(exc_type, exc_value, traceback)
+        self._graph.reset_context_scope(self._token)
 
 
 class DependencyGraph:
@@ -174,6 +180,7 @@ class DependencyGraph:
         self._type_registry = TypeRegistry()
         self._config = GraphConfig(static_resolve=static_resolve)
         self._visitor = GraphVisitor[type]()
+        self._scope_context = ContextVar[SyncScope | AsyncScope]("connection_context")
 
     def __repr__(self) -> str:
         return (
@@ -234,6 +241,33 @@ class DependencyGraph:
     @property
     def visitor(self) -> GraphVisitor[type]:
         return self._visitor
+
+    def set_context_scope(
+        self, scope: SyncScope | AsyncScope
+    ) -> Token[SyncScope | AsyncScope]:
+        return self._scope_context.set(scope)
+
+    def reset_context_scope(self, token: Token[SyncScope | AsyncScope]):
+        self._scope_context.reset(token)
+
+    @ty.overload
+    def use_scope(self, as_async: ty.Literal[False] = False) -> SyncScope: ...
+
+    @ty.overload
+    def use_scope(self, as_async: ty.Literal[True]) -> AsyncScope: ...
+
+    def use_scope(self, as_async: bool = False) -> SyncScope | AsyncScope:
+        """
+        Get most recently created scope
+
+        as_async: bool
+        pure typing helper, ignored at runtime
+        """
+        try:
+            scope = self._scope_context.get()
+        except LookupError as le:
+            raise OutOfScopeError() from le
+        return scope
 
     def remove_node(self, node: DependentNode[ty.Any]) -> None:
         """
@@ -474,7 +508,7 @@ class DependencyGraph:
     ](
         self,
         dependent: ty.Callable[P, T],
-        scope: Maybe[SyncScope] = MISSING,
+        scope: Maybe[SyncScope | ty.Any] = MISSING,
         /,
         *args: ty.Any,
         **overrides: ty.Any,
@@ -484,12 +518,8 @@ class DependencyGraph:
         NOTE: overrides will only be applied to the current dependent.
         """
 
-        if args:
+        if args or is_provided(scope) and not isinstance(scope, AbstractScope):
             raise PositionalOverrideError(args)
-
-        # TODO:
-        # if not is_provided(scope):
-        #     self.global_scope.get()
 
         node_dep_type = dependent
 
@@ -532,7 +562,7 @@ class DependencyGraph:
                 raise ResourceOutsideScopeError(node.dependent_type)
             instance = scope.enter_context(resolved)
             if node.config.reuse:
-                scope.resolutions.register(node_dep_type, instance)
+                scope.cache_result(node_dep_type, instance)
             return ty.cast(T, instance)
         elif is_async_context_manager(resolved):
             # since we support ACM class.
@@ -548,15 +578,15 @@ class DependencyGraph:
     ](
         self,
         dependent: ty.Callable[P, T],
+        scope: Maybe[AsyncScope | ty.Any] = MISSING,
         /,
-        scope: Maybe[AsyncScope] = MISSING,
         *args: P.args,
         **overrides: P.kwargs,
     ) -> T:
         """
         Async version of resolve that handles async context managers and coroutines.
         """
-        if args:
+        if args or is_provided(scope) and not isinstance(scope, AbstractScope):
             raise PositionalOverrideError(args)
 
         node_dep_type = dependent
@@ -584,11 +614,6 @@ class DependencyGraph:
                 resolved_args[param_name] = dpram.default
                 continue
 
-            if node.config.lazy:
-                dep_node = self.static_resolve(param_type, node.config)
-                resolved_args[param_name] = self._create_lazy_node(dep_node)
-                continue
-
             resolved_args[param_name] = await self.aresolve(param_type, scope)
 
         bound_args = node.signature.bind_arguments(resolved_args)
@@ -599,7 +624,7 @@ class DependencyGraph:
                 raise ResourceOutsideScopeError(node.dependent_type)
             instance = await scope.enter_async_context(resolved)
             if node.config.reuse:
-                scope.resolutions.register(node_dep_type, instance)
+                scope.cache_result(node_dep_type, instance)
             return ty.cast(T, instance)
 
         if is_context_manager(resolved):
@@ -607,7 +632,7 @@ class DependencyGraph:
                 raise ResourceOutsideScopeError(node.dependent_type)
             instance = scope.enter_context(resolved)
             if node.config.reuse:
-                scope.resolutions.register(node_dep_type, instance)
+                scope.cache_result(node_dep_type, instance)
             return ty.cast(T, instance)
 
         if inspect.isawaitable(resolved):
@@ -660,11 +685,7 @@ class DependencyGraph:
 
         return aresolver if use_async else resolver
 
-    def entry[
-        **P, R
-    ](self, func: IFactory[P, R], /, **kwargs: ty.Unpack[INodeConfig]) -> IFactory[
-        [], R
-    ]:
+    def entry[**P, R](self, func: IFactory[P, R]) -> IFactory[[], R]:
         def func_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             with self.scope() as scope:
                 r = self.resolve(dep, scope, *args, **kwargs)
@@ -681,7 +702,7 @@ class DependencyGraph:
 
         # directly create node without DependecyGraph.node, use func as factory
         node = DependentNode.create(
-            dependent=dep, factory=func, signature=sig, config=NodeConfig(**kwargs)
+            dependent=dep, factory=func, signature=sig, config=NodeConfig()
         )
 
         self.register_node(node)
@@ -698,18 +719,6 @@ class DependencyGraph:
         create a scope for resource,
         resources resolved wihtin the scope would be
         """
-        """
-        we might use contextvar to save scope
-        so that user can have global scope
-
-        e.g. fastapi
-        async with dg.scope():
-             yield
-
-        # with dg.scope():
-        #     dg.resolve(Resource)
-        """
-
         return ScopeProxy(self)
 
     def register_node(self, node: DependentNode[ty.Any]) -> None:
@@ -782,17 +791,10 @@ class DependencyGraph:
         node_config = NodeConfig(**config)
 
         sig = get_typed_signature(factory_or_class)
-        return_type: type[R] = sig.return_annotation
+        return_type: type[R] | ty.ForwardRef = sig.return_annotation
 
-        """
-        TODO: factory for multiple protocol
-        class Closable(ty.Protocol): ...
-        class Resource(ty.Protocol): ...
-
-        @dg.node
-        def resource_factory() -> Closable | Resource
-        
-        """
+        if isinstance(return_type, ty.ForwardRef):
+            return_type = resolve_forwardref(factory_or_class, return_type)
 
         resolved_type = resolve_annotation(return_type)
 
