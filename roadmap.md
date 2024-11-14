@@ -8,7 +8,7 @@ let dg.resolve depends on static resolve, where the result of static resolve is 
 
 ## Version 0.3.0
 
-let DependencyGraph incharge of building nodes, currently node.from_param and _create_sig would build nodes recursively.
+let DependencyGraph incharge of building nodes, currently node.from_param and `_create_sig` would build nodes recursively.
 since they do not have access to the parent graph, they have no way to know whether a node is already registered in the graph and should not be built again.
 
 this is make ididi fail to work in some cases, for example:
@@ -40,7 +40,11 @@ But since dg.node would build node recursively, it would build env anyway, which
 In cases where a dependency is unsolvable by nature, and requires a factory to be provided, this would cause the node creation to fail, even if user did provide the factory.
 Since there is no way to tell if the unsolvable dependency is being provided with a factory or not, given the toppest level node does not know about the graph during its creation.
 
-In the near future, dg.node will only create a node without recursively resolving its sub dependencies, 
+In the near future, dg.node will only create a node without recursively resolving its sub dependencies,
 it only resolve the dependent and the dependencies of the dependent, nothing more.
 
 Node would be fully resolved when `dg.static_resolve` is called.
+
+## version 1.0.0
+
+use contextvar.contextvar for global scope

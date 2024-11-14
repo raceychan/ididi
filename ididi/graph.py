@@ -246,6 +246,8 @@ class DependencyGraph:
         """
         Return types in dependency order (topological sort).
         """
+        # TODO: use visitor
+
         order: list[type] = []
         visited = set[type]()
 
@@ -481,6 +483,10 @@ class DependencyGraph:
         if args:
             raise PositionalOverrideError(args)
 
+        # TODO:
+        # if not is_provided(scope):
+        #     self.global_scope.get()
+
         node_dep_type = dependent
 
         if is_provided(scope) and is_provided(
@@ -688,10 +694,17 @@ class DependencyGraph:
         create a scope for resource,
         resources resolved wihtin the scope would be
         """
-        # TODO: set it to contextvar
-        # so user can do
+        """
+        we might use contextvar to save scope
+        so that user can have global scope
+
+        e.g. fastapi
+        async with dg.scope():
+             yield
+
         # with dg.scope():
         #     dg.resolve(Resource)
+        """
 
         return ScopeProxy(self)
 
@@ -766,12 +779,24 @@ class DependencyGraph:
 
         sig = get_typed_signature(factory_or_class)
         return_type: type[R] = sig.return_annotation
+
+        """
+        TODO: factory for multiple protocol
+        class Closable(ty.Protocol): ...
+        class Resource(ty.Protocol): ...
+
+        @dg.node
+        def resource_factory() -> Closable | Resource
+        
+        """
+
         resolved_type = resolve_annotation(return_type)
 
-        if return_type is not INSPECT_EMPTY and resolved_type in self._nodes:
-            old_node = self._nodes[resolved_type]
-            self.remove_node(old_node)
-            self._visitor.remove_dependent(resolved_type)
+        if resolved_type in self._nodes:
+            if return_type is not INSPECT_EMPTY:
+                old_node = self._nodes[resolved_type]
+                self.remove_node(old_node)
+                self._visitor.remove_dependent(resolved_type)
 
         if inspect.isgeneratorfunction(factory_or_class):
             factory_or_class = contextmanager(factory_or_class)

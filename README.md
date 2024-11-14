@@ -4,6 +4,7 @@
   - [Introduction](#introduction)
     - [Source Code Link](#source-code-link)
   - [Install](#install)
+  - [DOCS](#docs)
   - [Usage](#usage)
     - [Quick Start](#quick-start)
     - [Terminology](#terminology)
@@ -49,6 +50,10 @@ To view viusal dependency graph, install `graphviz`
 ```bash
 pip install ididi[graphviz]
 ```
+
+## DOCS
+
+https://raceychan.github.io/ididi/
 
 ## Usage
 

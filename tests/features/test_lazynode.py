@@ -17,7 +17,6 @@ Here dg.resolve(UserRepository) will return a user_repository instance with db b
 """
 
 
-@pytest.mark.debug
 def test_lazynode():
     dg = DependencyGraph()
 

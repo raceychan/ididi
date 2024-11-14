@@ -102,8 +102,13 @@ def test_performance():
     print(f"Time taken: {round(end - start, 6)} seconds")
     time1 = end - start
 
-    start = time.perf_counter()
+    static_pre = time.perf_counter()
     dg.static_resolve(EmailService)
+    static_aft = time.perf_counter()
+    static_cost = round(static_aft - static_pre, 6)
+    print(f"static resolve cost {static_cost} seconds")
+
+    start = time.perf_counter()
     for _ in range(times):
         dg.resolve(EmailService)
     end = time.perf_counter()
