@@ -18,6 +18,7 @@ class _Missed:
         return False
 
 
+MISSING_TYPE = _Missed
 MISSING = _Missed()
 
 

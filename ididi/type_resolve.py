@@ -8,7 +8,11 @@ import inspect
 import types
 import typing as ty
 
-from .errors import ForwardReferenceNotFoundError, MissingReturnTypeError
+from .errors import (
+    ForwardReferenceNotFoundError,
+    GenericDependencyNotSupportedError,
+    MissingReturnTypeError,
+)
 from .utils.typing_utils import eval_type, get_full_typed_signature, is_builtin_type
 
 
@@ -127,10 +131,12 @@ def resolve_forwardref(dependent: type | ty.Callable[..., ty.Any], ref: ty.Forwa
     except NameError as e:
         raise ForwardReferenceNotFoundError(ref) from e
 
+
 def resolve_annotation(annotation: ty.Any) -> type:
     origin = ty.get_origin(annotation) or annotation
 
     if isinstance(annotation, ty.TypeVar):
+        # origin = MISSING_TYPE
         raise GenericDependencyNotSupportedError(annotation)
 
     # === Solvable dependency, NOTE: order matters!===

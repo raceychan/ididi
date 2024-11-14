@@ -46,10 +46,6 @@
 #     return ComplexDependency(a, b, 1, 2, 3, config=config, extra="test")
 
 
-# class GenericService[T]:
-#     def __init__(self, item: T):
-#         self.item = item
-
 
 # @pytest.fixture
 # def basic_nodes():
@@ -80,10 +76,6 @@
 #     assert factory_obj.config.env == "dev"
 #     assert factory_obj.kwargs == {"extra": "test"}
 
-
-# def test_generic_service_not_supported():
-#     with pytest.raises(NodeCreationErrorChain):
-#         DependentNode.from_node(GenericService[str])
 
 
 # def test_typed_annotation():
