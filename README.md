@@ -53,35 +53,7 @@ class UserService:
 assert isinstance(ididi.solve(UserService), UserService)
 ```
 
-### Performance
 
-ididi cares about performance, type analysis happens mostly at import time, and intermediate results are cached to avoid duplicate calculation.
-
-You might clone the repository and run bench mark yourself by
-
-1. install pixi from [pixi](https://pixi.sh/latest/)
-2. run `pixi install`
-3. run `make benchmark`
-
-As a reference:
-
-tests/test_benchmark.py 0.007354 seoncds to statically resolve 122 classes
-
-#### Performance tip
-
-- use dg.node to decorate your classes
-
-- use dg.node to decorate factory of third party classes so that ididi does not need to analyze them
-
-For Example
-
-```python
-def redis_factory(settings: Settings) -> Redis:
-    # build redis here
-    return redis
-```
-
-- use dg.static_resolve_all when your app starts, which will statically resolve all your classes decorated with @dg.node.
 
 ### Automatic dependencies injection
 
@@ -384,6 +356,63 @@ assert Repository in dag.nodes
 repo = dag.resolve(Repository)
 assert isinstance(repo, Repo1)
 ```
+
+### Dependent that implements multiple protocols
+
+```python
+class UserRepo(ty.Protocol): ...
+
+class SessionRepo(ty.Protocol): ...
+
+@dg.node
+class BothRepo(UserRepo, SessionRepo):
+    def __init__(self, name: str = "test"):
+        self.name = name
+
+class UserApp:
+    def __init__(self, repo: UserRepo):
+        self.repo = repo
+
+class SessionApp:
+    def __init__(self, repo: SessionRepo):
+        self.repo = repo
+
+user = scope.resolve(UserApp)
+session = scope.resolve(SessionApp)
+assert user.repo is session.repo
+
+# same logic for resource with scope
+```
+
+### Performance
+
+ididi cares about performance, type analysis happens mostly at import time, and intermediate results are cached to avoid duplicate calculation.
+
+You might clone the repository and run bench mark yourself by
+
+1. install pixi from [pixi](https://pixi.sh/latest/)
+2. run `pixi install`
+3. run `make benchmark`
+
+As a reference:
+
+tests/test_benchmark.py 0.007354 seoncds to statically resolve 122 classes
+
+#### Performance tip
+
+- use dg.node to decorate your classes
+
+- use dg.node to decorate factory of third party classes so that ididi does not need to analyze them
+
+For Example
+
+```python
+def redis_factory(settings: Settings) -> Redis:
+    # build redis here
+    return redis
+```
+
+- use dg.static_resolve_all when your app starts, which will statically resolve all your classes decorated with @dg.node.
 
 ### Resolve Rules
 
