@@ -82,13 +82,13 @@ assert isinstance(ididi.solve(UserService), UserService)
 
 `dependency`: an object that is required by a dependent.
 
-`resource`: a dependent that implements the Async/ContextManager, or has an async/sync generator as its factory, it is considered a resource.
+`resource`: a dependent that implements the contextlib.AbstractAsync/ContextManager, or has an async/sync generator as its factory, is considered a resource.
 
 `static resolve`: resursively build node from dependent, but does not create the instance of the dependent type.
 
-`resolve`: recursively resolve the dependent and its dependencies, then an instance of the dependent.
+`resolve`: recursively resolve the dependent and its dependencies, then create an instance of the dependent type.
 
-`solve`: alias for resolve
+`solve`: an alias for `resolve`
 
 `entry`: a special type of node, where it has no dependents and its factory is itself.
 
