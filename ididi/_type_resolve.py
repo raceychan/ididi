@@ -8,6 +8,7 @@ import inspect
 import types
 import typing as ty
 
+from ._itypes import AsyncClosable, Closable
 from .errors import (
     ForwardReferenceNotFoundError,
     GenericDependencyNotSupportedError,
@@ -19,21 +20,16 @@ from .utils.typing_utils import eval_type, get_full_typed_signature, is_builtin_
 class EmptyInitProtocol(ty.Protocol): ...
 
 
-@ty.runtime_checkable
-class Closable(ty.Protocol):
-    def close(self) -> None: ...
+type SyncResource = ty.ContextManager[ty.Any] | Closable
+type AsyncResource = ty.AsyncContextManager[ty.Any] | AsyncClosable
 
 
-@ty.runtime_checkable
-class AsyncClosable(ty.Protocol):
-    async def close(self) -> ty.Coroutine[ty.Any, ty.Any, None]: ...
-
-
-type Resource = ty.AsyncContextManager[ty.Any] | AsyncClosable
-
-
-def is_closable(type_: object) -> ty.TypeGuard[AsyncClosable]:
+def is_async_closable(type_: object) -> ty.TypeGuard[AsyncClosable]:
     return isinstance(type_, AsyncClosable)
+
+
+def is_closable(type_: object) -> ty.TypeGuard[Closable]:
+    return isinstance(type_, Closable)
 
 
 def get_typed_signature[
@@ -136,7 +132,6 @@ def resolve_annotation(annotation: ty.Any) -> type:
     origin = ty.get_origin(annotation) or annotation
 
     if isinstance(annotation, ty.TypeVar):
-        # origin = MISSING_TYPE
         raise GenericDependencyNotSupportedError(annotation)
 
     # === Solvable dependency, NOTE: order matters!===

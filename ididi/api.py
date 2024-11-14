@@ -1,7 +1,7 @@
 import typing as ty
 
+from ._itypes import INodeConfig
 from .graph import DependencyGraph as DependencyGraph
-from .types import INodeConfig
 
 
 def entry[

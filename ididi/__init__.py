@@ -18,9 +18,10 @@ VERSION = "0.2.9"
 
 __version__ = VERSION
 
+from ._itypes import GraphConfig as GraphConfig
+from ._itypes import NodeConfig as NodeConfig
 from .api import entry as entry
 from .api import solve as solve
 from .graph import DependencyGraph as DependencyGraph
 from .node import DependentNode as DependentNode
-from .types import INodeConfig as INodeConfig
 from .visual import Visualizer as Visualizer

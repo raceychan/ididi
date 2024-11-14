@@ -16,7 +16,7 @@ class Closable(ty.Protocol):
 
 @ty.runtime_checkable
 class AsyncClosable(ty.Protocol):
-    async def close(self) -> None: ...
+    async def close(self) -> ty.Coroutine[ty.Any, ty.Any, None]: ...
 
 
 class TDecor(ty.Protocol):
@@ -35,7 +35,11 @@ class INodeConfig(ty.TypedDict, total=False):
     """
     reuse: bool
     ---
-    whether the resolved instanec should be reused if it already exists in the graph.
+    whether the resolved instance should be reused if it already exists in the graph.
+
+    lazy: bool
+    ---
+    whether the resolved instance should be a `lazy` dependent, meaning that its dependencies would not be resolved untill the attribute is accessed.
     """
 
     reuse: bool
@@ -51,17 +55,3 @@ class NodeConfig:
 @dataclass(kw_only=True, frozen=True, slots=True, unsafe_hash=True)
 class GraphConfig:
     static_resolve: bool = True
-
-
-# class Override[T](ty.Protocol):
-#     @ty.overload
-#     def __call__[**P](self, dep: ty.Callable[P, T], /) -> T: ...
-
-#     @ty.overload
-#     def __call__[
-#         **P
-#     ](self, dep: ty.Callable[P, T], /, *args: P.args, **kwargs: P.kwargs) -> T: ...
-
-#     def __call__[
-#         **P
-#     ](self, dep: ty.Callable[P, T], /, *args: ty.Any, **kwargs: ty.Any) -> T: ...

@@ -1,5 +1,6 @@
 import pytest
 
+from ididi.errors import ResourceOutsideScopeError
 from ididi.graph import DependencyGraph
 
 dag = DependencyGraph()
@@ -35,16 +36,15 @@ async def test_close_graph_with_resources():
 @pytest.mark.asyncio
 async def test_resource():
     async with dag:
-        resource = dag.resolve(ArbitraryResource)
-        assert not resource.is_closed
-    assert resource.is_closed
+        with pytest.raises(ResourceOutsideScopeError):
+            await dag.aresolve(ArbitraryResource)
 
 
 @pytest.mark.asyncio
 async def test_graph_context_manager():
 
-    async with dag:
-        resource = dag.resolve(ArbitraryResource)
+    async with dag.scope() as scope:
+        resource = await scope.resolve(ArbitraryResource)
         async with resource:
             assert not resource.is_closed
     assert resource.is_closed

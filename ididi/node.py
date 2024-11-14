@@ -5,14 +5,8 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from inspect import Parameter
 
-from .errors import (
-    ABCNotImplementedError,
-    MissingAnnotationError,
-    NotSupportedError,
-    ProtocolFacotryNotProvidedError,
-    UnsolvableDependencyError,
-)
-from .type_resolve import (
+from ._itypes import EMPTY_SIGNATURE, INSPECT_EMPTY, IAsyncFactory, IFactory, NodeConfig
+from ._type_resolve import (
     get_sig_origin_return,
     get_typed_signature,
     is_class,
@@ -21,12 +15,15 @@ from .type_resolve import (
     is_unresolved_type,
     resolve_annotation,
 )
-from .types import EMPTY_SIGNATURE, INSPECT_EMPTY, IAsyncFactory, IFactory, NodeConfig
+from .errors import (
+    ABCNotImplementedError,
+    MissingAnnotationError,
+    NotSupportedError,
+    ProtocolFacotryNotProvidedError,
+    UnsolvableDependencyError,
+)
 from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import get_factory_sig_from_cls
-
-# def factory_placeholder() -> None:
-#     raise NotSupportedError("Factory placeholder should not be called")
 
 
 @dataclass(slots=True)
@@ -40,6 +37,9 @@ class Dependent[T]:
         return self.dependent_type.__name__
 
 
+# we might make this a descriptor
+# for dpram in node.signature
+#     setattr(node.dependent_type, LazyDescriptor)
 @dataclass(slots=True)
 class LazyDependent[T](Dependent[T]):
     dependent_type: type[T]
@@ -288,7 +288,6 @@ class DependentNode[T]:
             signature=dpram_sig,
             config=config,
         )
-
         return node
 
     @classmethod
@@ -339,19 +338,21 @@ class DependentNode[T]:
         cls,
         factory_or_class: type[I] | IFactory[P, I] | IAsyncFactory[P, I],
         *,
-        config: NodeConfig | None = None,
+        config: Maybe[NodeConfig] = MISSING,
     ) -> "DependentNode[I]":
         """
         Build a node from a class, a factory function of the class, or an async factory function of the class
         """
-        config = config or NodeConfig()
+        if not is_provided(config):
+            config = NodeConfig()
+
         if is_class(factory_or_class):
             dependent = factory_or_class
             return cls.from_class(dependent=dependent, config=config)
         else:
+            # TODO: support lazy factory
+            # where attributes other than keyword arguments are lazy
             if config.lazy:
-                # TODO: support lazy factory
-                # where attributes other than keyword arguments are lazy
                 raise NotSupportedError(
                     "Lazy dependency is not supported for factories"
                 )

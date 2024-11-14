@@ -33,7 +33,13 @@ class NodeError(IDIDIError):
 # TODO: 2. make NodeErrorChain more generic
 
 
-class AsyncResourceInSyncError(NodeError):
+class NodeResolveError(IDIDIError):
+    """
+    Base class for all node resolve related exceptions.
+    """
+
+
+class AsyncResourceInSyncError(NodeResolveError):
     def __init__(self, factory: ty.Callable[..., ty.Any]):
         self.factory = factory
         super().__init__(
@@ -41,10 +47,9 @@ class AsyncResourceInSyncError(NodeError):
         )
 
 
-class NodeResolveError(IDIDIError):
-    """
-    Base class for all node resolve related exceptions.
-    """
+class ResourceOutsideScopeError(NodeResolveError):
+    def __init__(self, dependent: type):
+        super().__init__(f"resource {dependent} has to be resolved within scope")
 
 
 class PositionalOverrideError(NodeResolveError):

@@ -6,6 +6,7 @@
   - [Install](#install)
   - [Usage](#usage)
     - [Quick Start](#quick-start)
+    - [Terminology](#terminology)
     - [Automatic dependencies injection](#automatic-dependencies-injection)
     - [Using Scope to manage resources](#using-scope-to-manage-resources)
     - [Usage with FastAPI](#usage-with-fastapi)
@@ -22,15 +23,16 @@
       - [Why do we need it?](#why-do-we-need-it)
     - [FAQ](#faq)
       - [How do I override, or provide a default value for a dependency?](#how-do-i-override-or-provide-a-default-value-for-a-dependency)
+      - [how do i override a dependent in test?](#how-do-i-override-a-dependent-in-test)
       - [How do I make ididi reuse a dependencies across different dependent?](#how-do-i-make-ididi-reuse-a-dependencies-across-different-dependent)
 
 ## Introduction
 
-Ididi is a pythonic dependency injection lib, with ergonomic apis, without boilplate code, works out of the box.
+ididi is a pythonic dependency injection lib, with ergonomic apis, without boilplate code, works out of the box.
 
-It allows you to define dependencies in a declarative way without any boilerplate code.
+ididi is designed to be non-intrusive, it stays out of your existing code, and is easy to be added/removed.
 
-ididi is written and tested under strict type checking, you can exepct very good typing support.
+ididi is 100% strictly typed and well-tested, you can expect excellent typing support.
 
 ### Source Code Link
 
@@ -73,6 +75,12 @@ class UserService:
 
 assert isinstance(ididi.solve(UserService), UserService)
 ```
+
+### Terminology
+
+dependent: a class, or a function that requires arguments to be built/called.
+dependency: an object that is required by a dependent.
+resource: if a dependent defines an async/sync generator as its factory, it is considered a resource.
 
 ### Automatic dependencies injection
 
@@ -119,7 +127,9 @@ assert await main() == "ok"
 ### Using Scope to manage resources
 
 you might use combination of `with` or `async with` statement and `dg.scope()` to manage resources.
-resources will be automatically closed when the scope is exited.
+
+resources will only be shared across dependents only withint the same scope,
+and will be automatically destryoed and closed when the scope is exited.
 
 ```python
 @dg.node
@@ -128,13 +138,17 @@ def get_resource() -> ty.Generator[Resource, None, None]:
     yield res
     res.close()
 
-# async with for async resource
 with dg.scope() as scope:
     resource = scope.resolve(Resource)
-    assert resource.is_opened
+
+# For async generator
+async with dg.scope() as scope:
+    resource = await scope.resolve(Resource)
 ```
 
 ### Usage with FastAPI
+
+NOTE: resource is supported
 
 ```python
 from fastapi import FastAPI
@@ -213,12 +227,12 @@ vs.view # use vs.view in jupyter notebook, or use vs.save(path, format) otherwis
 
 ### Lazy Dependency(Beta)
 
-when a node is defined as 'lazy', each of its dependency will be delayed to be resolved as much as possible.
+you can  use `@dg.node(lazy=True)` to define a dependent as `lazy`,
+which means each of its dependency will not be resolved untill accessed.
 
-Note that 'lazy' is transitive, if `ServiceA` is lazy, and `ServiceA` depends on `ServiceB`, then `ServiceB` is also lazy.
+start with v0.3.0, lazy node is no longer transitive.
 
 ```python
-
 class UserRepo:
     def __init__(self, db: Database):
         self._db = db
@@ -246,7 +260,8 @@ class ServiceA:
 assert isinstance(instance.user_repo, LazyDependent)
 assert isinstance(instance.session_repo, LazyDependent)
 
-assert instance.user_repo.test() == "test" # user_repo would be resolved when user_repo.test is accessed.
+# user_repo would be resolved when user_repo.test() is called.
+assert instance.user_repo.test() == "test" 
 ```
 
 ### Runtime override
@@ -342,6 +357,7 @@ assert isinstance(repo, Repo1)
 - If a node has a factory, it will be used to create the instance.
 - Otherwise, the node will be created using the `__init__` method.
   - Parent's `__init__` will be called if no `__init__` is defined in the node.
+- whenver there is a default value, it will be used to resolve the dependency.
 - bulitin types are not resolvable by nature, it requires default value to be provided.
 - runtime override with `dg.resolve`
 
@@ -395,13 +411,7 @@ However, this creates a few problems:
 - It is not typesafe, you might pass the wrong type of dependencies to the class.
 - It is hard to track when the dependencies are modified.
 
-
 Dependency injection enables you to extend the dependencies of a class without modifying the class itself, which increases the flexibility and reusability of the class.
-
-Let's see an example that shows how dependency injection can be useful.
-
-Scenario: you want to send email to users.
-
 
 ### FAQ
 
@@ -420,7 +430,38 @@ def config_factory() -> Config:
     return Config(env="test")
 ```
 
+#### how do i override a dependent in test?
+
+you can use `dg.node` with a factory method to override the dependent resolution.
+
+```python
+class Cache: ...
+
+class RedisCache(Cache):
+    ...
+
+class MemoryCache(Cache):
+    ...
+
+@dg.node
+def cache_factory(...) -> Cache:
+    return RedisCache() 
+
+in your conftest.py:
+
+@dg.node
+def memory_cache_factory(...) -> Cache:
+    return MemoryCache()    
+```
+
+as this follows LSP, it works both with ididi and type checker.
+
 #### How do I make ididi reuse a dependencies across different dependent?
 
 by default, ididi will reuse the dependencies across different dependent,
 you can change this behavior by setting `reuse=False` in `dg.node`.
+
+```python
+@dg.node(reuse=False) # True by default
+class AuthService: ...
+```

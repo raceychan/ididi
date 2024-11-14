@@ -2,8 +2,8 @@ import typing as ty
 from collections import defaultdict
 from types import MappingProxyType
 
+from ._type_resolve import is_async_closable, is_closable
 from .node import DependentNode
-from .type_resolve import is_closable
 from .utils.param_utils import MISSING, Maybe
 
 type GraphNodes[I] = dict[type[I], DependentNode[I]]
@@ -75,6 +75,9 @@ class TypeRegistry(BaseRegistry):
 class ResolutionRegistry(BaseRegistry):
     __slots__ = ("_mappings",)
 
+    # TODO: close_callback_registry
+    # type close_callback[T] = ty.Callable[[T], None | ty.Awaitable[None]]
+
     def __init__(self):
         self._mappings: ResolvedInstances[ty.Any] = {}
 
@@ -101,8 +104,14 @@ class ResolutionRegistry(BaseRegistry):
 
     async def close(self, dependent_type: type) -> None:
         instance = self._mappings.pop(dependent_type, None)
-        if instance and is_closable(instance):
+
+        if not instance:
+            return
+
+        if is_async_closable(instance):
             await instance.close()
+        elif is_closable(instance):
+            instance.close()
 
     async def close_all(self, close_order: ty.Iterable[type]) -> None:
         for type_ in close_order:

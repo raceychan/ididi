@@ -17,7 +17,7 @@ Here dg.resolve(UserRepository) will return a user_repository instance with db b
 """
 
 
-@pytest.mark.skip("TODO: support recursive lazy dependent")
+@pytest.mark.debug
 def test_lazynode():
     dg = DependencyGraph()
 
@@ -32,6 +32,7 @@ def test_lazynode():
         def save(self, name: str):
             return f"saved {name}"
 
+    @dg.node(lazy=True)
     class UserRepo:
         def __init__(self, db: Database, config: Config):
             self._db = db
@@ -77,15 +78,15 @@ def test_lazynode():
 
     db1 = instance.user_repo._db
     db2 = instance.session_repo._db
-    assert db1 is db2
+    assert db1 is not db2
 
-    # TODO: support recursive lazy dependent
-    assert isinstance(instance.user_repo.config, LazyDependent)
+    assert isinstance(instance.user_repo.db, LazyDependent)
 
     assert instance.user_repo.test() == "test"
     repo1 = instance.user_repo
     assert instance.user_repo.save("test") == "saved test"
     repo2 = instance.user_repo
+
     assert repo1 is repo2
 
 

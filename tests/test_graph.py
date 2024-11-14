@@ -11,7 +11,7 @@ from ididi.errors import (
     UnsolvableDependencyError,
 )
 from ididi.graph import DependencyGraph
-from ididi.type_resolve import is_closable
+from ididi._type_resolve import is_closable
 
 
 # Replace global dag with a fixture
@@ -413,22 +413,18 @@ def test_abstract_base_resolution(dg: DependencyGraph):
 
 
 def test_multiple_dependency_paths(dg: DependencyGraph):
-    @dg.node
     class Shared:
         def __init__(self, value: str = "shared"):
             self.value = value
 
-    @dg.node
     class Service1:
         def __init__(self, shared2: Shared):
             self.shared2 = shared2
 
-    @dg.node
     class Service2:
         def __init__(self, shared1: Shared):
             self.shared1 = shared1
 
-    @dg.node
     class Root:
         def __init__(self, s1: Service1, s2: Service2):
             self.s1 = s1

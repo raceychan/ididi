@@ -11,26 +11,7 @@ from ._ds import (
     ResolutionRegistry,
     TypeRegistry,
 )
-from .errors import (
-    AsyncResourceInSyncError,
-    CircularDependencyDetectedError,
-    MissingImplementationError,
-    PositionalOverrideError,
-    TopLevelBulitinTypeError,
-    UnsolvableDependencyError,
-    UnsolvableNodeError,
-)
-from .node import DependencyParam, DependentNode, LazyDependent
-from .type_resolve import (
-    get_typed_signature,
-    is_async_context_manager,
-    is_context_manager,
-    is_function,
-    is_unresolved_type,
-    resolve_annotation,
-    resolve_forwardref,
-)
-from .types import (
+from ._itypes import (
     INSPECT_EMPTY,
     GraphConfig,
     IAsyncFactory,
@@ -39,6 +20,26 @@ from .types import (
     NodeConfig,
     TDecor,
 )
+from ._type_resolve import (
+    get_typed_signature,
+    is_async_context_manager,
+    is_context_manager,
+    is_function,
+    is_unresolved_type,
+    resolve_annotation,
+    resolve_forwardref,
+)
+from .errors import (
+    AsyncResourceInSyncError,
+    CircularDependencyDetectedError,
+    MissingImplementationError,
+    PositionalOverrideError,
+    ResourceOutsideScopeError,
+    TopLevelBulitinTypeError,
+    UnsolvableDependencyError,
+    UnsolvableNodeError,
+)
+from .node import DependencyParam, DependentNode, LazyDependent
 from .utils.param_utils import MISSING, Maybe, is_provided
 
 
@@ -320,6 +321,7 @@ class DependencyGraph:
             self.register_node(node)
         else:
             node = self._nodes[concrete_type]
+
         return node
 
     def replace_node(
@@ -331,16 +333,12 @@ class DependencyGraph:
         self.remove_node(old_node)
         self.register_node(new_node)
 
-    def _create_lazy_node[
-        T
-    ](
-        self, node: DependentNode[T], scope: Maybe[SyncScope], node_config: NodeConfig
-    ) -> LazyDependent[T]:
+    def _create_lazy_node[T](self, node: DependentNode[T]) -> LazyDependent[T]:
         """Create a lazy version of a node with appropriate resolver."""
 
         def resolver(dep_type: type[T]) -> T:
-            self.static_resolve(dep_type, node_config)
-            return self.resolve(dep_type, scope)
+            self.static_resolve(dep_type)
+            return self.resolve(dep_type)
 
         return LazyDependent(
             dependent_type=node.dependent_type,
@@ -381,10 +379,12 @@ class DependencyGraph:
         """
         Resolve a dependency without building its instance.
         """
+
         if is_function(dependent_factory):
             sig = get_typed_signature(dependent_factory)
             dependent: type[T] = sig.return_annotation
             if dependent not in self.nodes:
+                # create node and register
                 self.node(dependent_factory)
         else:
             dependent = ty.cast(type[T], dependent_factory)
@@ -393,7 +393,6 @@ class DependencyGraph:
             return self._resolved_nodes[dependent]
 
         node = self._resolve_concrete_node(dependent, node_config)
-
         self._actualize_forwardrefs(node)
 
         for param in node.signature:
@@ -440,14 +439,16 @@ class DependencyGraph:
         """
         if is_unresolved_type(dependent):
             raise TopLevelBulitinTypeError(dependent)
-
         return self.__static_resolve(dependent, node_config)
 
     @ty.overload
     def resolve[
         **P, T
     ](
-        self, dependent: ty.Callable[P, T], scope: Maybe[SyncScope] = MISSING, /
+        self,
+        dependent: ty.Callable[P, T],
+        scope: Maybe[SyncScope] = MISSING,
+        /,
     ) -> T: ...
 
     @ty.overload
@@ -508,9 +509,7 @@ class DependencyGraph:
 
             if node.config.lazy:
                 dep_node = self.static_resolve(param_type, node.config)
-                resolved_args[param_name] = self._create_lazy_node(
-                    dep_node, scope, node.config
-                )
+                resolved_args[param_name] = self._create_lazy_node(dep_node)
                 continue
 
             resolved_args[param_name] = self.resolve(param_type, scope)
@@ -519,9 +518,11 @@ class DependencyGraph:
         resolved = node.factory(**bound_args.arguments)
 
         if is_context_manager(resolved):
-            assert is_provided(scope)
+            if not is_provided(scope):
+                raise ResourceOutsideScopeError(node.dependent_type)
             instance = scope.enter_context(resolved)
-            scope.resolutions.register(node_dep_type, instance)
+            if node.config.reuse:
+                scope.resolutions.register(node_dep_type, instance)
             return ty.cast(T, instance)
         elif is_async_context_manager(resolved):
             # since we support ACM class.
@@ -575,27 +576,28 @@ class DependencyGraph:
 
             if node.config.lazy:
                 dep_node = self.static_resolve(param_type, node.config)
-                resolved_args[param_name] = self._create_lazy_node(
-                    dep_node, scope, node.config
-                )
+                resolved_args[param_name] = self._create_lazy_node(dep_node)
                 continue
 
             resolved_args[param_name] = await self.aresolve(param_type, scope)
 
         bound_args = node.signature.bind_arguments(resolved_args)
-
         resolved = node.factory(**bound_args.arguments)
 
         if is_async_context_manager(resolved):
-            assert is_provided(scope)
+            if not is_provided(scope):
+                raise ResourceOutsideScopeError(node.dependent_type)
             instance = await scope.enter_async_context(resolved)
-            scope.resolutions.register(node_dep_type, instance)
+            if node.config.reuse:
+                scope.resolutions.register(node_dep_type, instance)
             return ty.cast(T, instance)
 
         if is_context_manager(resolved):
-            assert is_provided(scope)
+            if not is_provided(scope):
+                raise ResourceOutsideScopeError(node.dependent_type)
             instance = scope.enter_context(resolved)
-            scope.resolutions.register(node_dep_type, instance)
+            if node.config.reuse:
+                scope.resolutions.register(node_dep_type, instance)
             return ty.cast(T, instance)
 
         if inspect.isawaitable(resolved):
@@ -667,12 +669,10 @@ class DependencyGraph:
         dep = ty.cast(type[R], entry_type)
         sig = get_typed_signature(func)
 
-        # try:
+        # directly create node without DependecyGraph.node, use func as factory
         node = DependentNode.create(
             dependent=dep, factory=func, signature=sig, config=NodeConfig(**kwargs)
         )
-        # except Exception as e:
-        #     raise NodeCreationErrorChain(func, error=e, form_message=True) from e
 
         self.register_node(node)
 
@@ -684,6 +684,15 @@ class DependencyGraph:
         return ty.cast(IFactory[[], R], f)
 
     def scope(self) -> ScopeProxy:
+        """
+        create a scope for resource,
+        resources resolved wihtin the scope would be
+        """
+        # TODO: set it to contextvar
+        # so user can do
+        # with dg.scope():
+        #     dg.resolve(Resource)
+
         return ScopeProxy(self)
 
     def register_node(self, node: DependentNode[ty.Any]) -> None:
@@ -769,10 +778,6 @@ class DependencyGraph:
         elif inspect.isasyncgenfunction(factory_or_class):
             factory_or_class = asynccontextmanager(factory_or_class)
 
-        # try:
         node = DependentNode.from_node(factory_or_class, config=node_config)
-        # except Exception as e:
-        #     raise NodeCreationErrorChain(factory_or_class, error=e, form_message=True)
-
         self.register_node(node)
         return factory_or_class
