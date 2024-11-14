@@ -501,7 +501,6 @@ def test_graph_replace_node(dg: DependencyGraph):
     dg.replace_node(node, node)
 
 
-@pytest.mark.debug
 def test_resolve_node_without_annotation():
     dag = DependencyGraph()
 
@@ -529,7 +528,6 @@ class GenericService[T]:
         self.item = item
 
 
-@pytest.mark.debug
 def test_generic_service_not_supported(dg: DependencyGraph):
     with pytest.raises(GenericDependencyNotSupportedError):
         dg.resolve(GenericService[str])

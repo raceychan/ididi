@@ -1,3 +1,35 @@
+<<<<<<< HEAD
+=======
+# ididi
+
+- [ididi](#ididi)
+  - [Introduction](#introduction)
+    - [Source Code Link](#source-code-link)
+  - [Install](#install)
+  - [DOCS](#docs)
+  - [Usage](#usage)
+    - [Quick Start](#quick-start)
+    - [Terminology](#terminology)
+    - [Automatic dependencies injection](#automatic-dependencies-injection)
+    - [Using Scope to manage resources](#using-scope-to-manage-resources)
+    - [Usage with FastAPI](#usage-with-fastapi)
+    - [Visualize the dependency graph(beta)](#visualize-the-dependency-graphbeta)
+    - [Lazy Dependency(Beta)](#lazy-dependencybeta)
+    - [Runtime override](#runtime-override)
+    - [Advanced Usage](#advanced-usage)
+      - [ABC](#abc)
+        - [Register ABC implementation with `dg.node`](#register-abc-implementation-with-dgnode)
+        - [Multiple Implementations of ABC](#multiple-implementations-of-abc)
+    - [Resolve Rules](#resolve-rules)
+    - [What and why](#what-and-why)
+      - [What is dependency injection?](#what-is-dependency-injection)
+      - [Why do we need it?](#why-do-we-need-it)
+    - [FAQ](#faq)
+      - [How do I override, or provide a default value for a dependency?](#how-do-i-override-or-provide-a-default-value-for-a-dependency)
+      - [how do i override a dependent in test?](#how-do-i-override-a-dependent-in-test)
+      - [How do I make ididi reuse a dependencies across different dependent?](#how-do-i-make-ididi-reuse-a-dependencies-across-different-dependent)
+
+>>>>>>> a48f988 (Release version 0.3.1)
 ## Introduction
 
 ididi is a pythonic dependency injection lib, with ergonomic apis, without boilplate code, works out of the box.
@@ -24,6 +56,10 @@ To view viusal dependency graph, install `graphviz`
 ```bash
 pip install ididi[graphviz]
 ```
+
+## DOCS
+
+https://raceychan.github.io/ididi/
 
 ## Usage
 

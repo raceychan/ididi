@@ -69,14 +69,6 @@ def is_unresolved_type(t: ty.Any) -> bool:
     return is_builtin_type(t)
 
 
-# def is_generator[T](t: T) -> ty.TypeGuard[ty.Generator[T, None, None]]:
-#     return ty.get_origin(t) is collections.abc.Generator
-
-
-# def is_async_generator[T](t: T) -> ty.TypeGuard[ty.AsyncGenerator[T, None]]:
-#     return ty.get_origin(t) is collections.abc.AsyncGenerator
-
-
 def is_context_manager[T](t: T) -> ty.TypeGuard[ty.ContextManager[T]]:
     return isinstance(t, contextlib.AbstractContextManager)
 
@@ -141,3 +133,12 @@ def resolve_annotation(annotation: ty.Any) -> type:
         # we don't care which type is correct, it would be provided by the factory
         return union_types[0]
     return origin
+
+
+def get_bases(dependent: type) -> tuple[type, ...]:
+    if issubclass(dependent, ty.Protocol):
+        # -3 excludes ty.Protocol, ty.Generic, object
+        bases = ty.cast(type, dependent).__mro__[1:-3]
+    else:
+        bases = dependent.__mro__[1:-1]
+    return bases

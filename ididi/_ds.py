@@ -2,7 +2,7 @@ import typing as ty
 from collections import defaultdict
 from types import MappingProxyType
 
-from ._type_resolve import is_async_closable, is_closable
+from ._type_resolve import get_bases, is_async_closable, is_closable
 from .node import DependentNode
 from .utils.param_utils import MISSING, Maybe
 
@@ -53,12 +53,13 @@ class TypeRegistry(BaseRegistry):
 
     def register[T](self, dependent_type: type[T]) -> None:
         self._mappings[dependent_type].append(dependent_type)
-        for base in dependent_type.__mro__[1:-1]:
+        for base in get_bases(dependent_type):
             self._mappings[base].append(dependent_type)
 
     def remove(self, dependent_type: type):
-        for base in dependent_type.__mro__[1:-1]:
+        for base in get_bases(dependent_type):
             self._mappings[base].remove(dependent_type)
+
         del self._mappings[dependent_type]
 
     def get[
@@ -90,7 +91,12 @@ class ResolutionRegistry(BaseRegistry):
     def register[
         T
     ](self, dependent_type: type[T] | ty.Callable[..., T], instance: T) -> None:
-        self._mappings[dependent_type] = instance
+        if isinstance(dependent_type, type) and issubclass(dependent_type, ty.Protocol):
+            instance_type: type[T] = type(instance)
+            for base in get_bases(instance_type):
+                self._mappings[base] = instance
+        else:
+            self._mappings[dependent_type] = instance
 
     def get[
         T

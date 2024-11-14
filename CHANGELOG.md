@@ -195,11 +195,3 @@ dg.resolve(Service)
 
 This would previously raise `NodeCreationError`, with root cause being `MissingAnnotationErro`, now being fixed.
 
-## version 0.3.0
-
-- [ ] lazy factory
-
-```python
-class AutherService:
-    def __init__(self, db, cache, )
-```
