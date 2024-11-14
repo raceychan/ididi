@@ -1,32 +1,3 @@
-# ididi
-
-- [ididi](#ididi)
-  - [Introduction](#introduction)
-    - [Source Code](#source-code)
-    - [Docs](#Docs)
-  - [Install](#install)
-  - [Usage](#usage)
-    - [Quick Start](#quick-start)
-    - [Terminology](#terminology)
-    - [Automatic dependencies injection](#automatic-dependencies-injection)
-    - [Using Scope to manage resources](#using-scope-to-manage-resources)
-    - [Usage with FastAPI](#usage-with-fastapi)
-    - [Visualize the dependency graph(beta)](#visualize-the-dependency-graphbeta)
-    - [Lazy Dependency(Beta)](#lazy-dependencybeta)
-    - [Runtime override](#runtime-override)
-    - [Advanced Usage](#advanced-usage)
-      - [ABC](#abc)
-        - [Register ABC implementation with `dg.node`](#register-abc-implementation-with-dgnode)
-        - [Multiple Implementations of ABC](#multiple-implementations-of-abc)
-    - [Resolve Rules](#resolve-rules)
-    - [What and why](#what-and-why)
-      - [What is dependency injection?](#what-is-dependency-injection)
-      - [Why do we need it?](#why-do-we-need-it)
-    - [FAQ](#faq)
-      - [How do I override, or provide a default value for a dependency?](#how-do-i-override-or-provide-a-default-value-for-a-dependency)
-      - [how do i override a dependent in test?](#how-do-i-override-a-dependent-in-test)
-      - [How do I make ididi reuse a dependencies across different dependent?](#how-do-i-make-ididi-reuse-a-dependencies-across-different-dependent)
-
 ## Introduction
 
 ididi is a pythonic dependency injection lib, with ergonomic apis, without boilplate code, works out of the box.
@@ -80,22 +51,6 @@ class UserService:
 assert isinstance(ididi.solve(UserService), UserService)
 ```
 
-### Terminology
-
-`dependent`: a class, or a function that requires arguments to be built/called.
-
-`dependency`: an object that is required by a dependent.
-
-`resource`: a dependent that implements the contextlib.AbstractAsync/ContextManager, or has an async/sync generator as its factory, is considered a resource.
-
-`static resolve`: resursively build node from dependent, but does not create the instance of the dependent type.
-
-`resolve`: recursively resolve the dependent and its dependencies, then create an instance of the dependent type.
-
-`solve`: an alias for `resolve`
-
-`entry`: a special type of node, where it has no dependents and its factory is itself.
-
 ### Automatic dependencies injection
 
 You can use generator/async generator to create a resource that needs to be closed.
@@ -107,16 +62,6 @@ NOTE:
 ```python
 from ididi import DependencyGraph
 dg = DependencyGraph()
-
-@dg.node
-async def get_client() -> ty.AsyncGenerator[Client, None]:
-    client = Client()
-    try:
-        client.open()
-        yield client
-    finally:
-        await client.close()
-
 
 @dg.node
 async def get_db(client: Client) -> ty.AsyncGenerator[DataBase, None]:
@@ -175,8 +120,9 @@ dg = DependencyGraph()
 class AuthService: ...
 
 @dg.node
-def auth_service_factory() -> AuthService:
-    return AuthService()
+def auth_service_factory(db: DataBase) -> AuthService:
+    asycn with AuthService(db=db) as auth:
+        yield auth
 
 Service = ty.Annotated[AuthService, Depends(dg.factory(auth_service_factory))]
 
@@ -428,6 +374,22 @@ However, this creates a few problems:
 
 Dependency injection enables you to extend the dependencies of a class without modifying the class itself, which increases the flexibility and reusability of the class.
 
+### Terminology
+
+`dependent`: a class, or a function that requires arguments to be built/called.
+
+`dependency`: an object that is required by a dependent.
+
+`resource`: a dependent that implements the contextlib.AbstractAsync/ContextManager, or has an async/sync generator as its factory, is considered a resource.
+
+`static resolve`: resursively build node from dependent, but does not create the instance of the dependent type.
+
+`resolve`: recursively resolve the dependent and its dependencies, then create an instance of the dependent type.
+
+`solve`: an alias for `resolve`
+
+`entry`: a special type of node, where it has no dependents and its factory is itself.
+
 ### FAQ
 
 #### How do I override, or provide a default value for a dependency?
@@ -480,3 +442,4 @@ you can change this behavior by setting `reuse=False` in `dg.node`.
 @dg.node(reuse=False) # True by default
 class AuthService: ...
 ```
+
