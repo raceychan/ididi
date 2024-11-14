@@ -26,9 +26,6 @@ To view viusal dependency graph, install `graphviz`
 pip install ididi[graphviz]
 ```
 
-## DOCS
-
-https://raceychan.github.io/ididi/
 
 ## Usage
 
@@ -56,12 +53,15 @@ class UserService:
 assert isinstance(ididi.solve(UserService), UserService)
 ```
 
-### performance
+### Performance
 
 ididi cares about performance, type analysis happens mostly at import time, and intermediate results are cached to avoid duplicate calculation.
 
-with that being said, you might clone the repository and run bench mark yourself by
-`make benchmark`
+You might clone the repository and run bench mark yourself by
+
+1. install pixi from [pixi](https://pixi.sh/latest/)
+2. run `pixi install`
+3. run `make benchmark`
 
 As a reference:
 
@@ -69,9 +69,19 @@ tests/test_benchmark.py 0.007354 seoncds to statically resolve 122 classes
 
 #### Performance tip
 
-1. use dg.node to decorate your classes
-2. use dg.node to decorate third party classes so that ididi does not need to analyze them
-3. use dg.static_resolve_all when your app starts
+- use dg.node to decorate your classes
+
+- use dg.node to decorate factory of third party classes so that ididi does not need to analyze them
+
+For Example
+
+```python
+def redis_factory(settings: Settings) -> Redis:
+    # build redis here
+    return redis
+```
+
+- use dg.static_resolve_all when your app starts, which will statically resolve all your classes decorated with @dg.node.
 
 ### Automatic dependencies injection
 
