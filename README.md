@@ -405,17 +405,30 @@ assert user.repo is session.repo
 
 ### Performance
 
-ididi cares about performance, type analysis happens mostly at import time, and intermediate results are cached to avoid duplicate calculation.
+ididi is very efficient and performant,
 
-You might clone the repository and run bench mark yourself by
+#### `DependencyGraph.statical_resolve` (type analysis on each class, can be done at import time)
 
-1. install pixi from [pixi](https://pixi.sh/latest/)
-2. run `pixi install`
-3. run `make benchmark`
+Time Complexity: O(n) - O(n**2)
+
+O(n): more-real case, where each dependent has a constant number of dependencies, for example, each dependents has on average 3 dependencies.
+
+O(n**2): worst case, where each dependent has as much as possible number of dependencies, for example, with 100 nodes, node 1 has 99 dependencies, node 2 has 98, etc.
+
+#### `DependencyGraph.resolve` (inject dependencies and build the dependent instance)
+
+Time Complexity: O(n)
+
+You might run the benchmark yourself with following steps
+
+1. clone the repo, cd to project root
+2. install pixi from [pixi](https://pixi.sh/latest/)
+3. run `pixi install`
+4. run `make benchmark`
 
 As a reference:
 
-tests/test_benchmark.py 0.007354 seoncds to statically resolve 122 classes
+tests/test_benchmark.py 0.003801 seoncds to statically resolve 122 classes
 
 #### Performance tip
 

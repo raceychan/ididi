@@ -752,4 +752,12 @@ def test_static_resolve():
     cost = round(aft - pre, 6)
     print(f"{cost} seoncds to statically resolve {len(dg.nodes)} classes")
 
-    # Visualizer(dg).
+    t = ConflictResolver
+    pre = time.perf_counter()
+    r = dg.resolve(t)
+    aft = time.perf_counter()
+
+    cost = round(aft - pre, 6)
+
+    deps = dg.visitor.get_dependencies(t, recursive=True)
+    print(f"{cost} seoncds to resolve {t} with {len(deps)} dependencies")

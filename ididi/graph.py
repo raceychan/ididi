@@ -185,11 +185,32 @@ class Visitor:
             dfs(dep)
         return dependents
 
-    def get_dependencies(self, dependent: type) -> list[type]:
+    def get_dependencies(self, dependent: type, recursive: bool = False) -> list[type]:
         """
         return dependencies of a dependent, both need to be in the graph
+
+        recursive: bool; if true, return recursive dependencies.
         """
-        return [p.param_type for _, p in self._nodes[dependent].signature]
+        if not recursive:
+            return [p.param_type for _, p in self._nodes[dependent].signature]
+
+        visited: set[type] = set()
+        dependencies: list[type] = []
+
+        def dfs(dep: type):
+            if dep in visited:
+                return
+            visited.add(dep)
+            node = self._nodes[dep]
+            for _, dep_param in node.signature:
+                param_type = dep_param.param_type
+                dependencies.append(param_type)
+                if param_type not in self._nodes:
+                    continue
+                dfs(param_type)
+
+        dfs(dependent)
+        return dependencies
 
 
 class DependencyGraph:
@@ -321,7 +342,7 @@ class DependencyGraph:
         order: list[type] = []
         visited = set[type]()
 
-        def visit(node_type: type):
+        def dfs(node_type: type):
             if node_type in visited:
                 return
 
@@ -331,12 +352,12 @@ class DependencyGraph:
                 dependent_type = dep_param.param_type
                 if dependent_type not in self._nodes:
                     continue
-                visit(dependent_type)
+                dfs(dependent_type)
 
             order.append(node_type)
 
         for node_type in self._nodes:
-            visit(node_type)
+            dfs(node_type)
 
         return order
 
@@ -463,13 +484,10 @@ class DependencyGraph:
                     i = current_path.index(param_type)
                     cycle = current_path[i:] + [param_type]
                     raise CircularDependencyDetectedError(cycle)
-
-                if param_type in self._nodes:
+                if param_type in self._nodes:  # shared dependency
                     continue
-
                 if is_provided(param.default):
                     continue
-
                 if param.unresolvable:
                     raise UnsolvableDependencyError(
                         dep_name=param.name,
@@ -477,7 +495,6 @@ class DependencyGraph:
                         factory=node.factory,
                     )
 
-                # Recursively resolve and register dependency
                 try:
                     dep_node = dfs(param_type, node_config)
                 except UnsolvableNodeError as une:

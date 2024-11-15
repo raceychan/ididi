@@ -112,13 +112,14 @@ class DependencyParam[T]:
 
     @property
     def unresolvable(self) -> bool:
+        "if the param is variadic or is of builtin without default"
         if self.param.kind in (
             inspect.Parameter.VAR_POSITIONAL,
             inspect.Parameter.VAR_KEYWORD,
         ):
             return True
 
-        if not is_provided(self.default) and is_unresolved_type(self.param_type):
+        if self.default is MISSING and is_unresolved_type(self.param_type):
             return True
 
         return False
