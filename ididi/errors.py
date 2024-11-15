@@ -34,10 +34,6 @@ class NodeError(IDIDIError):
     """
 
 
-# TODO: 1. differentaite node creation and node resolve errors
-# TODO: 2. make NodeErrorChain more generic
-
-
 class NodeResolveError(IDIDIError):
     """
     Base class for all node resolve related exceptions.
@@ -71,7 +67,7 @@ class PositionalOverrideError(NodeResolveError):
 class UnsolvableNodeError(NodeResolveError):
     def add_context(self, dependent: type, param_name: str, param_annotation: type):
         self.add_note(
-            f"-> {dependent.__name__}({param_name}: {param_annotation.__name__})"
+            f"<- {dependent.__name__}({param_name}: {param_annotation.__name__})"
         )
 
 

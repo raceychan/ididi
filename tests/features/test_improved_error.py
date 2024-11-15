@@ -34,7 +34,7 @@ class AuthService:
 class UserService:
     def __init__(self, auth: AuthService, db: DataBase):
         self.auth = auth
-        self.db = db
+        # self.db = db
 
 
 class NotificationService:

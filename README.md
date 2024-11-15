@@ -26,7 +26,6 @@ To view viusal dependency graph, install `graphviz`
 pip install ididi[graphviz]
 ```
 
-
 ## Usage
 
 ### Quick Start
@@ -442,6 +441,21 @@ def redis_factory(settings: Settings) -> Redis:
 - whenver there is a default value, it will be used to resolve the dependency.
 - bulitin types are not resolvable by nature, it requires default value to be provided.
 - runtime override with `dg.resolve`
+
+### Error context
+
+static resolve might fail when class contain unresolvable dependencies, when failed, ididi would show a chain of errors like this:
+
+```bash
+ididi.errors.MissingAnnotationError: Unable to resolve dependency for parameter: env in <class 'tests.features.test_improved_error.Config'>, annotation for `env` must be provided
+
+<- Config(env: _Missed)
+<- DataBase(config: Config)
+<- AuthService(db: DataBase)
+<- UserService(auth: AuthService)
+```
+
+Where UserService depends on AuthService, which depends on Database, then Config, but Config.env is missing annotation.
 
 ### What and why
 

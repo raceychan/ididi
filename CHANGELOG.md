@@ -195,3 +195,26 @@ dg.resolve(Service)
 
 This would previously raise `NodeCreationError`, with root cause being `MissingAnnotationErro`, now being fixed.
 
+## version 1.0.0
+
+API changes:
+`ididi.solve` renamed to `ididi.resolve` for better consistency with naming style.
+`ididi.entry` no longer accepts `INodeConfig` as kwargs. 
+
+Feat:
+
+DependencyGraph.use_scope to indirectly retrive nearest local
+raise `OutOfScopeError`, when not within any scope.
+
+Fix:
+
+- now correctly recoganize if a class is async closable or not
+- resolve factory with forward ref as return type.
+
+Improvements:
+
+- raise PositionalOverrideError when User use `dg.resolve` with any positional arguments.
+
+- test coverages raised from 95% to 99%, where the only misses only exists in visual.py, and  are import error when graphviz not installed, and graph persist logic.
+
+- user can directly call `Visualizer.save` without first calling `Visualizer.make_graph`.

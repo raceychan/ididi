@@ -165,7 +165,7 @@ class ScopeProxy:
 class DependencyGraph:
     """
     ### Description:
-    A dependency DAG (Directed Acyclic Graph) that manages dependency nodes and their relationships.
+    A DAG (Directed Acyclic Graph) where each dependent is a node.
 
     [config]
     static_resolve: bool
@@ -174,11 +174,12 @@ class DependencyGraph:
     """
 
     def __init__(self, static_resolve: bool = True):
+        self._config = GraphConfig(static_resolve=static_resolve)
+
         self._nodes: GraphNodes[ty.Any] = {}
         self._resolved_nodes: GraphNodes[ty.Any] = {}
         self._resolution_registry = ResolutionRegistry()
         self._type_registry = TypeRegistry()
-        self._config = GraphConfig(static_resolve=static_resolve)
         self._visitor = GraphVisitor[type]()
         self._scope_context = ContextVar[SyncScope | AsyncScope]("connection_context")
 
@@ -388,6 +389,10 @@ class DependencyGraph:
         )
 
     def _actualize_forwardrefs(self, node: DependentNode[ty.Any]):
+        # TODO: circular dependency detection should be done in static resolve
+        # note that circular dependency has to start from a forward ref
+        # we can load forward refs into a stack and if when find a forward node
+        # contain dependencies in the stack, then the stack is the path for the dependency
         dependent_type = node.dependent_type
         for dpram in node.signature:
             param_type = dpram.param_type
@@ -398,8 +403,8 @@ class DependencyGraph:
                     dpram.name,
                     DependencyParam(
                         name=dpram.name,
-                        param=dpram.param,
                         param_annotation=dpram.param_annotation,
+                        param_kind=dpram.param_kind,
                         param_type=param_type,
                         default=dpram.default,
                     ),
@@ -419,6 +424,8 @@ class DependencyGraph:
         """
         Resolve a dependency without building its instance.
         """
+        # TODO: we are already doing a dfs here with recursive static resolve
+        # we might integrate visitor.find_circular_dependency here
 
         if is_function(dependent_factory):
             sig = get_typed_signature(dependent_factory)

@@ -7,20 +7,20 @@ from inspect import Parameter
 
 from ._itypes import EMPTY_SIGNATURE, INSPECT_EMPTY, IAsyncFactory, IFactory, NodeConfig
 from ._type_resolve import (
-    get_sig_origin_return,
+    get_literal_values,
     get_typed_signature,
     is_class,
     is_class_or_method,
     is_class_with_empty_init,
     is_unresolved_type,
     resolve_annotation,
+    resolve_factory_return,
 )
 from .errors import (
     ABCNotImplementedError,
     MissingAnnotationError,
     NotSupportedError,
     ProtocolFacotryNotProvidedError,
-    UnsolvableDependencyError,
 )
 from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import get_factory_sig_from_cls
@@ -75,32 +75,44 @@ class LazyDependent[T](Dependent[T]):
 # ======================= Signature =====================================
 
 
+type ParamKind = ty.Literal[
+    "positional-only",
+    "positional or keyword",
+    "variadic positional",
+    "keyword-only",
+    "variadic keyword",
+]
+
+
+kind_order: tuple[ParamKind, ...] = get_literal_values(ParamKind)
+
+
 @dataclass(kw_only=True, slots=True, frozen=True)
 class DependencyParam[T]:
     """'dpram' for short
     Represents a parameter and its corresponding dependency node
 
+    ```
     @dg.node
     def dependent_factory(self, name: str) -> ty.Any:
+        ...
+    ```
 
-    Here we 'name: str' would be built into a DependencyParam
+    Here 'name: str' would be built into a DependencyParam
     """
 
     name: str
-    param: Parameter  # TODO: do no rely on inspect.Parameter
     param_annotation: type  # original type
+    param_kind: ParamKind
     param_type: type[T]  # resolved_type
     default: Maybe[T]
 
     def __repr__(self) -> str:
-        return f"{self.param.name}: {self.param_type}"
+        return f"{self.name}: {self.param_type}"
 
     @property
     def unresolvable(self) -> bool:
-        if self.param.kind in (
-            Parameter.VAR_POSITIONAL,
-            Parameter.VAR_KEYWORD,
-        ):
+        if self.param_kind in ("variadic positional", "variadic keyword"):
             return True
 
         if not is_provided(self.default) and is_unresolved_type(self.param_type):
@@ -134,7 +146,15 @@ class DependentSignature[T]:
 
     def get_signature(self) -> inspect.Signature:
         return inspect.Signature(
-            parameters=[dpram.param for dpram in self.dprams.values()],
+            parameters=[
+                inspect.Parameter(
+                    p.name,
+                    default=p.default,
+                    kind=kind_order.index(p.param_kind),
+                    annotation=p.param_annotation,
+                )
+                for p in self.dprams.values()
+            ],
             return_annotation=self.dependent,
         )
 
@@ -165,16 +185,20 @@ def _create_sig[
     for param in params:
         param_annotation = param.annotation
         if param_annotation is INSPECT_EMPTY:
-            raise MissingAnnotationError(param.name, dependent)
+            e = MissingAnnotationError(param.name, dependent)
+            e.add_context(dependent, param.name, type(MISSING))
+            raise e
 
         if param.default == INSPECT_EMPTY:
             default = MISSING
         else:
             default = param.default
 
+        param_kind = kind_order[param.kind.value]
+
         dep_param = DependencyParam(
-            param=param,
             name=param.name,
+            param_kind=param_kind,
             param_annotation=param_annotation,
             param_type=resolve_annotation(param_annotation),
             default=default,
@@ -282,22 +306,11 @@ class DependentNode[T]:
         cls, *, factory: IFactory[P, I] | IAsyncFactory[P, I], config: NodeConfig
     ) -> "DependentNode[I]":
         signature = get_typed_signature(factory, check_return=True)
-        dependent: type[I] = get_sig_origin_return(signature.return_annotation)
+        dependent: type[I] = resolve_factory_return(signature.return_annotation)
         node = cls.create(
             dependent=dependent, factory=factory, signature=signature, config=config
         )
         return node
-
-    @classmethod
-    def _create_empty_init_node(
-        cls, dependent: type[ty.Any], config: NodeConfig
-    ) -> "DependentNode[ty.Any]":
-        return cls.create(
-            dependent=dependent,
-            factory=dependent,
-            signature=EMPTY_SIGNATURE,
-            config=config,
-        )
 
     @classmethod
     def from_class[
@@ -308,7 +321,12 @@ class DependentNode[T]:
                 dependent = res
 
         if is_class_with_empty_init(dependent):
-            return cls._create_empty_init_node(dependent, config)
+            return cls.create(
+                dependent=dependent,
+                factory=dependent,
+                signature=EMPTY_SIGNATURE,
+                config=config,
+            )
 
         signature = get_factory_sig_from_cls(dependent)
         return cls.create(
@@ -335,8 +353,6 @@ class DependentNode[T]:
             dependent = factory_or_class
             return cls.from_class(dependent=dependent, config=config)
         else:
-            # TODO: support lazy factory
-            # where attributes other than keyword arguments are lazy
             if config.lazy:
                 raise NotSupportedError(
                     "Lazy dependency is not supported for factories"

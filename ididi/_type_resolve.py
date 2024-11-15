@@ -45,7 +45,10 @@ def get_typed_signature[
     return sig
 
 
-def get_sig_origin_return[T](sig_return: ty.Any) -> ty.Any:
+def resolve_factory_return[T](sig_return: type[T]) -> type[T]:
+    """
+    Get dependent type from a factory return
+    """
     if ty.get_origin(sig_return) in (
         collections.abc.AsyncGenerator,
         collections.abc.Generator,
@@ -102,6 +105,10 @@ def is_function[
 def is_class_with_empty_init(cls: type) -> bool:
     """
     Check if a class has an empty __init__ method.
+    e.g.:
+
+    class Person: ...
+    class IPerson(typing.Protocol): ...
     """
     is_undefined_init = cls.__init__ is object.__init__
     is_protocol = cls.__init__ is EmptyInitProtocol.__init__
@@ -142,3 +149,10 @@ def get_bases(dependent: type) -> tuple[type, ...]:
     else:
         bases = dependent.__mro__[1:-1]
     return bases
+
+
+def get_literal_values[T](literal: ty.TypeAliasType | T) -> tuple[T, ...]:
+    if isinstance(literal, ty.TypeAliasType):
+        literal = literal.__value__
+
+    return ty.get_args(literal)
