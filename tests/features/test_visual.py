@@ -2,6 +2,7 @@ import pytest
 
 from ididi.graph import DependencyGraph
 from ididi.visual import Visualizer
+from pathlib import Path
 
 
 class Config:
@@ -37,7 +38,7 @@ def test_visualizer():
     vis.make_node(AuthService, {}, {})
 
 
-def test_complex_graph():
+def test_complex_graph(tmp_path: Path):
     dg = DependencyGraph()
     vs = Visualizer(dg)
 
@@ -79,4 +80,8 @@ def test_complex_graph():
     dg.static_resolve(EmailService)
     vs.dot
     vs.view
-    # vs.save("test_visual")
+
+    f = (tmp_path / "vis")
+    f.touch()
+    
+    vs.save(f)

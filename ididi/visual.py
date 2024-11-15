@@ -1,11 +1,7 @@
 from .graph import DependencyGraph
 from .node import DependentNode as DependentNode
 
-try:
-    from graphviz import Digraph
-except ImportError:
-    pass
-
+from graphviz import Digraph
 
 class Visualizer:
     def __init__(

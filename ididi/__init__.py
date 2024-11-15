@@ -24,4 +24,10 @@ from .api import entry as entry
 from .api import resolve as resolve
 from .graph import DependencyGraph as DependencyGraph
 from .node import DependentNode as DependentNode
-from .visual import Visualizer as Visualizer
+
+try:
+    import graphviz
+except ImportError:
+    pass
+else:
+    from .visual import Visualizer as Visualizer
