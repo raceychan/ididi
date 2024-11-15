@@ -7,16 +7,11 @@ INSPECT_EMPTY = inspect.Signature.empty
 
 type IFactory[**P, R] = ty.Callable[P, R]
 type IAsyncFactory[**P, R] = ty.Callable[P, ty.Awaitable[R]]
-
-
-@ty.runtime_checkable
-class Closable(ty.Protocol):
-    def close(self) -> None: ...
-
-
-@ty.runtime_checkable
-class AsyncClosable(ty.Protocol):
-    async def close(self) -> ty.Coroutine[ty.Any, ty.Any, None]: ...
+type IResourceFactory[**P, R] = ty.Callable[P, ty.Generator[R]]
+type IAsyncResourceFactory[**P, R] = ty.Callable[P, ty.AsyncGenerator[R]]
+type INode[**P, R] = IFactory[P, R] | IAsyncFactory[P, R] | IResourceFactory[
+    P, R
+] | IAsyncResourceFactory[P, R] | type[R]
 
 
 class TDecor(ty.Protocol):
@@ -24,11 +19,23 @@ class TDecor(ty.Protocol):
     def __call__[I](self, factory: type[I]) -> type[I]: ...
 
     @ty.overload
-    def __call__[**P, *I](self, factory: IFactory[P, I]) -> IFactory[P, I]: ...
-
     def __call__[
         **P, I
-    ](self, factory: IFactory[P, I] | type[I]) -> IFactory[P, I] | type[I]: ...
+    ](self, factory: IResourceFactory[P, I]) -> IResourceFactory[P, I]: ...
+
+    @ty.overload
+    def __call__[
+        **P, I
+    ](self, factory: IAsyncResourceFactory[P, I]) -> IAsyncResourceFactory[P, I]: ...
+
+    @ty.overload
+    def __call__[**P, I](self, factory: IAsyncFactory[P, I]) -> IAsyncFactory[P, I]: ...
+
+    @ty.overload
+    def __call__[**P, I](self, factory: IFactory[P, I]) -> IFactory[P, I]: ...
+
+    @ty.overload
+    def __call__[**P, I](self, factory: INode[P, I]) -> INode[P, I]: ...
 
 
 class INodeConfig(ty.TypedDict, total=False):
@@ -55,3 +62,13 @@ class NodeConfig:
 @dataclass(kw_only=True, frozen=True, slots=True, unsafe_hash=True)
 class GraphConfig:
     static_resolve: bool = True
+
+
+@ty.runtime_checkable
+class Closable(ty.Protocol):
+    def close(self) -> None: ...
+
+
+@ty.runtime_checkable
+class AsyncClosable(ty.Protocol):
+    async def close(self) -> ty.Coroutine[ty.Any, ty.Any, None]: ...

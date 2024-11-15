@@ -2,7 +2,7 @@ import time
 
 import pytest
 
-from ididi import DependencyGraph, Visualizer
+from ididi import DependencyGraph
 
 dg = DependencyGraph()
 

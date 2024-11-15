@@ -1,8 +1,9 @@
 import typing as ty
 
-import pytest
-
 from ididi import DependencyGraph
+
+# import pytest
+
 
 dg = DependencyGraph()
 

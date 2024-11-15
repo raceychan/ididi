@@ -7,7 +7,6 @@ from inspect import Parameter
 
 from ._itypes import EMPTY_SIGNATURE, INSPECT_EMPTY, IAsyncFactory, IFactory, NodeConfig
 from ._type_resolve import (
-    get_literal_values,
     get_typed_signature,
     is_class,
     is_class_or_method,
@@ -15,6 +14,7 @@ from ._type_resolve import (
     is_unresolved_type,
     resolve_annotation,
     resolve_factory_return,
+    resolve_forwardref,
 )
 from .errors import (
     ABCNotImplementedError,
@@ -75,16 +75,16 @@ class LazyDependent[T](Dependent[T]):
 # ======================= Signature =====================================
 
 
-type ParamKind = ty.Literal[
-    "positional-only",
-    "positional or keyword",
-    "variadic positional",
-    "keyword-only",
-    "variadic keyword",
-]
+# type ParamKind = ty.Literal[
+#     "positional-only",
+#     "positional or keyword",
+#     "variadic positional",
+#     "keyword-only",
+#     "variadic keyword",
+# ]
 
 
-kind_order: tuple[ParamKind, ...] = get_literal_values(ParamKind)
+# kind_order: tuple[ParamKind, ...] = get_literal_values(ParamKind)
 
 
 @dataclass(kw_only=True, slots=True, frozen=True)
@@ -102,8 +102,8 @@ class DependencyParam[T]:
     """
 
     name: str
+    param: inspect.Parameter
     param_annotation: type  # original type
-    param_kind: ParamKind
     param_type: type[T]  # resolved_type
     default: Maybe[T]
 
@@ -112,7 +112,10 @@ class DependencyParam[T]:
 
     @property
     def unresolvable(self) -> bool:
-        if self.param_kind in ("variadic positional", "variadic keyword"):
+        if self.param.kind in (
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
+        ):
             return True
 
         if not is_provided(self.default) and is_unresolved_type(self.param_type):
@@ -132,8 +135,8 @@ class DependentSignature[T]:
         return hash((self.dependent, tuple(self.dprams.keys())))
     """
 
-    def __iter__(self) -> ty.Iterator[DependencyParam[ty.Any]]:
-        return iter(self.dprams.values())
+    def __iter__(self) -> ty.Iterator[tuple[str, DependencyParam[ty.Any]]]:
+        return iter(self.dprams.items())
 
     def __len__(self) -> int:
         return len(self.dprams)
@@ -141,20 +144,9 @@ class DependentSignature[T]:
     def __getitem__(self, param_name: str) -> DependencyParam[ty.Any]:
         return self.dprams[param_name]
 
-    def update(self, param_name: str, dpram: DependencyParam[ty.Any]) -> None:
-        self.dprams[param_name] = dpram
-
     def get_signature(self) -> inspect.Signature:
         return inspect.Signature(
-            parameters=[
-                inspect.Parameter(
-                    p.name,
-                    default=p.default,
-                    kind=kind_order.index(p.param_kind),
-                    annotation=p.param_annotation,
-                )
-                for p in self.dprams.values()
-            ],
+            parameters=[p.param for p in self.dprams.values()],
             return_annotation=self.dependent,
         )
 
@@ -166,6 +158,21 @@ class DependentSignature[T]:
         bound_args = sig.bind_partial(**resolved_args)
         bound_args.apply_defaults()
         return bound_args
+
+    def actualized_params(self):
+        for param_name, param in self:
+            param_type = ty.cast(type | ty.ForwardRef, param.param_type)
+            if isinstance(param_type, ty.ForwardRef):
+                param_type = resolve_forwardref(self.dependent, param_type)
+                param = DependencyParam(
+                    name=param_name,
+                    param=param.param,
+                    param_annotation=param.param_annotation,
+                    param_type=param_type,
+                    default=param.default,
+                )
+                self.dprams[param_name] = param
+            yield param
 
 
 # ======================= Node =====================================
@@ -194,11 +201,9 @@ def _create_sig[
         else:
             default = param.default
 
-        param_kind = kind_order[param.kind.value]
-
         dep_param = DependencyParam(
             name=param.name,
-            param_kind=param_kind,
+            param=param,
             param_annotation=param_annotation,
             param_type=resolve_annotation(param_annotation),
             default=default,
@@ -357,5 +362,7 @@ class DependentNode[T]:
                 raise NotSupportedError(
                     "Lazy dependency is not supported for factories"
                 )
-            factory = factory_or_class
-            return cls.from_factory(factory=factory, config=config)
+            return cls.from_factory(
+                factory=ty.cast(IFactory[P, I] | IAsyncFactory[P, I], factory_or_class),
+                config=config,
+            )

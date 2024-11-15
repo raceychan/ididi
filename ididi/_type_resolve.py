@@ -16,12 +16,11 @@ from .errors import (
 )
 from .utils.typing_utils import eval_type, get_full_typed_signature, is_builtin_type
 
-
-class EmptyInitProtocol(ty.Protocol): ...
-
-
 type SyncResource = ty.ContextManager[ty.Any] | Closable
 type AsyncResource = ty.AsyncContextManager[ty.Any] | AsyncClosable
+
+
+class EmptyInitProtocol(ty.Protocol): ...
 
 
 def is_async_closable(type_: object) -> ty.TypeGuard[AsyncClosable]:
@@ -115,7 +114,9 @@ def is_class_with_empty_init(cls: type) -> bool:
     return cls is type or is_undefined_init or is_protocol
 
 
-def resolve_forwardref(dependent: type | ty.Callable[..., ty.Any], ref: ty.ForwardRef):
+def resolve_forwardref(
+    dependent: type | ty.Callable[..., ty.Any], ref: ty.ForwardRef
+) -> ty.Any:
     if is_function(dependent):
         globalvs = dependent.__globals__
     else:
@@ -151,8 +152,8 @@ def get_bases(dependent: type) -> tuple[type, ...]:
     return bases
 
 
-def get_literal_values[T](literal: ty.TypeAliasType | T) -> tuple[T, ...]:
-    if isinstance(literal, ty.TypeAliasType):
-        literal = literal.__value__
+# def get_literal_values[T](literal: ty.TypeAliasType | T) -> tuple[T, ...]:
+#     if isinstance(literal, ty.TypeAliasType):
+#         literal = literal.__value__
 
-    return ty.get_args(literal)
+#     return ty.get_args(literal)

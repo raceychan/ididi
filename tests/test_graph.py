@@ -83,6 +83,24 @@ def test_get_dependent_types(dg: DependencyGraph):
     assert AuthService in database_dependents
 
 
+def test_node_signature_change_after_factory(dg: DependencyGraph):
+    class UserService:
+        def __init__(self, repo: UserRepository, auth: AuthService, name: str = "user"):
+            self.repo = repo
+            self.auth = auth
+
+    dg.static_resolve(UserService)
+    node = dg.nodes[UserService]
+    assert len(node.signature.dprams) == 3
+
+    @dg.node
+    def user_service_factory(repo: UserRepository, auth: AuthService) -> UserService:
+        return UserService(repo, auth)
+
+    node = dg.nodes[UserService]
+    assert len(node.signature.dprams) == 2
+
+
 def test_top_level_builtin_dependency(dg: DependencyGraph):
     with pytest.raises(TopLevelBulitinTypeError):
         dg.resolve(int)
@@ -270,7 +288,7 @@ def test_node_removal_cleanup(dg: DependencyGraph):
     assert Dependency not in dg.resolved_nodes
 
 
-def test_factory_override(dg: DependencyGraph):
+def test_facwry_override(dg: DependencyGraph):
     @dg.node
     class Service:
         def __init__(self, name: str = "default"):
@@ -501,6 +519,12 @@ async def test_graph_without_static_resolve(dg: DependencyGraph):
 
     with pytest.raises(PositionalOverrideError):
         await dg.aresolve(UserRepository, 1)
+
+    with pytest.raises(PositionalOverrideError):
+        dg.resolve(UserRepository, 1, 2)  # type: ignore
+
+    with pytest.raises(PositionalOverrideError):
+        await dg.aresolve(UserRepository, 1, 2)
 
     await dg.aresolve(UserRepository, db="asdf")
 

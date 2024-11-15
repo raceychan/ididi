@@ -5,18 +5,13 @@ from contextvars import ContextVar, Token
 from functools import partial
 from types import MappingProxyType, TracebackType
 
-from ._ds import (
-    GraphNodes,
-    GraphNodesView,
-    GraphVisitor,
-    ResolutionRegistry,
-    TypeRegistry,
-)
+from ._ds import GraphNodes, GraphNodesView, ResolutionRegistry, TypeRegistry
 from ._itypes import (
     INSPECT_EMPTY,
     GraphConfig,
     IAsyncFactory,
     IFactory,
+    INode,
     INodeConfig,
     NodeConfig,
     TDecor,
@@ -41,7 +36,7 @@ from .errors import (
     UnsolvableDependencyError,
     UnsolvableNodeError,
 )
-from .node import DependencyParam, DependentNode, LazyDependent
+from .node import DependentNode, LazyDependent
 from .utils.param_utils import MISSING, Maybe, is_provided
 
 
@@ -162,6 +157,41 @@ class ScopeProxy:
         self._graph.reset_context_scope(self._token)
 
 
+class Visitor:
+    def __init__(self, nodes: GraphNodes[ty.Any]):
+        self._nodes = nodes
+
+    def get_dependents(self, dependency: type) -> list[type]:
+        """
+        return dependents of a dependency, both need to be in the graph
+        """
+        visited: set[type] = set()
+        dependents: list[type] = []
+
+        def dfs(dep: type):
+            if dep in visited:
+                return
+            visited.add(dep)
+            node = self._nodes[dep]
+            for _, dep_param in node.signature:
+                param_type = dep_param.param_type
+                if param_type not in self._nodes:
+                    continue
+                if param_type is dependency:
+                    dependents.append(dep)
+                dfs(param_type)
+
+        for dep in self._nodes:
+            dfs(dep)
+        return dependents
+
+    def get_dependencies(self, dependent: type) -> list[type]:
+        """
+        return dependencies of a dependent, both need to be in the graph
+        """
+        return [p.param_type for _, p in self._nodes[dependent].signature]
+
+
 class DependencyGraph:
     """
     ### Description:
@@ -173,15 +203,17 @@ class DependencyGraph:
     whether to statically resolve all nodes when entering the graph.
     """
 
-    def __init__(self, static_resolve: bool = True):
+    def __init__(
+        self,
+        static_resolve: bool = True,
+    ):
         self._config = GraphConfig(static_resolve=static_resolve)
-
         self._nodes: GraphNodes[ty.Any] = {}
         self._resolved_nodes: GraphNodes[ty.Any] = {}
         self._resolution_registry = ResolutionRegistry()
         self._type_registry = TypeRegistry()
-        self._visitor = GraphVisitor[type]()
         self._scope_context = ContextVar[SyncScope | AsyncScope]("connection_context")
+        self._visitor = Visitor(self._nodes)
 
     def __repr__(self) -> str:
         return (
@@ -192,13 +224,12 @@ class DependencyGraph:
 
     def static_resolve_all(self) -> None:
         if not self._config.static_resolve:
-            return None
+            return
 
         for node_type in self._nodes.copy():
             if node_type in self._resolved_nodes:
                 continue
             self.static_resolve(node_type)
-        return None
 
     async def __aenter__(self) -> "DependencyGraph":
         self.static_resolve_all()
@@ -240,7 +271,7 @@ class DependencyGraph:
         return MappingProxyType(self._resolved_nodes)
 
     @property
-    def visitor(self) -> GraphVisitor[type]:
+    def visitor(self) -> Visitor:
         return self._visitor
 
     def set_context_scope(
@@ -296,7 +327,7 @@ class DependencyGraph:
 
             visited.add(node_type)
             node = self._nodes[node_type]
-            for dep_param in node.signature:
+            for _, dep_param in node.signature:
                 dependent_type = dep_param.param_type
                 if dependent_type not in self._nodes:
                     continue
@@ -324,7 +355,6 @@ class DependencyGraph:
             self._type_registry.clear()
             self._resolved_nodes.clear()
             self._nodes.clear()
-            self._visitor.clear()
 
     async def aclose(self) -> None:
         """
@@ -388,89 +418,6 @@ class DependencyGraph:
             resolver=resolver,
         )
 
-    def _actualize_forwardrefs(self, node: DependentNode[ty.Any]):
-        # TODO: circular dependency detection should be done in static resolve
-        # note that circular dependency has to start from a forward ref
-        # we can load forward refs into a stack and if when find a forward node
-        # contain dependencies in the stack, then the stack is the path for the dependency
-        dependent_type = node.dependent_type
-        for dpram in node.signature:
-            param_type = dpram.param_type
-            if isinstance(param_type, ty.ForwardRef):
-                param_type = resolve_forwardref(node.factory, param_type)
-
-                node.signature.update(
-                    dpram.name,
-                    DependencyParam(
-                        name=dpram.name,
-                        param_annotation=dpram.param_annotation,
-                        param_kind=dpram.param_kind,
-                        param_type=param_type,
-                        default=dpram.default,
-                    ),
-                )
-            self._visitor.add_edge(dependent_type, param_type)
-            circular_path = self._visitor.find_circular_dependency()
-            if circular_path:
-                raise CircularDependencyDetectedError(circular_path)
-
-    def __static_resolve[
-        T, **P
-    ](
-        self,
-        dependent_factory: type[T] | ty.Callable[P, T],
-        node_config: Maybe[NodeConfig],
-    ) -> DependentNode[T]:
-        """
-        Resolve a dependency without building its instance.
-        """
-        # TODO: we are already doing a dfs here with recursive static resolve
-        # we might integrate visitor.find_circular_dependency here
-
-        if is_function(dependent_factory):
-            sig = get_typed_signature(dependent_factory)
-            dependent: type[T] = sig.return_annotation
-            if dependent not in self.nodes:
-                # create node and register
-                self.node(dependent_factory)
-        else:
-            dependent = ty.cast(type[T], dependent_factory)
-
-        if dependent in self._resolved_nodes:
-            return self._resolved_nodes[dependent]
-
-        node = self._resolve_concrete_node(dependent, node_config)
-        self._actualize_forwardrefs(node)
-
-        for param in node.signature:
-            dep_type = param.param_type
-            if dep_type in self._nodes:
-                continue
-
-            if is_provided(param.default):
-                continue
-
-            if param.unresolvable:
-                raise UnsolvableDependencyError(
-                    dep_name=param.name,
-                    required_type=param.param_type,
-                    factory=node.factory,
-                )
-
-            # Recursively resolve and register dependency
-            try:
-                dep_node = self.__static_resolve(dep_type, node_config)
-            except UnsolvableNodeError as une:
-                une.add_context(node.dependent_type, param.name, param.param_annotation)
-                raise
-
-            self.register_node(dep_node)
-            self._resolved_nodes[dep_type] = dep_node
-
-        node.check_for_resolvability()
-        self._resolved_nodes[dependent] = node
-        return node
-
     def static_resolve[
         T, **P
     ](
@@ -486,7 +433,68 @@ class DependencyGraph:
         """
         if is_unresolved_type(dependent):
             raise TopLevelBulitinTypeError(dependent)
-        return self.__static_resolve(dependent, node_config)
+
+        current_path: list[type] = []
+
+        def dfs(
+            dependent_factory: type[T] | ty.Callable[P, T],
+            node_config: Maybe[NodeConfig],
+        ) -> DependentNode[T]:
+
+            if is_function(dependent_factory):
+                sig = get_typed_signature(dependent_factory)
+                dependent: type[T] = sig.return_annotation
+                if dependent not in self.nodes:
+                    # create node and register
+                    self.node(dependent_factory)
+            else:
+                dependent = ty.cast(type[T], dependent_factory)
+
+            if dependent in self._resolved_nodes:
+                return self._resolved_nodes[dependent]
+
+            node = self._resolve_concrete_node(dependent, node_config)
+
+            current_path.append(dependent)
+
+            for param in node.signature.actualized_params():
+                param_type = param.param_type
+                if param_type in current_path:
+                    i = current_path.index(param_type)
+                    cycle = current_path[i:] + [param_type]
+                    raise CircularDependencyDetectedError(cycle)
+
+                if param_type in self._nodes:
+                    continue
+
+                if is_provided(param.default):
+                    continue
+
+                if param.unresolvable:
+                    raise UnsolvableDependencyError(
+                        dep_name=param.name,
+                        required_type=param.param_type,
+                        factory=node.factory,
+                    )
+
+                # Recursively resolve and register dependency
+                try:
+                    dep_node = dfs(param_type, node_config)
+                except UnsolvableNodeError as une:
+                    une.add_context(
+                        node.dependent_type, param.name, param.param_annotation
+                    )
+                    raise
+
+                self.register_node(dep_node)
+                self._resolved_nodes[param_type] = dep_node
+
+            node.check_for_resolvability()
+            self._resolved_nodes[dependent] = node
+            current_path.pop()
+            return node
+
+        return dfs(dependent, node_config)
 
     @ty.overload
     def resolve[
@@ -515,7 +523,7 @@ class DependencyGraph:
     ](
         self,
         dependent: ty.Callable[P, T],
-        scope: Maybe[SyncScope | ty.Any] = MISSING,
+        scope: Maybe[SyncScope] = MISSING,
         /,
         *args: ty.Any,
         **overrides: ty.Any,
@@ -525,25 +533,23 @@ class DependencyGraph:
         NOTE: overrides will only be applied to the current dependent.
         """
 
-        if args or is_provided(scope) and not isinstance(scope, AbstractScope):
+        if args:
             raise PositionalOverrideError(args)
 
-        node_dep_type = dependent
+        if is_provided(scope):
+            if not isinstance(ty.cast(ty.Any, scope), AbstractScope):
+                raise PositionalOverrideError(args)
+            if is_provided(solution := scope.resolutions.get(dependent)):
+                return solution
 
-        if is_provided(scope) and is_provided(
-            solution := scope.resolutions.get(node_dep_type)
-        ):
+        if is_provided(solution := self._resolution_registry.get(dependent)):
             return solution
 
-        if is_provided(solution := self._resolution_registry.get(node_dep_type)):
-            return solution
-
-        node: DependentNode[T] = self.static_resolve(node_dep_type)
+        node: DependentNode[T] = self.static_resolve(dependent)
 
         resolved_args: dict[str, ty.Any] = {}
 
-        for dpram in node.signature:
-            param_name = dpram.name
+        for param_name, dpram in node.signature:
             param_type = dpram.param_type
 
             if param_name in overrides:
@@ -569,15 +575,14 @@ class DependencyGraph:
                 raise ResourceOutsideScopeError(node.dependent_type)
             instance = scope.enter_context(resolved)
             if node.config.reuse:
-                scope.cache_result(node_dep_type, instance)
+                scope.cache_result(dependent, instance)
             return ty.cast(T, instance)
         elif is_async_context_manager(resolved):
-            # since we support ACM class.
-            if is_function(node.factory):
+            if is_function(node.factory):  # ACM class
                 raise AsyncResourceInSyncError(node.factory)
 
         if node.config.reuse:
-            self._resolution_registry.register(node_dep_type, resolved)
+            self._resolution_registry.register(dependent, resolved)
         return ty.cast(T, resolved)
 
     async def aresolve[
@@ -585,7 +590,7 @@ class DependencyGraph:
     ](
         self,
         dependent: ty.Callable[P, T],
-        scope: Maybe[AsyncScope | ty.Any] = MISSING,
+        scope: Maybe[AsyncScope] = MISSING,
         /,
         *args: P.args,
         **overrides: P.kwargs,
@@ -593,25 +598,24 @@ class DependencyGraph:
         """
         Async version of resolve that handles async context managers and coroutines.
         """
-        if args or is_provided(scope) and not isinstance(scope, AbstractScope):
+
+        if args:
             raise PositionalOverrideError(args)
 
-        node_dep_type = dependent
+        if is_provided(scope):
+            if not isinstance(ty.cast(ty.Any, scope), AbstractScope):
+                raise PositionalOverrideError(args)
+            if is_provided(solution := scope.resolutions.get(dependent)):
+                return solution
 
-        if is_provided(scope) and is_provided(
-            solution := scope.resolutions.get(node_dep_type)
-        ):
+        if is_provided(solution := self._resolution_registry.get(dependent)):
             return solution
 
-        if is_provided(solution := self._resolution_registry.get(node_dep_type)):
-            return solution
-
-        node: DependentNode[T] = self.static_resolve(node_dep_type)
+        node: DependentNode[T] = self.static_resolve(dependent)
 
         resolved_args: dict[str, ty.Any] = {}
 
-        for dpram in node.signature:
-            param_name = dpram.name
+        for param_name, dpram in node.signature:
             param_type = dpram.param_type
             if param_name in overrides:
                 resolved_args[param_name] = overrides[param_name]
@@ -631,7 +635,7 @@ class DependencyGraph:
                 raise ResourceOutsideScopeError(node.dependent_type)
             instance = await scope.enter_async_context(resolved)
             if node.config.reuse:
-                scope.cache_result(node_dep_type, instance)
+                scope.cache_result(dependent, instance)
             return ty.cast(T, instance)
 
         if is_context_manager(resolved):
@@ -639,7 +643,7 @@ class DependencyGraph:
                 raise ResourceOutsideScopeError(node.dependent_type)
             instance = scope.enter_context(resolved)
             if node.config.reuse:
-                scope.cache_result(node_dep_type, instance)
+                scope.cache_result(dependent, instance)
             return ty.cast(T, instance)
 
         if inspect.isawaitable(resolved):
@@ -648,7 +652,7 @@ class DependencyGraph:
             instance = resolved
 
         if node.config.reuse:
-            self._resolution_registry.register(node_dep_type, instance)
+            self._resolution_registry.register(dependent, instance)
         return ty.cast(T, instance)
 
     @ty.overload
@@ -760,9 +764,9 @@ class DependencyGraph:
         **P, R
     ](
         self,
-        factory_or_class: IFactory[P, R] | type[R] | None = None,
+        factory_or_class: INode[P, R] | None = None,
         **config: ty.Unpack[INodeConfig],
-    ) -> (IFactory[P, R] | type[R] | TDecor):
+    ) -> (INode[P, R] | TDecor):
         """
         ### Decorator to register a node in the dependency graph.
 
@@ -809,13 +813,15 @@ class DependencyGraph:
             if return_type is not INSPECT_EMPTY:
                 old_node = self._nodes[resolved_type]
                 self.remove_node(old_node)
-                self._visitor.remove_dependent(resolved_type)
 
         if inspect.isgeneratorfunction(factory_or_class):
-            factory_or_class = contextmanager(factory_or_class)
+            func_gen = contextmanager(factory_or_class)
+            node = DependentNode.from_node(func_gen, config=node_config)
         elif inspect.isasyncgenfunction(factory_or_class):
-            factory_or_class = asynccontextmanager(factory_or_class)
+            func_gen = asynccontextmanager(factory_or_class)
+            node = DependentNode.from_node(func_gen, config=node_config)
+        else:
+            node = DependentNode.from_node(factory_or_class, config=node_config)
 
-        node = DependentNode.from_node(factory_or_class, config=node_config)
         self.register_node(node)
         return factory_or_class
