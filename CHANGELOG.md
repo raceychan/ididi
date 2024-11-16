@@ -218,3 +218,16 @@ Improvements:
 - test coverages raised from 95% to 99%, where the only misses only exists in visual.py, and  are import error when graphviz not installed, and graph persist logic.
 
 - user can directly call `Visualizer.save` without first calling `Visualizer.make_graph`.
+
+
+## version 1.0.1
+
+Improvements
+
+- performance boost on dg.static_resolve
+
+## version 1.0.2
+
+Features
+
+- named scope, user can now call `dg.use_scope(name)` to get a specific parent scope in current context, this is particularly useful in scenario where you have tree-structured scopes, like app-route-request.

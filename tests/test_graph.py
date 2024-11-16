@@ -1,5 +1,7 @@
 import inspect
+import sys
 from abc import ABC, abstractmethod
+from unittest import mock
 
 import pytest
 
@@ -13,6 +15,21 @@ from ididi.errors import (
     UnsolvableDependencyError,
 )
 from ididi.graph import DependencyGraph
+
+
+def test_import_graphviz_failure():
+    with mock.patch.dict(sys.modules, {"graphviz": None}):
+        # Remove cached ididi module
+        if "ididi" in sys.modules:
+            del sys.modules["ididi"]
+
+        # Import ididi after patching
+        import ididi
+
+        # Ensure Visualizer is not available
+        assert not hasattr(
+            ididi, "Visualizer"
+        ), "Visualizer should not be available when graphviz is missing"
 
 
 # Replace global dag with a fixture
