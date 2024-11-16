@@ -1,44 +1,4 @@
-# Ididi
-
-Genius simplicity, unmathced power.
-
-ididi is 100% test covered and strictly typed.
-
-## Information
-
-**Documentation**: <a href="https://raceychan.github.io/ididi" target="_blank"> https://raceychan.github.io/ididi </a>
-
-**Source Code**: <a href=" https://github.com/raceychan/ididi" target="_blank">  https://github.com/raceychan/ididi</a>
-
-## Install
-
-```bash
-pip install ididi
-```
-
-To view viusal dependency graph, install `graphviz`
-
-```bash
-pip install ididi[graphviz]
-```
-
-## Usage
-
-### Quick Start
-
-```python
-import ididi
-
-class UserService:
-    def __init__(self, repo: UserRepository):
-        self.repo = repo
-
-user_service = ididi.resolve(UserService) 
-```
-
-**No Container, No Provider, No Wiring, just *Python***
-
-## Features
+# Features
 
 ### Automatic dependencies injection
 
@@ -166,25 +126,7 @@ async with dg.scope(app_name) as app_scope:
 For any functions called within the request_scope, you can get the most recent scope with `dg.use_scope()`,
 or its parent scopes, i.e. `dg.use_scope(app_name)` to get app_scope.
 
-### Usage with FastAPI
 
-```python
-from fastapi import FastAPI
-from ididi import DependencyGraph
-
-app = FastAPI()
-dg = DependencyGraph()
-
-def auth_service_factory(db: DataBase) -> AuthService:
-    async with dg.scope() as scope
-        yield dg.resolve(AuthService)
-
-Service = ty.Annotated[AuthService, Depends(dg.factory(auth_service_factory))]
-
-@app.get("/")
-def get_service(service: Service):
-    return service
-```
 
 ### Visualize the dependency graph(beta)
 
@@ -340,18 +282,4 @@ class Outer:
 instance = dg.resolve(Outer, inner=Inner(value="overridden"))
 assert instance.inner.value == "overridden"
 ```
-### Error context
 
-static resolve might fail when class contain unresolvable dependencies, when failed, ididi would show a chain of errors like this:
-
-```bash
-ididi.errors.MissingAnnotationError: Unable to resolve dependency for parameter: env in <class 'Config'>,
-annotation for `env` must be provided
-
-<- Config(env: _Missed)
-<- DataBase(config: Config)
-<- AuthService(db: DataBase)
-<- UserService(auth: AuthService)
-```
-
-Where UserService depends on AuthService, which depends on Database, then Config, but Config.env is missing annotation.

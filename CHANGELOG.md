@@ -237,4 +237,11 @@ Features
 
 Fix:
 
-now config of `entry` node is default to reuse=False, which means the result will no longer be cached.
+- now config of `entry` node is default to reuse=False, which means the result will no longer be cached.
+- better typing with `entry`
+
+
+## version 1.0.4
+
+improvements:
+refactor visitor
