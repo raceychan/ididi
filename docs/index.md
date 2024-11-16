@@ -10,7 +10,7 @@ ididi is 100% test covered and strictly typed.
 
 **Documentation**: <a href="https://raceychan.github.io/ididi" target="_blank"> https://raceychan.github.io/ididi </a>
 
-**Source Code**: https://github.com/raceychan/ididi
+**Source Code**: <a href=" https://github.com/raceychan/ididi" target="_blank">  https://github.com/raceychan/ididi</a>
 
 ## Install
 
