@@ -28,8 +28,6 @@ pip install ididi[graphviz]
 
 ### Quick Start
 
-Your existing code
-
 ```python
 import ididi
 
@@ -39,6 +37,10 @@ class UserService:
 
 user_service = ididi.resolve(UserService) 
 ```
+
+**No Container, No Provider, No Wiring, just *Python***
+
+## Features
 
 ### Automatic dependencies injection
 
@@ -341,11 +343,11 @@ instance = dg.resolve(Outer, inner=Inner(value="overridden"))
 assert instance.inner.value == "overridden"
 ```
 
-### Advanced Usage
+## Advanced Usage
 
-#### ABC
+### ABC
 
-##### Register ABC implementation with `dg.node`
+#### Register ABC implementation with `dg.node`
 
 you should use `dg.node` to let ididi know about the implementations of the ABC.
 you are going to resolve.
@@ -376,7 +378,7 @@ dag.resolve(Repository)
 
 You might also use `__init_subclass__` hook to automatically register implementations.
 
-##### Multiple Implementations of ABC
+#### Multiple Implementations of ABC
 
 ididi will use the last implementation registered to resolve the ABC, you can use a factory to override this behavior.
 
@@ -437,7 +439,25 @@ assert user.repo is session.repo
 # same logic for resource with scope
 ```
 
-### Performance
+### Error context
+
+static resolve might fail when class contain unresolvable dependencies, when failed, ididi would show a chain of errors like this:
+
+```bash
+ididi.errors.MissingAnnotationError: Unable to resolve dependency for parameter: env in <class 'Config'>,
+annotation for `env` must be provided
+
+<- Config(env: _Missed)
+<- DataBase(config: Config)
+<- AuthService(db: DataBase)
+<- UserService(auth: AuthService)
+```
+
+Where UserService depends on AuthService, which depends on Database, then Config, but Config.env is missing annotation.
+
+
+
+## Performance
 
 ididi is very efficient and performant, with average time complexity of O(n)
 
@@ -491,24 +511,12 @@ def redis_factory(settings: Settings) -> Redis:
 - bulitin types are not resolvable by nature, it requires default value to be provided.
 - runtime override with `dg.resolve`
 
-### Error context
+## What and why
 
-static resolve might fail when class contain unresolvable dependencies, when failed, ididi would show a chain of errors like this:
+<details>
+  <summary>  What is dependency injection? </summary>
+  <hr>
 
-```bash
-ididi.errors.MissingAnnotationError: Unable to resolve dependency for parameter: env in <class 'tests.features.test_improved_error.Config'>, annotation for `env` must be provided
-
-<- Config(env: _Missed)
-<- DataBase(config: Config)
-<- AuthService(db: DataBase)
-<- UserService(auth: AuthService)
-```
-
-Where UserService depends on AuthService, which depends on Database, then Config, but Config.env is missing annotation.
-
-### What and why
-
-#### What is dependency injection?
 
 If a class requires other classes as its attributes, then these attributes are regarded as dependencies of the class, and the class requiring them is called a dependent.
 
@@ -532,7 +540,13 @@ class Downloader:
 
 Now, since `requests.Session` is automatically built with `Downloader`, it would be difficult to change the behavior of `requests.Session` at runtime.
 
-#### Why do we need it?
+</details>
+
+<details>
+  <summary>  Why do we need it? </summary>
+  <hr>
+
+
 
 There are actually a few reasons why you might not need it, the most fundamental one being your code does not need reuseability and flexibility.
 
@@ -558,7 +572,11 @@ However, this creates a few problems:
 
 Dependency injection enables you to extend the dependencies of a class without modifying the class itself, which increases the flexibility and reusability of the class.
 
-#### Do we need a DI framework?
+</details>
+
+<details>
+  <summary> Do we need a DI framework? </summary>
+  <hr>
 
 Not necessarily, You will be doing just fine using menual dependency injection,as long as the number of dependencies in your app stays within a managable range.
 
@@ -621,13 +639,15 @@ for example, auth repo might be needed by both AuthService and UserService, or e
 
 You might also need to menually create and manage scope as some resources should be accessed/shared only whtin a certain scope, e.g., a request.
 
-#### Why Ididi?
+</details>
+
+### Why Ididi?
 
 ididi helps you do this while stays out of your way, you do not need to create additional classes like `Container`, `Provider`, `Wire`, nor adding lib-specific annotation like `Closing`, `Injectable`, etc.
 
 ididi provides unique powerful features that most alternatives don't have, such as support to inifinite number of context-specific nested sopce, lazydependent, advanced circular dependency detection, plotting, etc.
 
-### Terminology
+## Terminology
 
 `dependent`: a class, or a function that requires arguments to be built/called.
 
@@ -643,9 +663,14 @@ ididi provides unique powerful features that most alternatives don't have, such 
 
 `entry`: a special type of node, where it has no dependents and its factory is itself.
 
-### FAQ
+## FAQ
 
-#### How do I override, or provide a default value for a dependency?
+<details>
+  <summary>
+    How do I override, or provide a default value for a dependency?
+   </summary>
+<hr>
+
 
 you can use `dg.node` to create a factory to override the value.
 you can also have dependencies in your factory, and they will be resolved recursively.
@@ -660,7 +685,13 @@ def config_factory() -> Config:
     return Config(env="test")
 ```
 
-#### How do i override a dependent in test?
+</details>
+
+<details>
+  <summary>
+    How do i override a dependent in test?
+   </summary>
+  <hr>
 
 you can use `dg.node` with a factory method to override the dependent resolution.
 
@@ -686,7 +717,11 @@ def memory_cache_factory(...) -> Cache:
 
 as this follows LSP, it works both with ididi and type checker.
 
-#### How do I make ididi reuse a dependencies across different dependent?
+</details>
+
+<details>
+  <summary> How do I make ididi reuse a dependencies across different dependent? </summary>
+  <hr>
 
 by default, ididi will reuse the dependencies across different dependent,
 you can change this behavior by setting `reuse=False` in `dg.node`.
@@ -695,3 +730,5 @@ you can change this behavior by setting `reuse=False` in `dg.node`.
 @dg.node(reuse=False) # True by default
 class AuthService: ...
 ```
+
+</details>
