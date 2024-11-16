@@ -14,7 +14,7 @@ copyright: (c) 2024 by race chan.
 license: MIT, see LICENSE for more details.
 """
 
-VERSION = "1.0.2"
+VERSION = "1.0.3"
 
 __version__ = VERSION
 
