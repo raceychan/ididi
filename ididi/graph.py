@@ -43,7 +43,7 @@ from .utils.param_utils import MISSING, Maybe, is_provided
 class AbstractScope[Stack: ExitStack | AsyncExitStack]:
     _stack: Stack
     _graph: "DependencyGraph"
-    _scope_id: ty.Hashable
+    _name: ty.Hashable
     _pre: Maybe["SyncScope | AsyncScope"]
     resolutions: ResolutionRegistry
 
@@ -54,33 +54,33 @@ class AbstractScope[Stack: ExitStack | AsyncExitStack]:
         return self._stack.enter_context(context)
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(id={self._scope_id})"
+        return f"{self.__class__.__name__}(id={self._name})"
 
-    def get_scope(self, scope_id: ty.Hashable) -> ty.Self:
-        if scope_id == self._scope_id:
+    def get_scope(self, name: ty.Hashable) -> ty.Self:
+        if name == self._name:
             return self
 
         ptr = self
         while is_provided(ptr._pre):
-            if ptr._pre._scope_id == scope_id:
+            if ptr._pre._name == name:
                 return ty.cast(ty.Self, ptr._pre)
             ptr = ptr._pre
         else:
-            raise LookupError(f"scope with {scope_id=} not found in current context")
+            raise OutOfScopeError(name)
 
 
 class SyncScope(AbstractScope[ExitStack]):
-    __slots__ = ("_graph", "_stack", "_scope_id", "_pre", "resolutions")
+    __slots__ = ("_graph", "_stack", "_name", "_pre", "resolutions")
 
     def __init__(
         self,
         graph: "DependencyGraph",
         *,
-        scope_id: Maybe[ty.Hashable] = MISSING,
+        name: Maybe[ty.Hashable] = MISSING,
         pre: Maybe["SyncScope | AsyncScope"] = MISSING,
     ):
         self._graph = graph
-        self._scope_id = scope_id
+        self._name = name
         self._pre = pre
         self._stack = ExitStack()
         self.resolutions = ResolutionRegistry()
@@ -113,17 +113,17 @@ class SyncScope(AbstractScope[ExitStack]):
 
 
 class AsyncScope(AbstractScope[AsyncExitStack]):
-    __slots__ = ("_graph", "_stack", "_scope_id", "_pre", "resolutions")
+    __slots__ = ("_graph", "_stack", "_name", "_pre", "resolutions")
 
     def __init__(
         self,
         graph: "DependencyGraph",
         *,
-        scope_id: Maybe[ty.Hashable] = MISSING,
+        name: Maybe[ty.Hashable] = MISSING,
         pre: Maybe["SyncScope"] = MISSING,
     ):
         self._graph = graph
-        self._scope_id = scope_id
+        self._name = name
         self._pre = pre
         self._stack = AsyncExitStack()
         self.resolutions = ResolutionRegistry()
@@ -161,23 +161,19 @@ class AsyncScope(AbstractScope[AsyncExitStack]):
 class ScopeProxy:
     _scope: Maybe[SyncScope | AsyncScope]
 
-    __slots__ = ("_graph", "_scope", "_token", "_scope_id", "_pre")
+    __slots__ = ("_graph", "_scope", "_token", "_name", "_pre")
 
-    def __init__(
-        self, graph: "DependencyGraph", scope_id: Maybe[ty.Hashable] = MISSING
-    ):
+    def __init__(self, graph: "DependencyGraph", name: Maybe[ty.Hashable] = MISSING):
         self._graph = graph
         self._scope = MISSING
-        self._scope_id = scope_id
+        self._name = name
 
     def __enter__(self) -> SyncScope:
         try:
             pre = self._graph.use_scope()
         except OutOfScopeError:
             pre = MISSING
-        self._scope = SyncScope(
-            self._graph, scope_id=self._scope_id, pre=pre
-        ).__enter__()
+        self._scope = SyncScope(self._graph, name=self._name, pre=pre).__enter__()
         self._token = self._graph.set_context_scope(self._scope)
         return self._scope
 
@@ -187,7 +183,7 @@ class ScopeProxy:
         except OutOfScopeError:
             pre = MISSING
         self._scope = await AsyncScope(
-            self._graph, scope_id=self._scope_id, pre=pre
+            self._graph, name=self._name, pre=pre
         ).__aenter__()
         self._token = self._graph.set_context_scope(self._scope)
         return self._scope
@@ -353,16 +349,16 @@ class DependencyGraph:
 
     @ty.overload
     def use_scope(
-        self, scope_id: ty.Hashable = MISSING, *, as_async: ty.Literal[False] = False
+        self, name: Maybe[ty.Hashable] = MISSING, *, as_async: ty.Literal[False] = False
     ) -> SyncScope: ...
 
     @ty.overload
     def use_scope(
-        self, scope_id: ty.Hashable = MISSING, *, as_async: ty.Literal[True]
+        self, name: Maybe[ty.Hashable] = MISSING, *, as_async: ty.Literal[True]
     ) -> AsyncScope: ...
 
     def use_scope(
-        self, scope_id: Maybe[ty.Hashable] = MISSING, *, as_async: bool = False
+        self, name: Maybe[ty.Hashable] = MISSING, *, as_async: bool = False
     ) -> SyncScope | AsyncScope:
         """
         Get most recently created scope
@@ -375,8 +371,8 @@ class DependencyGraph:
         except LookupError as le:
             raise OutOfScopeError() from le
 
-        if scope_id:
-            return scope.get_scope(scope_id)
+        if name:
+            return scope.get_scope(name)
         return scope
 
     def remove_node(self, node: DependentNode[ty.Any]) -> None:
@@ -799,7 +795,7 @@ class DependencyGraph:
 
         return ty.cast(IFactory[[], R], f)
 
-    def scope(self, scope_id: Maybe[ty.Hashable] = MISSING) -> ScopeProxy:
+    def scope(self, name: Maybe[ty.Hashable] = MISSING) -> ScopeProxy:
         """
         create a scope for resource,
         resources resolved wihtin the scope would be
@@ -807,7 +803,7 @@ class DependencyGraph:
         scope_name: give a iditifier to the scope so that you can get it with
         dg.get_scope(scope_name)
         """
-        return ScopeProxy(self, scope_id=scope_id)
+        return ScopeProxy(self, name=name)
 
     def register_node(self, node: DependentNode[ty.Any]) -> None:
         """

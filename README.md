@@ -85,21 +85,23 @@ assert await main() == "ok"
 
 ### Using Scope to manage resources
 
-- scope can resolve non-resource dependents as well.
-- nested scope is supported.
-- you can have infinite number of scopes
-- scope is separated by context:
+- **Infinite nested scope is supported.**
+- **Scopes are separated by context**
+- **Parent scope can be accssed by child scope(within the same context)**
+- **Resources will be shared across dependents only withint the same scope(reuse needs to be True)**
+- **Resources will be automatically closed and destroyed when the scope is exited.**
+- **Classes that implment `contextlib.AbstractContextManager` or `contextlib.AbstractAsyncContextManager` are also considered to be resources and can/should be resolved within scope.**
 
-If you have two call stack of `a1 -> b1` and `a2 -> b2`
-Here a1 and a2 means two calls to smame function `a`
-in b1 you can only access scope created by the a1, not a2.
+#### Scope is separated by context
 
-you might use combination of `with` or `async with` statement and `dg.scope()` to manage resources.
+If you have two call stack of `a1 -> b1` and `a2 -> b2`,
+Here `a1` and `a2` are two calls to smame function `a`
+in `b1` you can only access scope created by the `a1`, not `a2`.
 
-resources will only be shared across dependents only withint the same scope,
-and will be automatically destryoed and closed when the scope is exited.
+This is particularly useful when you try to separate resources by route, endpoint, request, etc.
 
-NOTE: classes that implment `contextlib.AbstractContextManager` or `contextlib.AbstractAsyncContextManager` are also considered to be resources and can/should be resolved within scope.
+### `scope` supports both `with` or `async with` statement
+
 
 ```python
 @dg.node
@@ -116,7 +118,9 @@ async with dg.scope() as scope:
     resource = await scope.resolve(Resource)
 ```
 
-you can use dg.use_scope to retrive most recent scope, context-wise, this allows your to have
+#### Contexted Scope
+
+You can use dg.use_scope to retrive most recent scope, context-wise, this allows your to have
 access the scope without passing it around, e.g.
 
 ```python
@@ -124,15 +128,13 @@ async def service_factory():
     async with dg.scope() as scope:
         service = scope.resolve(Service)
         yield service
-```
 
-```python
 @app.get("users")
 async def get_user(service: Service = Depends(dg.factory(service_factory)))
     await service.create_user(...)
 ```
 
-then somewhere deep in your service.create_user call stack
+Then somewhere deep in your service.create_user call stack
 
 ```python
 async def create_and_publish():
@@ -143,6 +145,22 @@ async def create_and_publish():
 ```
 
 Here `dg.use_scope()` would return the same scope you created in your `service_factory`.
+
+#### Named Scope
+
+You can create infinite level of scopes by assigning hashable name to scopes
+
+```python
+# at the top most entry of a request
+async with dg.scope(request_id) as scope:
+    ...
+```
+
+now scope with name `request_id` is accessible everywhere within the request context
+
+```python
+request_scope = dg.use_scope(request_id)
+```
 
 ### Usage with FastAPI
 
