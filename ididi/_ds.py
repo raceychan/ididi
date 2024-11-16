@@ -108,4 +108,3 @@ class ResolutionRegistry(BaseRegistry):
         default: Maybe[T] = MISSING,
     ) -> Maybe[T]:
         return self._mappings.get(dependent_type, default)
-

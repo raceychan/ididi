@@ -47,14 +47,14 @@ class AbstractScope[Stack: ExitStack | AsyncExitStack]:
     _pre: Maybe["SyncScope | AsyncScope"]
     resolutions: ResolutionRegistry
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}(id={self._name})"
+
     def cache_result[T](self, dependent: ty.Callable[..., T], result: T) -> None:
         self.resolutions.register(dependent, result)
 
     def enter_context[T](self, context: ty.ContextManager[T]) -> T:
         return self._stack.enter_context(context)
-
-    def __repr__(self):
-        return f"{self.__class__.__name__}(id={self._name})"
 
     def get_scope(self, name: ty.Hashable) -> ty.Self:
         if name == self._name:

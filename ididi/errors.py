@@ -12,11 +12,11 @@ class IDIDIError(Exception):
 
 
 class OutOfScopeError(IDIDIError):
-    def __init__(self, name: ty.Hashable=""):
+    def __init__(self, name: ty.Hashable = ""):
         if name:
             msg = f"scope with {name=} not found in current context"
         else:
-            msg = "Fail to find any scope"
+            msg = "scope not found in current context"
 
         super().__init__(msg)
 
