@@ -31,10 +31,11 @@ report:
 	pixi run -e test pytest tests/ --cov=ididi --cov-report html
 
 
-.PHONY: visualize
-visualize:
-	pixi run -e dev python -m illustrate
+.PHONY: docs
+docs:
+	pixi run -e dev mkdocs serve
 
+# =============
 
 .PHONY: patch
 patch:
@@ -124,3 +125,4 @@ publish-release:
 delete-branch:
 	git branch -d $(BRANCH)
 	git push origin --delete $(BRANCH)
+

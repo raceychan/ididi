@@ -342,6 +342,21 @@ class Outer:
 instance = dg.resolve(Outer, inner=Inner(value="overridden"))
 assert instance.inner.value == "overridden"
 ```
+### Error context
+
+static resolve might fail when class contain unresolvable dependencies, when failed, ididi would show a chain of errors like this:
+
+```bash
+ididi.errors.MissingAnnotationError: Unable to resolve dependency for parameter: env in <class 'Config'>,
+annotation for `env` must be provided
+
+<- Config(env: _Missed)
+<- DataBase(config: Config)
+<- AuthService(db: DataBase)
+<- UserService(auth: AuthService)
+```
+
+Where UserService depends on AuthService, which depends on Database, then Config, but Config.env is missing annotation.
 
 ## Advanced Usage
 
@@ -438,24 +453,6 @@ assert user.repo is session.repo
 
 # same logic for resource with scope
 ```
-
-### Error context
-
-static resolve might fail when class contain unresolvable dependencies, when failed, ididi would show a chain of errors like this:
-
-```bash
-ididi.errors.MissingAnnotationError: Unable to resolve dependency for parameter: env in <class 'Config'>,
-annotation for `env` must be provided
-
-<- Config(env: _Missed)
-<- DataBase(config: Config)
-<- AuthService(db: DataBase)
-<- UserService(auth: AuthService)
-```
-
-Where UserService depends on AuthService, which depends on Database, then Config, but Config.env is missing annotation.
-
-
 
 ## Performance
 

@@ -1,7 +1,6 @@
 [project]
-authors = [{name = "raceychan", email = "raceychan@gmail.com"}]
+authors = [{ name = "raceychan", email = "raceychan@gmail.com" }]
 description = "A dependency injection library for Python, Optimized for serverless applications"
-documentation = "https://ididi.readthedocs.io"
 dynamic = ["version"]
 license = "MIT"
 name = "ididi"
@@ -38,8 +37,8 @@ omit = [
 ]
 
 [tool.pyright]
-include = ["ididi/*.py"]
 exclude = ["tests"]
+include = ["ididi/*.py"]
 python_version = "3.12"
 typeCheckingMode = "strict"
 
@@ -48,26 +47,23 @@ channels = ["conda-forge"]
 platforms = ["linux-64"]
 
 [tool.pixi.environments]
-default = {solve-group = "default"}
-dev = {features = ["dev"], solve-group = "default"}
-publish = {features = ["publish"], solve-group = "default"}
-test = {features = ["test"], solve-group = "default"}
-
-# [tool.pixi.pypi-dependencies]
-# ididi = {path = ".", editable = true}
+default = { solve-group = "default" }
+dev = { features = ["dev"], solve-group = "default" }
+publish = { features = ["publish"], solve-group = "default" }
+test = { features = ["test"], solve-group = "default" }
 
 [tool.pixi.dependencies]
 python = ">=3.12"
 
 [tool.pixi.feature.dev.dependencies]
 jupyter = ">=1.1.1,<2"
-python-graphviz = ">=0.20.3,<0.21"
+mkdocs-material = ">=9.5.44,<10"
 
 [tool.pixi.feature.test.dependencies]
 pytest = ">=8.3.3"
 pytest-asyncio = ">=0.24.0,<0.25"
 pytest-cov = ">=4.1.0"
-python-graphviz = ">=0.20.3,<0.21"
+# python-graphviz = ">=0.20.3,<0.21"
 
 [tool.pixi.feature.publish.dependencies]
 hatch = ">=1.13.0,<2"
@@ -75,12 +71,12 @@ twine = ">=5.1.1,<6"
 
 [tool.pixi.feature.publish.tasks]
 # Build into a wheel using hatch
-build = {cmd = "hatch build", inputs = ["didi/*"], outputs = ["dist/*"]}
+build = { cmd = "hatch build", inputs = ["didi/*"], outputs = ["dist/*"] }
 # Upload to custom GCP registry using twine
-check = {cmd = "twine check"}
-publish = {cmd = "twine upload --skip-existing dist/*", depends-on = [
+check = { cmd = "twine check" }
+publish = { cmd = "twine upload --skip-existing dist/*", depends-on = [
   "build",
-]}
-test-publish = {cmd = "twine upload --repository testpypi --skip-existing dist/"}
+] }
+test-publish = { cmd = "twine upload --repository testpypi --skip-existing dist/" }
 
-patch = {cmd = "hatch version patch"}
+patch = { cmd = "hatch version patch" }
