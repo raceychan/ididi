@@ -205,56 +205,78 @@ class Visitor:
     def __init__(self, nodes: GraphNodes[ty.Any]):
         self._nodes = nodes
 
+    def _dfs(
+        self,
+        start_types: list[type] | type,
+        pre_visit: ty.Callable[[type], None] | None = None,
+        post_visit: ty.Callable[[type], None] | None = None,
+    ) -> None:
+        """Generic DFS traversal with customizable visit callbacks.
+
+        Args:
+            start_types: Starting type(s) for traversal
+            pre_visit: Called before visiting node's dependencies
+            post_visit: Called after visiting node's dependencies
+        """
+        if isinstance(start_types, type):
+            start_types = [start_types]
+
+        visited = set[type]()
+
+        def _get_deps(node_type: type) -> list[type]:
+            node = self._nodes[node_type]
+            return [
+                p.param_type for _, p in node.signature if p.param_type in self._nodes
+            ]
+
+        def dfs(node_type: type):
+            if node_type in visited:
+                return
+            visited.add(node_type)
+
+            if pre_visit:
+                pre_visit(node_type)
+
+            for dep_type in _get_deps(node_type):
+                dfs(dep_type)
+
+            if post_visit:
+                post_visit(node_type)
+
+        for node_type in start_types:
+            dfs(node_type)
+
     def get_dependents(self, dependency: type) -> list[type]:
-        """
-        return dependents of a dependency, both need to be in the graph
-        """
-        visited: set[type] = set()
         dependents: list[type] = []
 
-        def dfs(dep: type):
-            if dep in visited:
-                return
-            visited.add(dep)
-            node = self._nodes[dep]
-            for _, dep_param in node.signature:
-                param_type = dep_param.param_type
-                if param_type not in self._nodes:
-                    continue
-                if param_type is dependency:
-                    dependents.append(dep)
-                dfs(param_type)
+        def collect_dependent(node_type: type):
+            node = self._nodes[node_type]
+            if any(p.param_type is dependency for _, p in node.signature):
+                dependents.append(node_type)
 
-        for dep in self._nodes:
-            dfs(dep)
+        self._dfs(list(self._nodes), pre_visit=collect_dependent)
         return dependents
 
     def get_dependencies(self, dependent: type, recursive: bool = False) -> list[type]:
-        """
-        return dependencies of a dependent, both need to be in the graph
-
-        recursive: bool; if true, return recursive dependencies.
-        """
         if not recursive:
             return [p.param_type for _, p in self._nodes[dependent].signature]
 
-        visited: set[type] = set()
+        def collect_dependencies(t: type):
+            if t != dependent:
+                dependencies.append(t)
+
         dependencies: list[type] = []
-
-        def dfs(dep: type):
-            if dep in visited:
-                return
-            visited.add(dep)
-            node = self._nodes[dep]
-            for _, dep_param in node.signature:
-                param_type = dep_param.param_type
-                dependencies.append(param_type)
-                if param_type not in self._nodes:
-                    continue
-                dfs(param_type)
-
-        dfs(dependent)
+        self._dfs(
+            dependent,
+            post_visit=collect_dependencies,
+        )
         return dependencies
+
+    def top_sorted_dependencies(self) -> list[type]:
+        "Sort the whole graph, from lowest dependencies to toppest dependents"
+        order: list[type] = []
+        self._dfs(list(self._nodes), post_visit=order.append)
+        return order
 
 
 class DependencyGraph:
@@ -358,34 +380,6 @@ class DependencyGraph:
         self._resolution_registry.remove(dependent_type)
         self._resolved_nodes.pop(dependent_type, None)
 
-    def top_sorted_dependencies(self) -> list[type]:
-        """
-        Return types in dependency order (topological sort).
-        """
-        # TODO: extract dfs to be a separate function, reuse it when applicable
-
-        order: list[type] = []
-        visited = set[type]()
-
-        def dfs(node_type: type):
-            if node_type in visited:
-                return
-
-            visited.add(node_type)
-            node = self._nodes[node_type]
-            for _, dep_param in node.signature:
-                dependent_type = dep_param.param_type
-                if dependent_type not in self._nodes:
-                    continue
-                dfs(dependent_type)
-
-            order.append(node_type)
-
-        for node_type in self._nodes:
-            dfs(node_type)
-
-        return order
-
     def reset(self, clear_nodes: bool = False) -> None:
         """
         Clear all resolved instances while maintaining registrations.
@@ -407,8 +401,7 @@ class DependencyGraph:
         Close any resources held by resolved instances.
         Closes in reverse initialization order.
         """
-        close_order = reversed(self.top_sorted_dependencies())
-        await self._resolution_registry.close_all(close_order)
+        # TODO?: leave scopes
         self.reset(clear_nodes=True)
 
     def _resolve_concrete_type[T](self, abstract_type: type[T]) -> type[T]:
@@ -677,14 +670,13 @@ class DependencyGraph:
             instance = scope.enter_context(resolved)
             if node.config.reuse:
                 scope.cache_result(dependent, instance)
-            return ty.cast(T, instance)
         elif is_async_context_manager(resolved):
-            if is_function(node.factory):  # ACM class
-                raise AsyncResourceInSyncError(node.factory)
-
-        if node.config.reuse:
-            self._resolution_registry.register(dependent, resolved)
-        return ty.cast(T, resolved)
+            raise AsyncResourceInSyncError(node.factory)
+        else:
+            if node.config.reuse:
+                self._resolution_registry.register(dependent, resolved)
+            instance = resolved
+        return ty.cast(T, instance)
 
     async def aresolve[
         **P, T
@@ -737,23 +729,20 @@ class DependencyGraph:
             instance = await scope.enter_async_context(resolved)
             if node.config.reuse:
                 scope.cache_result(dependent, instance)
-            return ty.cast(T, instance)
-
-        if is_context_manager(resolved):
+        elif is_context_manager(resolved):
             if not scope:
                 raise ResourceOutsideScopeError(node.dependent_type)
             instance = scope.enter_context(resolved)
             if node.config.reuse:
                 scope.cache_result(dependent, instance)
-            return ty.cast(T, instance)
-
-        if inspect.isawaitable(resolved):
-            instance = await resolved
         else:
-            instance = resolved
+            if inspect.isawaitable(resolved):
+                instance = await resolved
+            else:
+                instance = resolved
 
-        if node.config.reuse:
-            self._resolution_registry.register(dependent, instance)
+            if node.config.reuse:
+                self._resolution_registry.register(dependent, instance)
         return ty.cast(T, instance)
 
     @ty.overload

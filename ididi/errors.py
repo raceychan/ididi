@@ -49,7 +49,7 @@ class AsyncResourceInSyncError(NodeResolveError):
     def __init__(self, factory: ty.Callable[..., ty.Any]):
         self.factory = factory
         super().__init__(
-            f"Requiring async resource {factory} in a sync context is not supported"
+            f"Requiring async resource {factory} in a sync scope is not supported"
         )
 
 

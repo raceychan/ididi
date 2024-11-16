@@ -80,7 +80,6 @@ def test_solve():
     assert isinstance(email, EmailService)
 
 
-@pytest.mark.debug
 @pytest.mark.asyncio
 async def test_entry_with_overrides():
     @entry

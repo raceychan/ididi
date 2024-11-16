@@ -102,7 +102,6 @@ def test_empty_init():
 #         DependentNode.from_node(bad_factory)
 
 
-# @pytest.mark.debug
 # def test_node_without_annotation():
 
 #     class Service:

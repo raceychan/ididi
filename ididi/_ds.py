@@ -2,7 +2,7 @@ import typing as ty
 from collections import defaultdict
 from types import MappingProxyType
 
-from ._type_resolve import get_bases, is_async_closable, is_closable
+from ._type_resolve import get_bases
 from .node import DependentNode
 from .utils.param_utils import MISSING, Maybe
 
@@ -109,18 +109,3 @@ class ResolutionRegistry(BaseRegistry):
     ) -> Maybe[T]:
         return self._mappings.get(dependent_type, default)
 
-    async def close(self, dependent_type: type) -> None:
-        instance = self._mappings.pop(dependent_type, None)
-
-        if not instance:
-            return
-
-        if is_async_closable(instance):
-            await instance.close()
-
-        elif is_closable(instance):
-            instance.close()
-
-    async def close_all(self, close_order: ty.Iterable[type]) -> None:
-        for type_ in close_order:
-            await self.close(type_)

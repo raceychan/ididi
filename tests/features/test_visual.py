@@ -1,8 +1,9 @@
+from pathlib import Path
+
 import pytest
 
 from ididi.graph import DependencyGraph
 from ididi.visual import Visualizer
-from pathlib import Path
 
 
 class Config:
@@ -81,7 +82,7 @@ def test_complex_graph(tmp_path: Path):
     vs.dot
     vs.view
 
-    f = (tmp_path / "vis")
+    f = tmp_path / "vis"
     f.touch()
-    
+
     vs.save(f)

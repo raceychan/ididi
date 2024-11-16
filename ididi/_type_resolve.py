@@ -23,14 +23,6 @@ type AsyncResource = ty.AsyncContextManager[ty.Any] | AsyncClosable
 class EmptyInitProtocol(ty.Protocol): ...
 
 
-def is_async_closable(type_: object) -> ty.TypeGuard[AsyncClosable]:
-    return isinstance(type_, AsyncClosable) and inspect.iscoroutinefunction(type_.close)
-
-
-def is_closable(type_: object) -> ty.TypeGuard[Closable]:
-    return isinstance(type_, Closable)
-
-
 def get_typed_signature[
     T
 ](call: ty.Callable[..., T], check_return: bool = False,) -> inspect.Signature:

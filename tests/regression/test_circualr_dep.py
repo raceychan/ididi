@@ -49,6 +49,6 @@ def test_advanced_cycle_detection():
     dag = DependencyGraph()
 
     with pytest.raises(CircularDependencyDetectedError) as exc_info:
-        dag.resolve(A)
+        dag.static_resolve(A)
 
     assert exc_info.value.cycle_path == [A, B, C, D, A]

@@ -761,3 +761,5 @@ def test_static_resolve():
 
     deps = dg.visitor.get_dependencies(t, recursive=True)
     print(f"{cost} seoncds to resolve {t} with {len(deps)} dependencies")
+
+    # sorted_deps = dg.visitor.top_sorted_dependencies()

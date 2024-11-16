@@ -83,8 +83,8 @@ assert await main(sql="select money from bank")
 
 > [!NOTE]
 If you have two call stack of `a1 -> b1` and `a2 -> b2`,
-    Here `a1` and `a2` are two calls to smame function `a`
-    in `b1` you can only access scope created by the `a1`, not `a2`.
+    Here `a1` and `a2` are two calls to the same function `a`,
+    then, in `b1`, you can only access scope created by the `a1`, not `a2`.
 
 This is particularly useful when you try to separate resources by route, endpoint, request, etc.
 
@@ -150,7 +150,7 @@ request_scope = dg.use_scope(request_id)
 ```
 
 > [!NOTE]
-Two scopes or more with the same name would follow local-first rule.
+Two scopes or more with the same name would follow most recent rule.
 
 #### Nested Nmaed Scope
 
@@ -163,8 +163,8 @@ async with dg.scope(app_name) as app_scope:
                     ...
 ```
 
-Any functions called within the request_scope, you can get `request_scope` with `dg.use_scope()`,
-or its parent scopes, such as `dg.use_scope(app_name)` to get app_scope.
+For any functions called within the request_scope, you can get the most recent scope with `dg.use_scope()`,
+or its parent scopes, i.e. `dg.use_scope(app_name)` to get app_scope.
 
 ### Usage with FastAPI
 
@@ -191,7 +191,6 @@ def get_service(service: Service):
 ```python
 from ididi import DependencyGraph, Visualizer
 dg = DependencyGraph()
-vs = Visualizer(dg)
 
 class ConfigService:
     def __init__(self, env: str = "test"):
@@ -236,7 +235,9 @@ class EmailService:
         self.user = user
 
 dg.static_resolve(EmailService)
+vs = Visualizer(dg)
 vs.view # use vs.view in jupyter notebook, or use vs.save(path, format) otherwise
+vs.save(path, format)
 ```
 
 ![image](https://github.com/user-attachments/assets/b86be121-3957-43f3-b75c-3689a855d7fb)
@@ -275,11 +276,12 @@ def test_advanced_cycle_detection():
     dag = DependencyGraph()
 
     with pytest.raises(CircularDependencyDetectedError) as exc_info:
-        dag.resolve(A)
+        dag.static_resolve(A)
     assert exc_info.value.cycle_path == [A, B, C, D, A]
 ```
 
-This happens when a class is statically resolved
+You can call `DependencyGraph.static_resolve_all` on app start to statically resolve all
+your noded classes, and let ididi get ready for resolve them at upcoming calls.
 
 ### Lazy Dependency(Beta)
 

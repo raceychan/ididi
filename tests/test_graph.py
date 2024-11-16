@@ -5,9 +5,9 @@ from unittest import mock
 
 import pytest
 
-from ididi._type_resolve import is_closable
 from ididi.errors import (
     ABCNotImplementedError,
+    AsyncResourceInSyncError,
     GenericDependencyNotSupportedError,
     MissingAnnotationError,
     PositionalOverrideError,
@@ -222,11 +222,18 @@ def test_static_resolve_factory(dg: DependencyGraph):
     assert Repository in dg.type_registry[Repository]
 
 
-def test_resource_cleanup(dg: DependencyGraph):
+@pytest.mark.asyncio
+async def test_resource_cleanup(dg: DependencyGraph):
     closed_resources: set[str] = set()
 
     @dg.node
     class Resource1:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            await self.close()
+
         async def close(self):
             closed_resources.add("resource1")
 
@@ -235,17 +242,24 @@ def test_resource_cleanup(dg: DependencyGraph):
         def __init__(self, r1: Resource1):
             self.r1 = r1
 
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            await self.close()
+
         async def close(self):
             closed_resources.add("resource2")
 
     # Resolve and verify resources
-    instance = dg.resolve(Resource2)
-    assert isinstance(instance, Resource2)
+    with pytest.raises(AsyncResourceInSyncError):
+        with dg.scope() as scope:
+            instance = scope.resolve(Resource2)
 
-    # Test cleanup
-    import asyncio
+    async with dg.scope() as scope:
+        instance = await scope.resolve(Resource2)
+        assert isinstance(instance, Resource2)
 
-    asyncio.run(dg.aclose())
     assert closed_resources == {"resource1", "resource2"}
 
 
@@ -385,40 +399,6 @@ def test_unsupported_annotation(dg: DependencyGraph):
         dg.resolve(New)
 
 
-def test_resource_type_check(dg: DependencyGraph):
-    class NonResource:
-        pass
-
-    class Resource:
-        async def close(self):
-            pass
-
-    assert not is_closable(NonResource())
-    assert is_closable(Resource())
-
-
-def test_initialization_order(dg: DependencyGraph):
-    # dag.reset(clear_resolved=True)
-
-    class ServiceC:
-        pass
-
-    class ServiceB:
-        def __init__(self, c: ServiceC):
-            self.c = c
-
-    class ServiceA:
-        def __init__(self, b: ServiceB):
-            self.b = b
-
-    dg.static_resolve(ServiceA)
-    order = dg.top_sorted_dependencies()
-    # C should be initialized before B, and B before A
-
-    assert order.index(ServiceC) < order.index(ServiceB)
-    assert order.index(ServiceB) < order.index(ServiceA)
-
-
 def test_dependency_override(dg: DependencyGraph):
     @dg.node
     class Service:
@@ -532,13 +512,13 @@ async def test_graph_without_static_resolve(dg: DependencyGraph):
         dg.resolve(UserService)
 
     with pytest.raises(PositionalOverrideError):
-        dg.resolve(UserRepository, 1)  # type: ignore
+        dg.resolve(UserRepository, 1)
 
     with pytest.raises(PositionalOverrideError):
         await dg.aresolve(UserRepository, 1)
 
     with pytest.raises(PositionalOverrideError):
-        dg.resolve(UserRepository, 1, 2)  # type: ignore
+        dg.resolve(UserRepository, 1, 2)
 
     with pytest.raises(PositionalOverrideError):
         await dg.aresolve(UserRepository, 1, 2)
