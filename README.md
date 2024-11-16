@@ -85,15 +85,21 @@ assert await main() == "ok"
 
 ### Using Scope to manage resources
 
+- scope can resolve non-resource dependents as well.
 - nested scope is supported.
-- scope can resolve 'normal' dependents as well.
+- you can have infinite number of scopes
+- scope is separated by context:
 
-you might use combination of `with` or `async with` statement and `dg.scope()` to manage resources. 
+If you have two call stack of `a1 -> b1` and `a2 -> b2`
+Here a1 and a2 means two calls to smame function `a`
+in b1 you can only access scope created by the a1, not a2.
+
+you might use combination of `with` or `async with` statement and `dg.scope()` to manage resources.
 
 resources will only be shared across dependents only withint the same scope,
 and will be automatically destryoed and closed when the scope is exited.
 
-NOTE: classes that implment `contextlib.AbstractContextManager` or `contextlib.AbstractAsyncContextManager` are also considered to be resources and can be resolved within scope.
+NOTE: classes that implment `contextlib.AbstractContextManager` or `contextlib.AbstractAsyncContextManager` are also considered to be resources and can/should be resolved within scope.
 
 ```python
 @dg.node
@@ -110,24 +116,33 @@ async with dg.scope() as scope:
     resource = await scope.resolve(Resource)
 ```
 
-you can use dg.use_scope to retrive nearest scope, this allows your to have
+you can use dg.use_scope to retrive most recent scope, context-wise, this allows your to have
 access the scope without passing it around, e.g.
 
 ```python
-def main():
-    with dg.scope() as scope:
-        global_app = scope.resolve(App)
+async def service_factory():
+    async with dg.scope() as scope:
+        service = scope.resolve(Service)
+        yield service
 ```
-
-and somewhere deep in your callstack, you can do
 
 ```python
-def somewhere():
-    scope = dg.use_scope()
-    local_app = scope.resolve(App)
-
-assert global_app is local_app
+@app.get("users")
+async def get_user(service: Service = Depends(dg.factory(service_factory)))
+    await service.create_user(...)
 ```
+
+then somewhere deep in your service.create_user call stack
+
+```python
+async def create_and_publish():
+    uow = dg.use_scope().resolve(UnitOfWork)
+    async with uow.trans():
+        user_repo.add_user(user)
+        event_store.add(user_created_event)
+```
+
+Here `dg.use_scope()` would return the same scope you created in your `service_factory`.
 
 ### Usage with FastAPI
 

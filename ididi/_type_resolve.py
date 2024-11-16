@@ -145,7 +145,7 @@ def resolve_annotation(annotation: ty.Any) -> type:
 
 def get_bases(dependent: type) -> tuple[type, ...]:
     if issubclass(dependent, ty.Protocol):
-        # -3 excludes ty.Protocol, ty.Generic, object
+        # -3 excludes ty.Protocol, ty.Gener, object
         bases = ty.cast(type, dependent).__mro__[1:-3]
     else:
         bases = dependent.__mro__[1:-1]

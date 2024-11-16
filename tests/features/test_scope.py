@@ -379,5 +379,16 @@ async def test_async_nested_scope_with_context_scope():
             assert dg2 is second_local
         assert dg.use_scope(as_async=True) is dg1
 
+    def test_two():
+        with dg.scope() as dga1:
+            assert dga1 is not dg1
+            assert dga1 is not dg2
+            assert dga1 is not dg3
+            assert dga1 is not local
+            assert dga1 is not second_local
+
+
+    test_two()
+
     with pytest.raises(OutOfScopeError):
         dg.use_scope()
