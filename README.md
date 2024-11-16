@@ -1,10 +1,8 @@
-# Introduction
+# Ididi
 
-ididi is a pythonic dependency injection lib, with ergonomic apis, without boilplate code, works out of the box.
+Genius simplicity, unmathced power.
 
-ididi is designed to be non-intrusive, it stays out of your existing code, and is easy to be added/removed.
-
-ididi is 100% strictly typed and well-tested, you can expect excellent typing support.
+ididi is 100% test covered and strictly typed.
 
 ## Information
 
@@ -30,26 +28,16 @@ pip install ididi[graphviz]
 
 ### Quick Start
 
+Your existing code
+
 ```python
 import ididi
-
-class Config:
-    def __init__(self, env: str = "prod"):
-        self.env = env
-
-class Database:
-    def __init__(self, config: Config):
-        self.config = config
-
-class UserRepository:
-    def __init__(self, db: Database):
-        self.db = db
 
 class UserService:
     def __init__(self, repo: UserRepository):
         self.repo = repo
 
-assert isinstance(ididi.resolve(UserService), UserService)
+user_service = ididi.resolve(UserService) 
 ```
 
 ### Automatic dependencies injection
@@ -62,6 +50,7 @@ NOTE:
 
 ```python
 from ididi import DependencyGraph
+
 dg = DependencyGraph()
 
 @dg.node
@@ -69,39 +58,37 @@ async def get_db(client: Client) -> ty.AsyncGenerator[DataBase, None]:
     db = DataBase(client)
     assert client.is_opened
     try:
-        db.open()
+        await db.connect()
         yield db
     finally:
         await db.close()
 
-
 @dg.entry
-async def main(db: DataBase) -> str:
-    assert db.is_opened
-    return "ok"
+async def main(db: DataBase, sql: str) -> ty.Any:
+    res = await db.execute(sql)
+    return res
 
-assert await main() == "ok"
+assert await main(sql="select money from bank")
 ```
 
 ### Using Scope to manage resources
 
 - **Infinite nested scope is supported.**
-- **Scopes are separated by context**
 - **Parent scope can be accssed by child scope(within the same context)**
 - **Resources will be shared across dependents only withint the same scope(reuse needs to be True)**
 - **Resources will be automatically closed and destroyed when the scope is exited.**
 - **Classes that implment `contextlib.AbstractContextManager` or `contextlib.AbstractAsyncContextManager` are also considered to be resources and can/should be resolved within scope.**
 
-#### Scope is separated by context
+- **Scopes are separated by context**
 
+> [!NOTE]
 If you have two call stack of `a1 -> b1` and `a2 -> b2`,
-Here `a1` and `a2` are two calls to smame function `a`
-in `b1` you can only access scope created by the `a1`, not `a2`.
+    Here `a1` and `a2` are two calls to smame function `a`
+    in `b1` you can only access scope created by the `a1`, not `a2`.
 
 This is particularly useful when you try to separate resources by route, endpoint, request, etc.
 
-### `scope` supports both `with` or `async with` statement
-
+#### Async, or not, works either way
 
 ```python
 @dg.node
@@ -162,9 +149,24 @@ now scope with name `request_id` is accessible everywhere within the request con
 request_scope = dg.use_scope(request_id)
 ```
 
-### Usage with FastAPI
+> [!NOTE]
+Two scopes or more with the same name would follow local-first rule.
 
-NOTE: resource is supported
+#### Nested Nmaed Scope
+
+```python
+async with dg.scope(app_name) as app_scope:
+    async with dg.scope(router) as router_scope:
+        async with dg.scope(endpoint) as endpoint_scope:
+            async with dg.scope(user_id) as user_scope:
+                async with dg.scope(request_id) as request_scope:
+                    ...
+```
+
+Any functions called within the request_scope, you can get `request_scope` with `dg.use_scope()`,
+or its parent scopes, such as `dg.use_scope(app_name)` to get app_scope.
+
+### Usage with FastAPI
 
 ```python
 from fastapi import FastAPI
@@ -173,12 +175,9 @@ from ididi import DependencyGraph
 app = FastAPI()
 dg = DependencyGraph()
 
-class AuthService: ...
-
-@dg.node
 def auth_service_factory(db: DataBase) -> AuthService:
-    asycn with AuthService(db=db) as auth:
-        yield auth
+    async with dg.scope() as scope
+        yield dg.resolve(AuthService)
 
 Service = ty.Annotated[AuthService, Depends(dg.factory(auth_service_factory))]
 
@@ -438,15 +437,21 @@ assert user.repo is session.repo
 
 ### Performance
 
-ididi is very efficient and performant,
+ididi is very efficient and performant, with average time complexity of O(n)
 
 #### `DependencyGraph.statical_resolve` (type analysis on each class, can be done at import time)
 
 Time Complexity: O(n) - O(n**2)
 
-O(n): more-real case, where each dependent has a constant number of dependencies, for example, each dependents has on average 3 dependencies.
+O(n): average case, where each dependent has a constant number of dependencies, for example, each dependents has on average 3 dependencies.
 
 O(n**2): worst case, where each dependent has as much as possible number of dependencies, for example, with 100 nodes, node 1 has 99 dependencies, node 2 has 98, etc.
+
+I personally don't think anyone would ever encouter the worse case in real-world, but even if someone does, you can still expect ididi resolve thousand of such classes in seoncds.
+
+As a reference:
+
+tests/test_benchmark.py 0.003801 seoncds to statically resolve 122 classes
 
 #### `DependencyGraph.resolve` (inject dependencies and build the dependent instance)
 
@@ -458,10 +463,6 @@ You might run the benchmark yourself with following steps
 2. install pixi from [pixi](https://pixi.sh/latest/)
 3. run `pixi install`
 4. run `make benchmark`
-
-As a reference:
-
-tests/test_benchmark.py 0.003801 seoncds to statically resolve 122 classes
 
 #### Performance tip
 
@@ -557,8 +558,11 @@ Dependency injection enables you to extend the dependencies of a class without m
 
 #### Do we need a DI framework?
 
-It depends on how complicated your dependency graph is,
-for example, you might have something like this in your app,
+Not necessarily, You will be doing just fine using menual dependency injection,as long as the number of dependencies in your app stays within a managable range.
+
+It gets more and more helpful once your your dependency graph starts getting more complicated,
+For example, you might have something like this in your app,
+
 where you menually inject dependencies into dependent.
 
 ```python
@@ -583,7 +587,7 @@ def auth_service_factory(
     )
     async_engine = sqlalchemy.ext.asyncio.AsyncEngine(engine)
     db = AsyncDatabase(async_engine)
-    cahce = RedisCache[str].build(
+    cache = RedisCache[str].build(
         url=config.URL,
         keyspace=config.keyspaces.APP,
         socket_timeout=config.SOCKET_TIMEOUT,
@@ -610,7 +614,16 @@ def auth_service_factory(
     return auth_service
 ```
 
-but then you realize that some of these dependencies should be shared across your services, for example, auth repo might be needed by both AuthService and UserService, or even more
+But then you realize that some of these dependencies should be shared across your services,
+for example, auth repo might be needed by both AuthService and UserService, or even more
+
+You might also need to menually create and manage scope as some resources should be accessed/shared only whtin a certain scope, e.g., a request.
+
+#### Why Ididi?
+
+ididi helps you do this while stays out of your way, you do not need to create additional classes like `Container`, `Provider`, `Wire`, nor adding lib-specific annotation like `Closing`, `Injectable`, etc.
+
+ididi provides unique powerful features that most alternatives don't have, such as support to inifinite number of context-specific nested sopce, lazydependent, advanced circular dependency detection, plotting, etc.
 
 ### Terminology
 
@@ -645,7 +658,7 @@ def config_factory() -> Config:
     return Config(env="test")
 ```
 
-#### how do i override a dependent in test?
+#### How do i override a dependent in test?
 
 you can use `dg.node` with a factory method to override the dependent resolution.
 

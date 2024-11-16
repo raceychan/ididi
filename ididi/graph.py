@@ -347,34 +347,6 @@ class DependencyGraph:
     def reset_context_scope(self, token: Token[SyncScope | AsyncScope]):
         self._scope_context.reset(token)
 
-    @ty.overload
-    def use_scope(
-        self, name: Maybe[ty.Hashable] = MISSING, *, as_async: ty.Literal[False] = False
-    ) -> SyncScope: ...
-
-    @ty.overload
-    def use_scope(
-        self, name: Maybe[ty.Hashable] = MISSING, *, as_async: ty.Literal[True]
-    ) -> AsyncScope: ...
-
-    def use_scope(
-        self, name: Maybe[ty.Hashable] = MISSING, *, as_async: bool = False
-    ) -> SyncScope | AsyncScope:
-        """
-        Get most recently created scope
-
-        as_async: bool
-        pure typing helper, ignored at runtime
-        """
-        try:
-            scope = self._scope_context.get()
-        except LookupError as le:
-            raise OutOfScopeError() from le
-
-        if name:
-            return scope.get_scope(name)
-        return scope
-
     def remove_node(self, node: DependentNode[ty.Any]) -> None:
         """
         Remove a node from the graph and clean up all its references.
@@ -414,7 +386,7 @@ class DependencyGraph:
 
         return order
 
-    def reset(self, clear_resolved: bool = False) -> None:
+    def reset(self, clear_nodes: bool = False) -> None:
         """
         Clear all resolved instances while maintaining registrations.
 
@@ -425,7 +397,7 @@ class DependencyGraph:
         - the type registry,
         """
         self._resolution_registry.clear()
-        if clear_resolved:
+        if clear_nodes:
             self._type_registry.clear()
             self._resolved_nodes.clear()
             self._nodes.clear()
@@ -437,7 +409,7 @@ class DependencyGraph:
         """
         close_order = reversed(self.top_sorted_dependencies())
         await self._resolution_registry.close_all(close_order)
-        self.reset(clear_resolved=True)
+        self.reset(clear_nodes=True)
 
     def _resolve_concrete_type[T](self, abstract_type: type[T]) -> type[T]:
         """
@@ -461,7 +433,6 @@ class DependencyGraph:
         try:
             concrete_type = self._resolve_concrete_type(dependent)
         except MissingImplementationError:
-            node_config = node_config if is_provided(node_config) else NodeConfig()
             node = DependentNode.from_node(dependent, config=node_config)
             self.register_node(node)
         else:
@@ -491,6 +462,35 @@ class DependencyGraph:
             signature=node.signature,
             resolver=resolver,
         )
+
+    def scope(self, name: Maybe[ty.Hashable] = MISSING) -> ScopeProxy:
+        """
+        create a scope for resource,
+        resources resolved wihtin the scope would be
+
+        scope_name: give a iditifier to the scope so that you can get it with
+        dg.get_scope(scope_name)
+        """
+        return ScopeProxy(self, name=name)
+
+    def register_node(self, node: DependentNode[ty.Any]) -> None:
+        """
+        Register a dependency node and update dependency relationships.
+        Automatically registers any unregistered dependencies.
+        """
+
+        dep_type = node.dependent.dependent_type
+        dependent_type: type = ty.get_origin(dep_type) or dep_type
+
+        # Skip if registered
+        if dependent_type in self._nodes:
+            return
+
+        # Register main type
+        self._nodes[dependent_type] = node
+
+        # Register type mappings
+        self._type_registry.register(dependent_type)
 
     def static_resolve[
         T, **P
@@ -542,6 +542,9 @@ class DependencyGraph:
                 if is_provided(param.default):
                     continue
                 if param.unresolvable:
+                    if node.config.partial:
+                        continue
+
                     raise UnsolvableDependencyError(
                         dep_name=param.name,
                         required_type=param.param_type,
@@ -567,18 +570,46 @@ class DependencyGraph:
         return dfs(dependent, node_config)
 
     @ty.overload
+    def use_scope(
+        self, name: Maybe[ty.Hashable] = MISSING, *, as_async: ty.Literal[False] = False
+    ) -> SyncScope: ...
+
+    @ty.overload
+    def use_scope(
+        self, name: Maybe[ty.Hashable] = MISSING, *, as_async: ty.Literal[True]
+    ) -> AsyncScope: ...
+
+    def use_scope(
+        self, name: Maybe[ty.Hashable] = MISSING, *, as_async: bool = False
+    ) -> SyncScope | AsyncScope:
+        """
+        Get most recently created scope
+
+        as_async: bool
+        pure typing helper, ignored at runtime
+        """
+        try:
+            scope = self._scope_context.get()
+        except LookupError as le:
+            raise OutOfScopeError() from le
+
+        if is_provided(name):
+            return scope.get_scope(name)
+        return scope
+
+    @ty.overload
     def resolve[
-        **P, T
+        T
     ](
         self,
-        dependent: ty.Callable[P, T],
+        dependent: ty.Callable[..., T],
         scope: Maybe[SyncScope] = MISSING,
         /,
     ) -> T: ...
 
     @ty.overload
     def resolve[
-        T, **P
+        **P, T
     ](
         self,
         dependent: ty.Callable[P, T],
@@ -595,8 +626,8 @@ class DependencyGraph:
         dependent: ty.Callable[P, T],
         scope: Maybe[SyncScope] = MISSING,
         /,
-        *args: ty.Any,
-        **overrides: ty.Any,
+        *args: P.args,
+        **overrides: P.kwargs,
     ) -> T:
         """
         Resolve a dependency and build its instance.
@@ -606,13 +637,13 @@ class DependencyGraph:
         if args:
             raise PositionalOverrideError(args)
 
-        if is_provided(scope):
+        if scope:
             if not isinstance(ty.cast(ty.Any, scope), AbstractScope):
                 raise PositionalOverrideError(args)
-            if is_provided(solution := scope.resolutions.get(dependent)):
+            if solution := scope.resolutions.get(dependent):
                 return solution
 
-        if is_provided(solution := self._resolution_registry.get(dependent)):
+        if solution := self._resolution_registry.get(dependent):
             return solution
 
         node: DependentNode[T] = self.static_resolve(dependent)
@@ -641,7 +672,7 @@ class DependencyGraph:
         resolved = node.factory(**bound_args.arguments)
 
         if is_context_manager(resolved):
-            if not is_provided(scope):
+            if not scope:
                 raise ResourceOutsideScopeError(node.dependent_type)
             instance = scope.enter_context(resolved)
             if node.config.reuse:
@@ -672,13 +703,13 @@ class DependencyGraph:
         if args:
             raise PositionalOverrideError(args)
 
-        if is_provided(scope):
+        if scope:
             if not isinstance(ty.cast(ty.Any, scope), AbstractScope):
                 raise PositionalOverrideError(args)
-            if is_provided(solution := scope.resolutions.get(dependent)):
+            if solution := scope.resolutions.get(dependent):
                 return solution
 
-        if is_provided(solution := self._resolution_registry.get(dependent)):
+        if solution := self._resolution_registry.get(dependent):
             return solution
 
         node: DependentNode[T] = self.static_resolve(dependent)
@@ -701,7 +732,7 @@ class DependencyGraph:
         resolved = node.factory(**bound_args.arguments)
 
         if is_async_context_manager(resolved):
-            if not is_provided(scope):
+            if not scope:
                 raise ResourceOutsideScopeError(node.dependent_type)
             instance = await scope.enter_async_context(resolved)
             if node.config.reuse:
@@ -709,7 +740,7 @@ class DependencyGraph:
             return ty.cast(T, instance)
 
         if is_context_manager(resolved):
-            if not is_provided(scope):
+            if not scope:
                 raise ResourceOutsideScopeError(node.dependent_type)
             instance = scope.enter_context(resolved)
             if node.config.reuse:
@@ -766,7 +797,17 @@ class DependencyGraph:
 
         return aresolver if use_async else resolver
 
-    def entry[**P, R](self, func: IFactory[P, R]) -> IFactory[[], R]:
+    @ty.overload
+    def entry[**P, R](self, func: IAsyncFactory[P, R]) -> IAsyncFactory[..., R]: ...
+
+    @ty.overload
+    def entry[**P, R](self, func: IFactory[P, R]) -> IFactory[..., R]: ...
+
+    def entry[
+        **P, R
+    ](self, func: IFactory[P, R] | IAsyncFactory[P, R]) -> (
+        IFactory[..., R] | IAsyncFactory[..., R]
+    ):
         def func_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             with self.scope() as scope:
                 r = self.resolve(dep, scope, *args, **kwargs)
@@ -782,8 +823,9 @@ class DependencyGraph:
         sig = get_typed_signature(func)
 
         # directly create node without DependecyGraph.node, use func as factory
+        config = NodeConfig(reuse=False, lazy=False, partial=True)
         node = DependentNode.create(
-            dependent=dep, factory=func, signature=sig, config=NodeConfig()
+            dependent=dep, factory=func, signature=sig, config=config
         )
 
         self.register_node(node)
@@ -793,36 +835,7 @@ class DependencyGraph:
         else:
             f = func_wrapper
 
-        return ty.cast(IFactory[[], R], f)
-
-    def scope(self, name: Maybe[ty.Hashable] = MISSING) -> ScopeProxy:
-        """
-        create a scope for resource,
-        resources resolved wihtin the scope would be
-
-        scope_name: give a iditifier to the scope so that you can get it with
-        dg.get_scope(scope_name)
-        """
-        return ScopeProxy(self, name=name)
-
-    def register_node(self, node: DependentNode[ty.Any]) -> None:
-        """
-        Register a dependency node and update dependency relationships.
-        Automatically registers any unregistered dependencies.
-        """
-
-        dep_type = node.dependent.dependent_type
-        dependent_type: type = ty.get_origin(dep_type) or dep_type
-
-        # Skip if registered
-        if dependent_type in self._nodes:
-            return
-
-        # Register main type
-        self._nodes[dependent_type] = node
-
-        # Register type mappings
-        self._type_registry.register(dependent_type)
+        return f
 
     @ty.overload
     def node[I](self, factory_or_class: type[I]) -> type[I]: ...

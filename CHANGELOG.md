@@ -231,3 +231,10 @@ Improvements
 Features
 
 - named scope, user can now call `dg.use_scope(name)` to get a specific parent scope in current context, this is particularly useful in scenario where you have tree-structured scopes, like app-route-request.
+
+
+## version 1.0.3
+
+Fix:
+
+now config of `entry` node is default to reuse=False, which means the result will no longer be cached.

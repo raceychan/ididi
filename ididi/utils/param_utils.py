@@ -12,7 +12,7 @@ class _Missed:
     def __repr__(self) -> str:
         return "MISSING"
 
-    def __bool__(self) -> bool:
+    def __bool__(self) -> ty.Literal[False]:
         return False
 
 

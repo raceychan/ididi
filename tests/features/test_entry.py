@@ -46,7 +46,6 @@ class EventStore:
         self.db = db
 
 
-@entry
 def main(email: EmailService, es: EventStore) -> str:
     assert isinstance(email, EmailService)
     assert isinstance(es, EventStore)
@@ -54,13 +53,11 @@ def main(email: EmailService, es: EventStore) -> str:
     return "ok"
 
 
-@entry
 def second_entry(email: EmailService) -> str:
     assert isinstance(email, EmailService)
     return "hello"
 
 
-@entry
 async def third_entry(
     notification: NotificationService, name: str = "hello", age: int = 18
 ) -> str:
@@ -70,11 +67,27 @@ async def third_entry(
 
 @pytest.mark.asyncio
 async def test_graph_entry():
-    assert main() == "ok"
-    assert second_entry() == "hello"
-    assert await third_entry() == "hello is 18 years old"
+    func = entry(third_entry)
+    func_main = entry(main)
+    func_sec = entry(second_entry)
+    assert func_main() == "ok"
+    assert func_sec() == "hello"
+    assert await func() == "hello is 18 years old"
 
 
 def test_solve():
     email = resolve(EmailService)
     assert isinstance(email, EmailService)
+
+
+@pytest.mark.debug
+@pytest.mark.asyncio
+async def test_entry_with_overrides():
+    @entry
+    async def func4(notif: NotificationService, email: str, format: str):
+        return email, format
+
+    assert await func4(email="asdf", format="asdf")
+
+
+

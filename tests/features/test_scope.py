@@ -71,6 +71,9 @@ class AsyncDataBase(AsyncResourceBase):
         super().__init__()
         self.client = client
 
+    async def execute(self, sql: str) -> str:
+        return sql
+
 
 async def async_get_client() -> ty.AsyncGenerator[AsyncClient, None]:
     client = AsyncClient()
@@ -387,8 +390,23 @@ async def test_async_nested_scope_with_context_scope():
             assert dga1 is not local
             assert dga1 is not second_local
 
-
     test_two()
 
     with pytest.raises(OutOfScopeError):
         dg.use_scope()
+
+
+@pytest.mark.asyncio
+async def test_db_exec():
+
+    dg = DependencyGraph()
+    dg.node(async_get_client)
+    dg.node(async_get_db)
+
+    @dg.entry
+    async def main(db: AsyncDataBase, sql: str) -> ty.Any:
+        res = await db.execute(sql)
+        return res
+
+    sql = "select moeny from bank"
+    assert await main(sql=sql) == sql 

@@ -138,7 +138,7 @@ def test_missing_implementation(dg: DependencyGraph):
 
 
 def test_multiple_implementations(dg: DependencyGraph):
-    dg.reset(clear_resolved=True)
+    dg.reset(clear_nodes=True)
 
     class Repository(ABC):
         def __init__(self):
@@ -281,7 +281,7 @@ def test_graph_reset(dg: DependencyGraph):
 
 
 def test_node_removal_cleanup(dg: DependencyGraph):
-    dg.reset(clear_resolved=True)
+    dg.reset(clear_nodes=True)
 
     @dg.node
     class Dependency:
@@ -609,3 +609,37 @@ def test_generic_service_with_default(dg: DependencyGraph):
         dg.resolve(GenericService[str])
 
     repr(dg)
+
+
+def test_node_config_non_transitive(dg: DependencyGraph):
+    class Base:
+        def __init__(self, name: str = "base"): ...
+
+    class Sub:
+        def __init__(self, b: Base): ...
+
+    dg.node(reuse=False)(Sub)
+    dg.static_resolve(Sub)
+
+    assert dg.nodes[Base].config.reuse == True
+
+
+def test_partial_node(dg: DependencyGraph):
+    class Base:
+        def __init__(self, name: str = "base"): ...
+
+    class Sub:
+        def __init__(self, b: Base, age: int):
+            self.b = b
+            self.age = age
+
+    with pytest.raises(UnsolvableDependencyError):
+        dg.node(reuse=False)(Sub)
+        dg.static_resolve(Sub)
+
+    dg.reset(clear_nodes=True)
+
+    dg.node(partial=True)(Sub)
+    dg.static_resolve(Sub)
+    # assert dg.resolve(Sub, age=15).age == 15
+    dg.resolve(Sub, age=15)
