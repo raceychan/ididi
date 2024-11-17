@@ -42,3 +42,18 @@ class UserService:
 
 user_service = ididi.resolve(UserService) 
 ```
+
+## Why Ididi?
+
+ididi helps you do this while stays out of your way, you do not need to create additional classes like `Container`, `Provider`, `Wire`, nor adding lib-specific annotation like `Closing`, `Injectable`, etc.
+
+ididi provides unique powerful features that most alternatives don't have, such as support to inifinite number of context-specific nested sopce, lazydependent, advanced circular dependency detection, plotting, etc.
+
+Let's now explore these fantastic feaures in the `Features` section.
+
+## To di, or not to di, this is my question
+
+If you are not familar with dependency injection, or oop in general, or/and can't come up with cases where it would be useful, or you fee like 
+> `it's java` 
+
+and you have `javaphobia`, let's discuss in the `Introduction` section.

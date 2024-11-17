@@ -1,4 +1,3 @@
-
 ### Usage with FastAPI
 
 ```python title="app.py"
@@ -18,3 +17,10 @@ Service = ty.Annotated[AuthService, Depends(dg.factory(auth_service_factory))]
 def get_service(service: Service):
     return service
 ```
+
+
+
+
+Stay tune.
+
+More advanced usage example coming...
