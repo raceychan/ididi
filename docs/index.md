@@ -53,7 +53,10 @@ Let's now explore these fantastic feaures in the `Features` section.
 
 ## To di, or not to di, this is my question
 
-If you are not familar with dependency injection, or oop in general, or/and can't come up with cases where it would be useful, or you fee like 
-> `it's java` 
+If you
 
-and you have `javaphobia`, let's discuss in the `Introduction` section.
+- Are not familar with dependency injection, or OOP in general.
+- Can't come up with cases where it would be useful.
+- You fee like `it's java` and you have `javaphobia`.
+
+**Let's discuss in the `Introduction` section.**
