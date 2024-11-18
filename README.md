@@ -2,7 +2,7 @@
 
 ### Genius simplicity, unmathced power.
 
-> [!IMPORTANT] ididi is 100% test covered and strictly typed.
+**ididi is *100%* test covered and strictly typed.**
 
 ---
 
