@@ -1,4 +1,4 @@
-## Performance
+# Performance
 
 ididi is very efficient and performant, with average time complexity of O(n)
 

@@ -19,6 +19,7 @@ VERSION = "1.0.4"
 __version__ = VERSION
 
 from ._itypes import GraphConfig as GraphConfig
+from ._itypes import INode as INode
 from ._itypes import NodeConfig as NodeConfig
 from .api import entry as entry
 from .api import resolve as resolve

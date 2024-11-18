@@ -2,6 +2,8 @@
 
 ### Genius simplicity, unmathced power.
 
+> [!IMPORTANT] ididi is 100% test covered and strictly typed.
+
 ---
 
 **Documentation**: <a href="https://raceychan.github.io/ididi" target="_blank"> https://raceychan.github.io/ididi </a>
@@ -9,8 +11,6 @@
 **Source Code**: <a href=" https://github.com/raceychan/ididi" target="_blank">  https://github.com/raceychan/ididi</a>
 
 ---
-
-> [!NOTE] ididi is 100% test covered and strictly typed.
 
 ## Install
 
@@ -41,6 +41,67 @@ user_service = ididi.resolve(UserService)
 **No Container, No Provider, No Wiring, just *Python***
 
 ## Features
+
+### Using factory to override dependency injection
+
+There are cases where you would like to menually build the dependency yourself with a factory function,
+
+#### Menually config details of external libraries
+
+```python
+@dg.node
+def engine_factory(config: Config)-> sqlalchemy.engine.Engine:
+    engine = create_engine(
+        url=config.db.URL,
+        pool_recycle=config.db.POOL_RECYCLE,
+        isolation_level=config.db.ISOLATION_LEVEL
+    )
+    return engine
+```
+
+- Privide a stub for your dependencies for testing.
+
+```py
+@dg.node
+def fake_engine_factory(config: Config)-> sqlalchemy.engine.Engine:
+    return FakeEngine()
+
+@pytest.fixture
+def engine():
+    return dg.resolve(Engine)
+```
+
+- Provide different implementation of the dependencies based on some condition.
+
+```py
+@dg.node
+def redis_cache(config: Config) -> redis.Redis:
+    if config.RUNTIME_ENV == 'prod':
+        return redis.Redis(...)
+    return redis.Redis(...)
+```
+
+- Assign a implementation for parent class
+
+```py
+class Storage:
+    ...
+class Database(Storage):
+    ...
+class S3(Storage): 
+    ...
+
+@dg.node
+def storage_factory(config: Config) -> Storage:
+    if config.storage.storage_type = "cold":
+        return S3(...)
+    return Database(...)
+```
+
+> This works for ABC, typing.Protocol, as well as plain classes.
+
+
+**`DependencyGraph.node` accepts a wide arrange of types, such as dependent class, sync/async facotry, sync/async resource factory, with typing support.**
 
 ### Automatic dependencies injection
 
@@ -342,6 +403,7 @@ class Outer:
 instance = dg.resolve(Outer, inner=Inner(value="overridden"))
 assert instance.inner.value == "overridden"
 ```
+
 ### Error context
 
 static resolve might fail when class contain unresolvable dependencies, when failed, ididi would show a chain of errors like this:
@@ -357,3 +419,19 @@ annotation for `env` must be provided
 ```
 
 Where UserService depends on AuthService, which depends on Database, then Config, but Config.env is missing annotation.
+
+To solve error like this, you can either provide the missing annotation, or you can provide a factory method with menually provide the value.
+
+```python
+@dg.node
+def config_factory() -> Config:
+    return Config(env=".env")
+```
+
+this is more common when you want to menually config external libraries like redis, sqlalchemy, etc.
+
+```python
+@dg.node
+def redis_factory(config: Config) -> redis.Redis:
+    return Redis(url=config.redis_url)
+```

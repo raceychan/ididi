@@ -1,5 +1,7 @@
 # Features
 
+## Core
+
 ### Automatic dependencies injection
 
 You can use generator/async generator to create a resource that needs to be closed.
@@ -126,9 +128,70 @@ async with dg.scope(app_name) as app_scope:
 For any functions called within the request_scope, you can get the most recent scope with `dg.use_scope()`,
 or its parent scopes, i.e. `dg.use_scope(app_name)` to get app_scope.
 
+### Circular Dependency Detection
+
+ididi would detect if circular dependency exists, if so, ididi would give you the circular path
+
+For example:
+
+```python
+class A:
+    def __init__(self, b: "B"):
+        self.b = b
 
 
-### Visualize the dependency graph(beta)
+class B:
+    def __init__(self, a: "C"):
+        self.a = a
+
+
+class C:
+    def __init__(self, d: "D"):
+        pass
+
+
+class D:
+    def __init__(self, a: A):
+        self.a = a
+
+
+def test_advanced_cycle_detection():
+    """
+    DependentNode.resolve_forward_dependency
+    """
+    dag = DependencyGraph()
+
+    with pytest.raises(CircularDependencyDetectedError) as exc_info:
+        dag.static_resolve(A)
+    assert exc_info.value.cycle_path == [A, B, C, D, A]
+```
+
+You can call `DependencyGraph.static_resolve_all` on app start to statically resolve all
+your noded classes, and let ididi get ready for resolve them at upcoming calls.
+
+### Runtime override
+
+```python
+dg = DependencyGraph()
+
+class Inner:
+    def __init__(self, value: str = "inner"):
+        self.value = value
+
+@dg.node
+class Outer:
+    def __init__(self, inner: Inner):
+        self.inner = inner
+
+# Override nested dependency
+instance = dg.resolve(Outer, inner=Inner(value="overridden"))
+assert instance.inner.value == "overridden"
+```
+
+### Visualize the dependency graph
+
+> [!NOTE] You will need to install graphviz to be able to use Visualizer
+
 
 ```python
 from ididi import DependencyGraph, Visualizer
@@ -184,46 +247,7 @@ vs.save(path, format)
 
 ![image](https://github.com/user-attachments/assets/b86be121-3957-43f3-b75c-3689a855d7fb)
 
-### Circular Dependency Detection
-
-ididi would detect if circular dependency exists, if so, ididi would give you the circular path
-
-For example:
-
-```python
-class A:
-    def __init__(self, b: "B"):
-        self.b = b
-
-
-class B:
-    def __init__(self, a: "C"):
-        self.a = a
-
-
-class C:
-    def __init__(self, d: "D"):
-        pass
-
-
-class D:
-    def __init__(self, a: A):
-        self.a = a
-
-
-def test_advanced_cycle_detection():
-    """
-    DependentNode.resolve_forward_dependency
-    """
-    dag = DependencyGraph()
-
-    with pytest.raises(CircularDependencyDetectedError) as exc_info:
-        dag.static_resolve(A)
-    assert exc_info.value.cycle_path == [A, B, C, D, A]
-```
-
-You can call `DependencyGraph.static_resolve_all` on app start to statically resolve all
-your noded classes, and let ididi get ready for resolve them at upcoming calls.
+## Beta
 
 ### Lazy Dependency(Beta)
 
@@ -263,23 +287,3 @@ assert isinstance(instance.session_repo, LazyDependent)
 # user_repo would be resolved when user_repo.test() is called.
 assert instance.user_repo.test() == "test" 
 ```
-
-### Runtime override
-
-```python
-dg = DependencyGraph()
-
-class Inner:
-    def __init__(self, value: str = "inner"):
-        self.value = value
-
-@dg.node
-class Outer:
-    def __init__(self, inner: Inner):
-        self.inner = inner
-
-# Override nested dependency
-instance = dg.resolve(Outer, inner=Inner(value="overridden"))
-assert instance.inner.value == "overridden"
-```
-
