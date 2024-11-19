@@ -40,65 +40,10 @@ user_service = ididi.resolve(UserService)
 
 **No Container, No Provider, No Wiring, just *Python***
 
+
 ## Features
 
 ### Using factory to override dependency injection
-
-There are cases where you would like to menually build the dependency yourself with a factory function,
-
-#### Menually config details of external libraries
-
-```python
-@dg.node
-def engine_factory(config: Config)-> sqlalchemy.engine.Engine:
-    engine = create_engine(
-        url=config.db.URL,
-        pool_recycle=config.db.POOL_RECYCLE,
-        isolation_level=config.db.ISOLATION_LEVEL
-    )
-    return engine
-```
-
-- Privide a stub for your dependencies for testing.
-
-```py
-@dg.node
-def fake_engine_factory(config: Config)-> sqlalchemy.engine.Engine:
-    return FakeEngine()
-
-@pytest.fixture
-def engine():
-    return dg.resolve(Engine)
-```
-
-- Provide different implementation of the dependencies based on some condition.
-
-```py
-@dg.node
-def redis_cache(config: Config) -> redis.Redis:
-    if config.RUNTIME_ENV == 'prod':
-        return redis.Redis(...)
-    return redis.Redis(...)
-```
-
-- Assign a implementation for parent class
-
-```py
-class Storage:
-    ...
-class Database(Storage):
-    ...
-class S3(Storage): 
-    ...
-
-@dg.node
-def storage_factory(config: Config) -> Storage:
-    if config.storage.storage_type = "cold":
-        return S3(...)
-    return Database(...)
-```
-
-> This works for ABC, typing.Protocol, as well as plain classes.
 
 
 **`DependencyGraph.node` accepts a wide arrange of types, such as dependent class, sync/async facotry, sync/async resource factory, with typing support.**
@@ -229,7 +174,11 @@ async with dg.scope(app_name) as app_scope:
 For any functions called within the request_scope, you can get the most recent scope with `dg.use_scope()`,
 or its parent scopes, i.e. `dg.use_scope(app_name)` to get app_scope.
 
-### Usage with FastAPI
+### Tutorial
+
+There are cases where you would like to menually build the dependency yourself with a factory function,
+
+#### Usage with FastAPI
 
 ```python
 from fastapi import FastAPI
@@ -238,16 +187,91 @@ from ididi import DependencyGraph
 app = FastAPI()
 dg = DependencyGraph()
 
-def auth_service_factory(db: DataBase) -> AuthService:
+def auth_service_factory() -> AuthService:
     async with dg.scope() as scope
         yield dg.resolve(AuthService)
 
-Service = ty.Annotated[AuthService, Depends(dg.factory(auth_service_factory))]
+Service = ty.Annotated[AuthService, Depends((auth_service_factory))]
 
 @app.get("/")
 def get_service(service: Service):
     return service
 ```
+
+#### with background task
+
+To use scope in background task, you would need to explicitly pass scope to your task
+
+```py
+@app.post("/send-notification/{email}")
+async def send_notification(email: str, background_tasks: BackgroundTasks):
+    background_tasks.add_task(write_notification, dg.use_scope(), email, message="some notification")
+    return {"message": "Notification sent in the background"}
+
+def write_notification(scope: SyncScope, email: str, message=""):
+    with open("log.txt", mode="w") as email_file:
+        content = f"notification for {email}: {message}"
+        email_file.write(content)
+        scope.resolve(MessageQueue).publish("Email Sent")
+
+    # To search parent scope:
+    parent_scope = scope.get_scope(name)
+```
+
+#### Menually config details of external libraries
+
+```python
+@dg.node
+def engine_factory(config: Config)-> sqlalchemy.engine.Engine:
+    engine = create_engine(
+        url=config.db.URL,
+        pool_recycle=config.db.POOL_RECYCLE,
+        isolation_level=config.db.ISOLATION_LEVEL
+    )
+    return engine
+```
+
+- Privide a stub for your dependencies for testing.
+
+```py
+@dg.node
+def fake_engine_factory(config: Config)-> sqlalchemy.engine.Engine:
+    return FakeEngine()
+
+@pytest.fixture
+def engine():
+    return dg.resolve(Engine)
+```
+
+- Provide different implementation of the dependencies based on some condition.
+
+```py
+@dg.node
+def redis_cache(config: Config) -> redis.Redis:
+    if config.RUNTIME_ENV == 'prod':
+        return redis.Redis(...)
+    return redis.Redis(...)
+```
+
+- Assign a implementation for parent class
+
+```py
+class Storage:
+    ...
+class Database(Storage):
+    ...
+class S3(Storage): 
+    ...
+
+@dg.node
+def storage_factory(config: Config) -> Storage:
+    if config.storage.storage_type = "cold":
+        return S3(...)
+    return Database(...)
+```
+
+> This works for ABC, typing.Protocol, as well as plain classes.
+
 
 ### Visualize the dependency graph(beta)
 

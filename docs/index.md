@@ -20,7 +20,6 @@ ididi is 100% test covered and strictly typed.
 $ pip install ididi
 ```
 
-
 To view viusal dependency graph, install `graphviz`
 
 ```console

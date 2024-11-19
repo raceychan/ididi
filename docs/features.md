@@ -128,6 +128,26 @@ async with dg.scope(app_name) as app_scope:
 For any functions called within the request_scope, you can get the most recent scope with `dg.use_scope()`,
 or its parent scopes, i.e. `dg.use_scope(app_name)` to get app_scope.
 
+Note that since scope in context-specific, you will need to pass your scope to new thread if needed.
+
+For example, To use scope in background task, you would need to explicitly pass scope to your task
+
+```py
+@app.post("/send-notification/{email}")
+async def send_notification(email: str, background_tasks: BackgroundTasks):
+    background_tasks.add_task(write_notification, dg.use_scope(), email, message="some notification")
+    return {"message": "Notification sent in the background"}
+
+def write_notification(scope: SyncScope, email: str, message=""):
+    with open("log.txt", mode="w") as email_file:
+        content = f"notification for {email}: {message}"
+        email_file.write(content)
+        scope.resolve(MessageQueue).publish("Email Sent")
+    
+    # To search parent scope:
+    parent_scope = scope.get_scope(name)
+```
+
 ### Circular Dependency Detection
 
 ididi would detect if circular dependency exists, if so, ididi would give you the circular path

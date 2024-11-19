@@ -68,6 +68,8 @@ class AbstractScope[Stack: ExitStack | AsyncExitStack]:
         else:
             raise OutOfScopeError(name)
 
+    # def scope(self): ...
+
 
 class SyncScope(AbstractScope[ExitStack]):
     __slots__ = ("_graph", "_stack", "_name", "_pre", "resolutions")
@@ -300,6 +302,8 @@ class DependencyGraph:
         self._resolution_registry = ResolutionRegistry()
         self._type_registry = TypeRegistry()
         self._scope_context = ContextVar[SyncScope | AsyncScope]("connection_context")
+        # maybe change it to current_scope? where it keeps the last scope used
+        # and if scope leaves context it just pops out
         self._visitor = Visitor(self._nodes)
 
     def __repr__(self) -> str:
@@ -464,6 +468,7 @@ class DependencyGraph:
         scope_name: give a iditifier to the scope so that you can get it with
         dg.get_scope(scope_name)
         """
+        # TODO(1.0.5): create_on_missed: bool = True
         return ScopeProxy(self, name=name)
 
     def register_node(self, node: DependentNode[ty.Any]) -> None:

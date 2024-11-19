@@ -75,18 +75,6 @@ class LazyDependent[T](Dependent[T]):
 # ======================= Signature =====================================
 
 
-# type ParamKind = ty.Literal[
-#     "positional-only",
-#     "positional or keyword",
-#     "variadic positional",
-#     "keyword-only",
-#     "variadic keyword",
-# ]
-
-
-# kind_order: tuple[ParamKind, ...] = get_literal_values(ParamKind)
-
-
 @dataclass(kw_only=True, slots=True, frozen=True)
 class DependencyParam[T]:
     """'dpram' for short
@@ -94,11 +82,17 @@ class DependencyParam[T]:
 
     ```
     @dg.node
-    def dependent_factory(self, name: str) -> ty.Any:
+    def dependent_factory(self, n: int = 5) -> ty.Any:
         ...
     ```
 
-    Here 'name: str' would be built into a DependencyParam
+    Here 'n: str = 5' would be built into a DependencyParam
+
+    name: the name of the param, here 'n' is the name
+    param: inspect.Parameter, checkout inspect for this
+    param_annotation: the original annotation of a by inspect, int, in this case.
+    param_type: an ididi-friendly type resolved from annotation, int, in this case.
+    default: the default value of the param, 5, in this case.
     """
 
     name: str

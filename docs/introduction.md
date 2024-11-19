@@ -8,15 +8,17 @@
 
 `dependency`: an object that is required by a dependent.
 
+`factory`: a function that is used to build the dependent, in case where dependent is a function, factory is the dependent.
+
 `resource`: a dependent that implements the contextlib.AbstractAsync/ContextManager, or has an async/sync generator as its factory, is considered a resource.
 
-`static resolve`: resursively build node from dependent, but does not create the instance of the dependent type.
+`static resolve`: resursively build node from dependent type, but does not create the instance of the dependent type.
 
 `resolve`: recursively resolve the dependent and its dependencies, then create an instance of the dependent type.
 
-`solve`: an alias for `resolve`
-
 `entry`: a special type of node, where it has no dependents and its factory is itself.
+
+`dg`: an instance of the DependencyGraph class.
 
 ## What and why
 

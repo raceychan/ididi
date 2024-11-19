@@ -1,5 +1,46 @@
 # Tutorial
 
+## Two primitives
+
+In most cases, you will only need these two primitive method for buliding your dpendent/dependency
+
+- `dg.resolve`
+
+you can either resolve a dependent class
+
+```py
+dg = DependencyGraph()
+
+dg.resolve(UserService)
+```
+
+or a factory function that return the dependent class.
+
+```py
+def get_user_service(user_repo: UserRepo) -> UserService:
+    return UserService(user_repo)
+
+dg.resolve(get_user_service)
+```
+
+or both
+
+```py
+def get_user_service() -> UserService:
+    return dg.resolve(UserService)
+```
+
+- `dg.scope`
+
+scope is like DependencyGraph, but for resouces.
+you can pass them around as you need,
+
+```py
+async with dg.scope() as scope:
+    conn = await scope.resolve(Connection)
+    await exec_sql(conn)
+```
+
 ### Usage with FastAPI
 
 ```python title="app.py"
@@ -81,6 +122,5 @@ def storage_factory(config: Config) -> Storage:
 ```
 
 > This works for ABC, typing.Protocol, as well as plain classes.
-
 
 **`DependencyGraph.node` accepts a wide arrange of types, such as dependent class, sync/async facotry, sync/async resource factory, with typing support.**
