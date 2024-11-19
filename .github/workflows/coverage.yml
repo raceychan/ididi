@@ -12,8 +12,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
       - name: Install dependencies
         run: pip install pytest pytest-cov pytest-asyncio
+
+      - name: install package
+        run: pip install .
 
       - name: Run tests
         run: pytest tests/ --cov=ididi --cov-report html
