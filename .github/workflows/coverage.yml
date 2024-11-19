@@ -12,16 +12,21 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - name: set up pixi
+        uses: prefix-dev/setup-pixi@v0.8.1
         with:
-          python-version: "3.12"
+          pixi-version: v0.36.0
+          cache: true
+          auth-host: prefix.dev
+          auth-token: ${{ secrets.PREFIX_DEV_TOKEN }}
 
-      - name: Install dependencies
-        run: pip install pytest pytest-cov
+      - run: pixi run -e test pytest tests/ --cov=ididi --cov-report html
 
-      - name: Run tests
-        run: pytest tests/ --cov=ididi --cov-report html
+      # - name: Install dependencies
+      #   run: pip install pytest pytest-cov
+
+      # - name: Run tests
+      #   run: pytest tests/ --cov=ididi --cov-report html
 
       - name: Upload results to Codecov
         uses: codecov/codecov-action@v4
