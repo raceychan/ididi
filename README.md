@@ -1,5 +1,7 @@
 # Ididi
 
+[![codecov](https://codecov.io/github/raceychan/ididi/graph/badge.svg?token=8N1AYWWN5N)](https://codecov.io/github/raceychan/ididi)
+
 ### Genius simplicity, unmatched power.
 
 **ididi is *100%* test covered and strictly typed.**
