@@ -10,7 +10,6 @@ requires-python = ">= 3.12"
 [project.optional-dependencies]
 graphviz = ["python-graphviz>=0.20.3,<0.21"]
 
-
 [build-system]
 build-backend = "hatchling.build"
 requires = ["hatchling"]
