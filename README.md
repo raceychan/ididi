@@ -1,5 +1,3 @@
-![image_resized](https://github.com/user-attachments/assets/33d0c9bf-7f76-438a-b9a0-2e3333f7d83f)
-
 # Ididi
 
 ## Genius simplicity, unmatched power
