@@ -203,7 +203,7 @@ DependencyGraph does NOT have to be a global singleton
 Although we use `dg` extensively to represent an instance of DependencyGraph for the convenience of explaination,
 it **DOES NOT** mean it has to be a *global singleton*. These are some examples you might inject it into your fastapi app at different levels.
 
-### DependencyGraph as an app-level instance
+##### DependencyGraph as an app-level instance
 
 ```py
 import typing as ty
@@ -233,7 +233,7 @@ async def signup_user(request: Request):
 
 ```
 
-#### Injecting DependencyGraph at route level
+##### Injecting DependencyGraph at route level
 
 ```py
 class UserRoute(APIRoute):
@@ -254,7 +254,7 @@ class UserRoute(APIRoute):
 user_router = APIRouter(route_class=UserRoute)
 ```
 
-#### Injecting DependencyGraph at request level
+##### Injecting DependencyGraph at request level
 
 ```py
 class GraphedMiddleware:
@@ -276,7 +276,7 @@ class GraphedMiddleware:
 app.add_middleware(GraphedMiddleware, dg=DependencyGraph)
 ```
 
-#### with background task
+##### with background task
 
 To use scope in background task, you would need to explicitly pass scope to your task
 
@@ -296,7 +296,12 @@ def write_notification(scope: SyncScope, email: str, message=""):
     parent_scope = scope.get_scope(name)
 ```
 
-#### Menually config details of external libraries
+### Usage of factory
+
+If you are working with non-trivial web application, there is a good chance that you already
+have some factory functions used to build your dependnecies, to get them work with ididi, just decorate them with `dg.node`.
+
+- Menually config details of external libraries
 
 ```python
 @dg.node
@@ -349,7 +354,6 @@ def storage_factory(config: Config) -> Storage:
 ```
 
 > This works for ABC, typing.Protocol, as well as plain classes.
-
 
 ### Visualize the dependency graph(beta)
 
