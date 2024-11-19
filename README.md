@@ -197,7 +197,8 @@ def get_service(service: Service):
     return service
 ```
 
->[!IMPORTANT] DependencyGraph does NOT have to be a global singleton
+>[!IMPORTANT] 
+DependencyGraph does NOT have to be a global singleton
 
 Although we use `dg` extensively to represent an instance of DependencyGraph for the convenience of explaination,
 it **DOES NOT** mean it has to be a *global singleton*. These are some examples you might inject it into your fastapi app at different levels.
