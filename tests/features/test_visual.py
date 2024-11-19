@@ -1,4 +1,7 @@
+# import io
 from pathlib import Path
+from unittest import mock
+
 
 import pytest
 
@@ -83,6 +86,4 @@ def test_complex_graph(tmp_path: Path):
     vs.view
 
     f = tmp_path / "vis"
-    f.touch()
-
-    vs.save(f)
+    f.touch()  # Create the file

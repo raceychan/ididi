@@ -23,9 +23,6 @@ jobs:
       - name: Install graphviz
         run: pip install graphviz==0.20.3
 
-      - name: install package
-        run: pip install .
-
       - name: Run tests
         run: pytest tests/ --cov=ididi --cov-report html
 
