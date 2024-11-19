@@ -1,6 +1,6 @@
 # Ididi
 
-### Genius simplicity, unmathced power.
+### Genius simplicity, unmatched power.
 
 **ididi is *100%* test covered and strictly typed.**
 
