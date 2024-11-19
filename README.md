@@ -42,6 +42,7 @@ user_service = ididi.resolve(UserService)
 
 
 ## Features
+> Ididi has a compact codebase with core part being < 600 LOC, feature requests and pull requests are welcomde, issues are appreciated.
 
 ### Using factory to override dependency injection
 
