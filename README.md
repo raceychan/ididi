@@ -42,12 +42,8 @@ user_service = ididi.resolve(UserService)
 
 
 ## Features
+> [!TIP]
 > Ididi has a compact codebase with core part being < 600 LOC, feature requests, pull requests and issues are all welcome and appreciated.
-
-### Using factory to override dependency injection
-
-
-**`DependencyGraph.node` accepts a wide arrange of types, such as dependent class, sync/async facotry, sync/async resource factory, with typing support.**
 
 ### Automatic dependencies injection
 
@@ -79,6 +75,8 @@ async def main(db: DataBase, sql: str) -> ty.Any:
 
 assert await main(sql="select money from bank")
 ```
+> [!NOTE]
+> **`DependencyGraph.node` accepts a wide arrange of types, such as dependent class, sync/async facotry, sync/async resource factory, with typing support.**
 
 ### Using Scope to manage resources
 
