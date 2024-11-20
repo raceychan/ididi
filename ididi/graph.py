@@ -302,8 +302,6 @@ class DependencyGraph:
         self._resolution_registry = ResolutionRegistry()
         self._type_registry = TypeRegistry()
         self._scope_context = ContextVar[SyncScope | AsyncScope]("connection_context")
-        # maybe change it to current_scope? where it keeps the last scope used
-        # and if scope leaves context it just pops out
         self._visitor = Visitor(self._nodes)
 
     def __repr__(self) -> str:
