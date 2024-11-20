@@ -209,6 +209,20 @@ DependencyGraph does NOT have to be a global singleton
 Although we use `dg` extensively to represent an instance of DependencyGraph for the convenience of explaination,
 it **DOES NOT** mean it has to be a *global singleton*. These are some examples you might inject it into your fastapi app at different levels.
 
+(ididi v1.0.5)
+You can create different dependency graphs in different files, then merge them in the main graph
+
+```py
+from app.features.user import user_graph
+from app.features.auth import auth_graph
+from app.features.payment import payment_graph
+
+# in your entry file
+
+dg = DependencyGraph()
+dg.merge([user_graph, auth_graph, payment_graph])
+```
+
 ##### DependencyGraph as an app-level instance
 
 ```py
