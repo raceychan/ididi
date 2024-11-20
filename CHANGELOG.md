@@ -245,3 +245,21 @@ Fix:
 
 improvements:
 refactor visitor
+
+
+## version 1.0.5
+
+improvements:
+DependencyGraph now supports `__contains__` operator, `a in dg` is the equivalent to `a in dg.nodes`
+
+features:
+DependencyGraph now supports a `merge` operator, example:
+
+```py
+from app.features.users import user_dg
+
+dg = DependencyGraph()
+dg.merge(user_dg)
+```
+
+you might choose to merge one or more DependencyGraph into the main graph, so that you don't have to import a single dg to register all your classes.

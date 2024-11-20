@@ -11,16 +11,6 @@ class IDIDIError(Exception):
         super().__init__(self.message)
 
 
-class OutOfScopeError(IDIDIError):
-    def __init__(self, name: ty.Hashable = ""):
-        if name:
-            msg = f"scope with {name=} not found in current context"
-        else:
-            msg = "scope not found in current context"
-
-        super().__init__(msg)
-
-
 # =============== General Errors ===============
 
 
@@ -170,6 +160,21 @@ class GraphError(IDIDIError):
     """
     Base class for all graph related exceptions.
     """
+
+
+class OutOfScopeError(GraphError):
+    def __init__(self, name: ty.Hashable = ""):
+        if name:
+            msg = f"scope with {name=} not found in current context"
+        else:
+            msg = "scope not found in current context"
+
+        super().__init__(msg)
+
+
+class MergeWithScopeStartedError(GraphError):
+    def __init__(self):
+        super().__init__("Merging graph within scope is not supported")
 
 
 class GraphResolveError(GraphError):

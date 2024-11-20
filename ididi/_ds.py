@@ -51,6 +51,9 @@ class TypeRegistry(BaseRegistry):
     def __getitem__[T](self, dependent_type: type[T]) -> list[type[T]]:
         return self._mappings[dependent_type].copy()
 
+    def update(self, other: "TypeRegistry"):
+        self._mappings.update(other._mappings)
+
     def register[T](self, dependent_type: type[T]) -> None:
         self._mappings[dependent_type].append(dependent_type)
         for base in get_bases(dependent_type):
@@ -87,6 +90,9 @@ class ResolutionRegistry(BaseRegistry):
 
     def remove(self, dependent_type: type) -> None:
         self._mappings.pop(dependent_type, None)
+
+    def update(self, other: "ResolutionRegistry"):
+        self._mappings.update(other._mappings)
 
     def register[
         T

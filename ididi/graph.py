@@ -28,6 +28,7 @@ from ._type_resolve import (
 from .errors import (
     AsyncResourceInSyncError,
     CircularDependencyDetectedError,
+    MergeWithScopeStartedError,
     MissingImplementationError,
     OutOfScopeError,
     PositionalOverrideError,
@@ -67,8 +68,6 @@ class AbstractScope[Stack: ExitStack | AsyncExitStack]:
             ptr = ptr._pre
         else:
             raise OutOfScopeError(name)
-
-    # def scope(self): ...
 
 
 class SyncScope(AbstractScope[ExitStack]):
@@ -311,6 +310,9 @@ class DependencyGraph:
             f"resolved={len(self._resolution_registry)})"
         )
 
+    def __contains__(self, item: type) -> bool:
+        return item in self._nodes
+
     def static_resolve_all(self) -> None:
         if not self._config.static_resolve:
             return
@@ -363,6 +365,29 @@ class DependencyGraph:
     def visitor(self) -> Visitor:
         return self._visitor
 
+    def merge(self, other: "DependencyGraph" | ty.Sequence["DependencyGraph"]):
+        """
+        Merge the other graphs into this graph, update the current graph.
+        """
+
+        if isinstance(other, DependencyGraph):
+            others = (other,)
+        else:
+            others = other
+
+        for other in others:
+            self._nodes.update(other.nodes)
+            self._resolved_nodes.update(other._resolved_nodes)
+            self._resolution_registry.update(other._resolution_registry)
+            self._type_registry.update(other._type_registry)
+            try:
+                other._scope_context.get()
+            except LookupError:
+                pass
+            else:
+                raise MergeWithScopeStartedError()
+        self._visitor = Visitor(self._nodes)
+
     def set_context_scope(
         self, scope: SyncScope | AsyncScope
     ) -> Token[SyncScope | AsyncScope]:
@@ -403,7 +428,6 @@ class DependencyGraph:
         Close any resources held by resolved instances.
         Closes in reverse initialization order.
         """
-        # TODO?: leave scopes
         self.reset(clear_nodes=True)
 
     def _resolve_concrete_type[T](self, abstract_type: type[T]) -> type[T]:
@@ -444,7 +468,7 @@ class DependencyGraph:
         self.remove_node(old_node)
         self.register_node(new_node)
 
-    def _create_lazy_node[T](self, node: DependentNode[T]) -> LazyDependent[T]:
+    def _create_lazy_dependent[T](self, node: DependentNode[T]) -> LazyDependent[T]:
         """Create a lazy version of a node with appropriate resolver."""
 
         def resolver(dep_type: type[T]) -> T:
@@ -466,7 +490,6 @@ class DependencyGraph:
         scope_name: give a iditifier to the scope so that you can get it with
         dg.get_scope(scope_name)
         """
-        # TODO(1.0.5): create_on_missed: bool = True
         return ScopeProxy(self, name=name)
 
     def register_node(self, node: DependentNode[ty.Any]) -> None:
@@ -659,7 +682,7 @@ class DependencyGraph:
 
             if node.config.lazy:
                 dep_node = self.static_resolve(param_type, node.config)
-                resolved_args[param_name] = self._create_lazy_node(dep_node)
+                resolved_args[param_name] = self._create_lazy_dependent(dep_node)
                 continue
 
             resolved_args[param_name] = self.resolve(param_type, scope)

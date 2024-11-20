@@ -9,6 +9,7 @@ from ididi.errors import (
     ABCNotImplementedError,
     AsyncResourceInSyncError,
     GenericDependencyNotSupportedError,
+    MergeWithScopeStartedError,
     MissingAnnotationError,
     PositionalOverrideError,
     TopLevelBulitinTypeError,
@@ -623,3 +624,46 @@ def test_partial_node(dg: DependencyGraph):
     dg.static_resolve(Sub)
     # assert dg.resolve(Sub, age=15).age == 15
     dg.resolve(Sub, age=15)
+
+
+def test_empty_graph_merge():
+    dg1 = DependencyGraph()
+    dg2 = DependencyGraph()
+    dg1.merge(dg2)
+
+
+def test_empty_multiple_merge():
+    dg1 = DependencyGraph()
+    dg2 = DependencyGraph()
+    dg3 = DependencyGraph()
+    dg1.merge([dg2, dg3])
+
+
+def test_graph_merge_with_error():
+    dg = DependencyGraph()
+
+    dg2 = DependencyGraph()
+
+    with pytest.raises(MergeWithScopeStartedError):
+        with dg2.scope():
+            dg.merge(dg2)
+
+
+def test_graph_static_resolved():
+
+    from .test_data import ComplianceChecker, DatabaseConfig
+
+    dg = DependencyGraph()
+    dg2 = DependencyGraph()
+
+    dg.static_resolve(ComplianceChecker)
+    c = dg.resolve(ComplianceChecker)
+    dg2.static_resolve(DatabaseConfig)
+    d = dg2.resolve(DatabaseConfig)
+
+    dg.merge(dg2)
+    assert ComplianceChecker in dg and DatabaseConfig in dg
+
+    c1, d1 = dg.resolve(ComplianceChecker), dg.resolve(DatabaseConfig)
+    assert c1 is c
+    assert d1 is d
