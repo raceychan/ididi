@@ -83,7 +83,6 @@ For example, you might have something like this in your app, where you menually 
 
 Let's see an example:
 
-> you can find the real-code from my react+fastapi project askgpt (https://github.com/raceychan/askgpt)
 
 ```python title="factory.py"
 from .infra import * 
