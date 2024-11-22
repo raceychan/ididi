@@ -80,8 +80,6 @@ class NodeConfig:
 class GraphConfig:
     __slots__ = "static_resolve"
 
-    static_resolve: bool
-
     def __init__(self, *, static_resolve: bool = True):
         self.static_resolve = static_resolve
 
