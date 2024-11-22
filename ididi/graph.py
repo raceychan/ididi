@@ -5,10 +5,14 @@ from contextvars import ContextVar, Token
 from functools import partial
 from types import MappingProxyType, TracebackType
 
+import typing_extensions as tye
+
 from ._ds import GraphNodes, GraphNodesView, ResolutionRegistry, TypeRegistry
 from ._itypes import (
     INSPECT_EMPTY,
     GraphConfig,
+    IAnyAsyncFactory,
+    IAnyFactory,
     IAsyncFactory,
     IFactory,
     INode,
@@ -40,31 +44,35 @@ from .errors import (
 from .node import DependentNode, LazyDependent
 from .utils.param_utils import MISSING, Maybe, is_provided
 
+T = ty.TypeVar("T")
+Stack = ty.TypeVar("Stack", ExitStack, AsyncExitStack)
+P = tye.ParamSpec("P")
 
-class AbstractScope[Stack: ExitStack | AsyncExitStack]:
+
+class AbstractScope(ty.Generic[Stack]):
     _stack: Stack
     _graph: "DependencyGraph"
     _name: ty.Hashable
-    _pre: Maybe["SyncScope | AsyncScope"]
+    _pre: Maybe[ty.Union["SyncScope", "AsyncScope"]]
     resolutions: ResolutionRegistry
 
     def __repr__(self):
         return f"{self.__class__.__name__}(id={self._name})"
 
-    def cache_result[T](self, dependent: ty.Callable[..., T], result: T) -> None:
+    def cache_result(self, dependent: IAnyFactory[T], result: T) -> None:
         self.resolutions.register(dependent, result)
 
-    def enter_context[T](self, context: ty.ContextManager[T]) -> T:
+    def enter_context(self, context: ty.ContextManager[T]) -> T:
         return self._stack.enter_context(context)
 
-    def get_scope(self, name: ty.Hashable) -> ty.Self:
+    def get_scope(self, name: ty.Hashable) -> tye.Self:
         if name == self._name:
             return self
 
         ptr = self
         while is_provided(ptr._pre):
             if ptr._pre._name == name:
-                return ty.cast(ty.Self, ptr._pre)
+                return ty.cast(tye.Self, ptr._pre)
             ptr = ptr._pre
         else:
             raise OutOfScopeError(name)
@@ -78,7 +86,7 @@ class SyncScope(AbstractScope[ExitStack]):
         graph: "DependencyGraph",
         *,
         name: Maybe[ty.Hashable] = MISSING,
-        pre: Maybe["SyncScope | AsyncScope"] = MISSING,
+        pre: Maybe[ty.Union["SyncScope", "AsyncScope"]] = MISSING,
     ):
         self._graph = graph
         self._name = name
@@ -91,25 +99,23 @@ class SyncScope(AbstractScope[ExitStack]):
 
     def __exit__(
         self,
-        exc_type: type[Exception] | None,
-        exc_value: Exception | None,
-        traceback: TracebackType | None,
+        exc_type: ty.Union[type[Exception], None],
+        exc_value: ty.Union[Exception, None],
+        traceback: ty.Union[TracebackType, None],
     ) -> None:
         self._stack.__exit__(exc_type, exc_value, traceback)
 
     @ty.overload
-    def resolve[R](self, dependent: ty.Callable[..., R], /) -> R: ...
+    def resolve(self, dependent: IAnyFactory[T], /) -> T: ...
 
     @ty.overload
-    def resolve[
-        **P, R
-    ](
-        self, dependent: ty.Callable[P, R], /, *args: P.args, **overrides: P.kwargs
-    ) -> R: ...
+    def resolve(
+        self, dependent: IFactory[P, T], /, *args: P.args, **overrides: P.kwargs
+    ) -> T: ...
 
-    def resolve[
-        **P, R
-    ](self, dependent: ty.Callable[P, R], /, *args: P.args, **overrides: P.kwargs) -> R:
+    def resolve(
+        self, dependent: IFactory[P, T], /, *args: P.args, **overrides: P.kwargs
+    ) -> T:
         return self._graph.resolve(dependent, self, *args, **overrides)
 
 
@@ -134,33 +140,31 @@ class AsyncScope(AbstractScope[AsyncExitStack]):
 
     async def __aexit__(
         self,
-        exc_type: type[Exception] | None,
-        exc_value: Exception | None,
-        traceback: TracebackType | None,
+        exc_type: ty.Union[type[Exception], None],
+        exc_value: ty.Union[Exception, None],
+        traceback: ty.Union[TracebackType, None],
     ) -> None:
         await self._stack.__aexit__(exc_type, exc_value, traceback)
 
     @ty.overload
-    async def resolve[R](self, dependent: ty.Callable[..., R], /) -> R: ...
+    async def resolve(self, dependent: ty.Callable[..., T], /) -> T: ...
 
     @ty.overload
-    async def resolve[
-        **P, R
-    ](
-        self, dependent: ty.Callable[P, R], /, *args: P.args, **overrides: P.kwargs
-    ) -> R: ...
+    async def resolve(
+        self, dependent: ty.Callable[P, T], /, *args: P.args, **overrides: P.kwargs
+    ) -> T: ...
 
-    async def resolve[
-        **P, R
-    ](self, dependent: ty.Callable[P, R], /, *args: P.args, **overrides: P.kwargs) -> R:
+    async def resolve(
+        self, dependent: ty.Callable[P, T], /, *args: P.args, **overrides: P.kwargs
+    ) -> T:
         return await self._graph.aresolve(dependent, self, *args, **overrides)
 
-    async def enter_async_context[T](self, context: ty.AsyncContextManager[T]) -> T:
+    async def enter_async_context(self, context: ty.AsyncContextManager[T]) -> T:
         return await self._stack.enter_async_context(context)
 
 
 class ScopeProxy:
-    _scope: Maybe[SyncScope | AsyncScope]
+    _scope: Maybe[ty.Union[SyncScope, AsyncScope]]
 
     __slots__ = ("_graph", "_scope", "_token", "_name", "_pre")
 
@@ -190,13 +194,19 @@ class ScopeProxy:
         return self._scope
 
     def __exit__(
-        self, exc_type: type | None, exc_value: ty.Any, traceback: TracebackType | None
+        self,
+        exc_type: ty.Union[type, None],
+        exc_value: ty.Any,
+        traceback: ty.Union[TracebackType, None],
     ) -> None:
         ty.cast(SyncScope, self._scope).__exit__(exc_type, exc_value, traceback)
         self._graph.reset_context_scope(self._token)
 
     async def __aexit__(
-        self, exc_type: type | None, exc_value: ty.Any, traceback: TracebackType | None
+        self,
+        exc_type: ty.Union[type, None],
+        exc_value: ty.Any,
+        traceback: ty.Union[TracebackType, None],
     ) -> None:
         await ty.cast(AsyncScope, self._scope).__aexit__(exc_type, exc_value, traceback)
         self._graph.reset_context_scope(self._token)
@@ -208,9 +218,9 @@ class Visitor:
 
     def _dfs(
         self,
-        start_types: list[type] | type,
-        pre_visit: ty.Callable[[type], None] | None = None,
-        post_visit: ty.Callable[[type], None] | None = None,
+        start_types: ty.Union[list[type], type],
+        pre_visit: ty.Union[ty.Callable[[type], None], None] = None,
+        post_visit: ty.Union[ty.Callable[[type], None], None] = None,
     ) -> None:
         """Generic DFS traversal with customizable visit callbacks.
 
@@ -300,7 +310,9 @@ class DependencyGraph:
         self._resolved_nodes: GraphNodes[ty.Any] = {}
         self._resolution_registry = ResolutionRegistry()
         self._type_registry = TypeRegistry()
-        self._scope_context = ContextVar[SyncScope | AsyncScope]("connection_context")
+        self._scope_context = ContextVar[ty.Union[SyncScope, AsyncScope]](
+            "connection_context"
+        )
         self._visitor = Visitor(self._nodes)
 
     def __repr__(self) -> str:
@@ -328,9 +340,9 @@ class DependencyGraph:
 
     async def __aexit__(
         self,
-        exc_type: type | None,
+        exc_type: ty.Union[type, None],
         exc_value: ty.Any,
-        traceback: TracebackType | None,
+        traceback: ty.Union[TracebackType, None],
     ) -> None:
         await self.aclose()
 
@@ -365,7 +377,7 @@ class DependencyGraph:
     def visitor(self) -> Visitor:
         return self._visitor
 
-    def merge(self, other: "DependencyGraph" | ty.Sequence["DependencyGraph"]):
+    def merge(self, other: ty.Union["DependencyGraph", ty.Sequence["DependencyGraph"]]):
         """
         Merge the other graphs into this graph, update the current graph.
         """
@@ -389,11 +401,11 @@ class DependencyGraph:
         self._visitor = Visitor(self._nodes)
 
     def set_context_scope(
-        self, scope: SyncScope | AsyncScope
-    ) -> Token[SyncScope | AsyncScope]:
+        self, scope: ty.Union[SyncScope, AsyncScope]
+    ) -> Token[ty.Union[SyncScope, AsyncScope]]:
         return self._scope_context.set(scope)
 
-    def reset_context_scope(self, token: Token[SyncScope | AsyncScope]):
+    def reset_context_scope(self, token: Token[ty.Union[SyncScope, AsyncScope]]):
         self._scope_context.reset(token)
 
     def remove_node(self, node: DependentNode[ty.Any]) -> None:
@@ -430,11 +442,11 @@ class DependencyGraph:
         """
         self.reset(clear_nodes=True)
 
-    def _resolve_concrete_type[T](self, abstract_type: type[T]) -> type[T]:
+    def _resolve_concrete_type(self, abstract_type: type) -> type:
         """
         Resolve abstract type to concrete implementation.
         """
-        implementations: Maybe[list[type[T]]] = self._type_registry.get(abstract_type)
+        implementations: Maybe[list[type]] = self._type_registry.get(abstract_type)
 
         if not is_provided(implementations):
             raise MissingImplementationError(abstract_type)
@@ -442,9 +454,9 @@ class DependencyGraph:
         last_implementations = implementations[-1]
         return last_implementations
 
-    def _resolve_concrete_node[
-        T
-    ](self, dependent: type[T], node_config: Maybe[NodeConfig]) -> DependentNode[T]:
+    def _resolve_concrete_node(
+        self, dependent: type, node_config: Maybe[NodeConfig]
+    ) -> DependentNode[ty.Any]:
         if registered_node := self._nodes.get(dependent):
             if is_function(registered_node.factory):
                 return registered_node
@@ -452,7 +464,7 @@ class DependencyGraph:
         try:
             concrete_type = self._resolve_concrete_type(dependent)
         except MissingImplementationError:
-            node = DependentNode.from_node(dependent, config=node_config)
+            node = DependentNode[ty.Any].from_node(dependent, config=node_config)
             self.register_node(node)
         else:
             node = self._nodes[concrete_type]
@@ -468,7 +480,7 @@ class DependencyGraph:
         self.remove_node(old_node)
         self.register_node(new_node)
 
-    def _create_lazy_dependent[T](self, node: DependentNode[T]) -> LazyDependent[T]:
+    def _create_lazy_dependent(self, node: DependentNode[T]) -> LazyDependent[T]:
         """Create a lazy version of a node with appropriate resolver."""
 
         def resolver(dep_type: type[T]) -> T:
@@ -511,17 +523,15 @@ class DependencyGraph:
         # Register type mappings
         self._type_registry.register(dependent_type)
 
-    def static_resolve[
-        T, **P
-    ](
+    def static_resolve(
         self,
-        dependent: type[T] | ty.Callable[P, T],
+        dependent: ty.Union[type, ty.Callable[P, T]],
         node_config: Maybe[NodeConfig] = MISSING,
-    ) -> DependentNode[T]:
+    ) -> DependentNode[ty.Any]:
         """
         Resolve a dependency without building its instance.
         Args:
-        dependent: type[T] | ty.Callable[P, T]
+        dependent: type | ty.Callable[P, T]
         node_config: NodeConfig
         """
         if is_unresolved_type(dependent):
@@ -530,18 +540,18 @@ class DependencyGraph:
         current_path: list[type] = []
 
         def dfs(
-            dependent_factory: type[T] | ty.Callable[P, T],
+            dependent_factory: ty.Union[type, ty.Callable[P, T]],
             node_config: Maybe[NodeConfig],
-        ) -> DependentNode[T]:
+        ) -> DependentNode[ty.Any]:
 
             if is_function(dependent_factory):
                 sig = get_typed_signature(dependent_factory)
-                dependent: type[T] = sig.return_annotation
+                dependent: type = sig.return_annotation
                 if dependent not in self.nodes:
                     # create node and register
                     self.node(dependent_factory)
             else:
-                dependent = ty.cast(type[T], dependent_factory)
+                dependent = ty.cast(type, dependent_factory)
 
             if dependent in self._resolved_nodes:
                 return self._resolved_nodes[dependent]
@@ -600,7 +610,7 @@ class DependencyGraph:
 
     def use_scope(
         self, name: Maybe[ty.Hashable] = MISSING, *, as_async: bool = False
-    ) -> SyncScope | AsyncScope:
+    ) -> ty.Union[SyncScope, AsyncScope]:
         """
         Get most recently created scope
 
@@ -617,19 +627,15 @@ class DependencyGraph:
         return scope
 
     @ty.overload
-    def resolve[
-        T
-    ](
+    def resolve(
         self,
-        dependent: ty.Callable[..., T],
+        dependent: IAnyFactory[T],
         scope: Maybe[SyncScope] = MISSING,
         /,
     ) -> T: ...
 
     @ty.overload
-    def resolve[
-        **P, T
-    ](
+    def resolve(
         self,
         dependent: ty.Callable[P, T],
         scope: Maybe[SyncScope] = MISSING,
@@ -638,9 +644,7 @@ class DependencyGraph:
         **overrides: P.kwargs,
     ) -> T: ...
 
-    def resolve[
-        **P, T
-    ](
+    def resolve(
         self,
         dependent: ty.Callable[P, T],
         scope: Maybe[SyncScope] = MISSING,
@@ -704,9 +708,7 @@ class DependencyGraph:
             instance = resolved
         return ty.cast(T, instance)
 
-    async def aresolve[
-        **P, T
-    ](
+    async def aresolve(
         self,
         dependent: ty.Callable[P, T],
         scope: Maybe[AsyncScope] = MISSING,
@@ -772,24 +774,18 @@ class DependencyGraph:
         return ty.cast(T, instance)
 
     @ty.overload
-    def factory[
-        R
-    ](
-        self, dependent: ty.Callable[..., R], *, use_async: ty.Literal[True] = True
-    ) -> IAsyncFactory[..., R]: ...
+    def factory(
+        self, dependent: IAnyFactory[T], *, use_async: ty.Literal[True] = True
+    ) -> IAnyAsyncFactory[T]: ...
 
     @ty.overload
-    def factory[
-        R
-    ](
-        self, dependent: ty.Callable[..., R], *, use_async: ty.Literal[False] = False
-    ) -> IFactory[..., R]: ...
+    def factory(
+        self, dependent: IAnyFactory[T], *, use_async: ty.Literal[False] = False
+    ) -> IAnyFactory[T]: ...
 
-    def factory[
-        R
-    ](self, dependent: ty.Callable[..., R], *, use_async: bool = True) -> (
-        IFactory[..., R] | IAsyncFactory[..., R]
-    ):
+    def factory(
+        self, dependent: IAnyFactory[T], *, use_async: bool = True
+    ) -> ty.Union[IAnyFactory[T], IAnyAsyncFactory[T]]:
         """
         A helper function that creates a resolver(a factory) for a given type.
 
@@ -802,44 +798,42 @@ class DependencyGraph:
         if dependent not in self._resolved_nodes:
             self.static_resolve(dependent)
 
-        def resolver() -> R:
+        def resolver() -> T:
             with self.scope() as scope:
                 return self.resolve(dependent, scope)
 
-        async def aresolver() -> R:
+        async def aresolver() -> T:
             async with self.scope() as scope:
                 return await self.aresolve(dependent, scope)
 
         return aresolver if use_async else resolver
 
     @ty.overload
-    def entry[**P, R](self, func: IAsyncFactory[P, R]) -> IAsyncFactory[..., R]: ...
+    def entry(self, func: IAsyncFactory[P, T]) -> IAnyAsyncFactory[T]: ...
 
     @ty.overload
-    def entry[**P, R](self, func: IFactory[P, R]) -> IFactory[..., R]: ...
+    def entry(self, func: IFactory[P, T]) -> IAnyFactory[T]: ...
 
-    def entry[
-        **P, R
-    ](self, func: IFactory[P, R] | IAsyncFactory[P, R]) -> (
-        IFactory[..., R] | IAsyncFactory[..., R]
-    ):
-        def func_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+    def entry(
+        self, func: ty.Union[IFactory[P, T], IAsyncFactory[P, T]]
+    ) -> ty.Union[IAnyFactory[T], IAnyAsyncFactory[T]]:
+        def func_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
             with self.scope() as scope:
                 r = self.resolve(dep, scope, *args, **kwargs)
                 return r
 
-        async def async_func_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        async def async_func_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
             async with self.scope() as scope:
                 r = await self.aresolve(dep, scope, *args, **kwargs)
                 return r
 
         entry_type = type(f"entry_node_{func.__name__}", (object,), {})
-        dep = ty.cast(type[R], entry_type)
+        dep = ty.cast(type[T], entry_type)
         sig = get_typed_signature(func)
 
         # directly create node without DependecyGraph.node, use func as factory
         config = NodeConfig(reuse=False, lazy=False, partial=True)
-        node = DependentNode.create(
+        node = DependentNode[T].create(
             dependent=dep, factory=func, signature=sig, config=config
         )
 
@@ -853,21 +847,19 @@ class DependencyGraph:
         return f
 
     @ty.overload
-    def node[I](self, factory_or_class: type[I]) -> type[I]: ...
+    def node(self, factory_or_class: type[T]) -> type[T]: ...
 
     @ty.overload
-    def node[**P, R](self, factory_or_class: IFactory[P, R]) -> IFactory[P, R]: ...
+    def node(self, factory_or_class: IFactory[P, T]) -> IFactory[P, T]: ...
 
     @ty.overload
-    def node(self, **config: ty.Unpack[INodeConfig]) -> TDecor: ...
+    def node(self, **config: tye.Unpack[INodeConfig]) -> TDecor: ...
 
-    def node[
-        **P, R
-    ](
+    def node(
         self,
-        factory_or_class: INode[P, R] | None = None,
-        **config: ty.Unpack[INodeConfig],
-    ) -> (INode[P, R] | TDecor):
+        factory_or_class: ty.Union[INode[P, T], None] = None,
+        **config: tye.Unpack[INodeConfig],
+    ) -> ty.Union[INode[P, T], TDecor]:
         """
         ### Decorator to register a node in the dependency graph.
 
@@ -903,7 +895,7 @@ class DependencyGraph:
         node_config = NodeConfig(**config)
 
         sig = get_typed_signature(factory_or_class)
-        return_type: type[R] | ty.ForwardRef = sig.return_annotation
+        return_type: ty.Union[type[T], ty.ForwardRef] = sig.return_annotation
 
         if isinstance(return_type, ty.ForwardRef):
             return_type = resolve_forwardref(factory_or_class, return_type)
@@ -917,12 +909,12 @@ class DependencyGraph:
 
         if inspect.isgeneratorfunction(factory_or_class):
             func_gen = contextmanager(factory_or_class)
-            node = DependentNode.from_node(func_gen, config=node_config)
+            node = DependentNode[T].from_node(func_gen, config=node_config)
         elif inspect.isasyncgenfunction(factory_or_class):
             func_gen = asynccontextmanager(factory_or_class)
-            node = DependentNode.from_node(func_gen, config=node_config)
+            node = DependentNode[T].from_node(func_gen, config=node_config)
         else:
-            node = DependentNode.from_node(factory_or_class, config=node_config)
+            node = DependentNode[T].from_node(factory_or_class, config=node_config)
 
         self.register_node(node)
         return factory_or_class

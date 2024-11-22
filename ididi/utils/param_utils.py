@@ -1,5 +1,9 @@
 import typing as ty
 
+import typing_extensions as tye
+
+T = ty.TypeVar("T")
+
 
 class _Missed:
     """
@@ -19,22 +23,22 @@ class _Missed:
 MISSING = _Missed()
 
 
-type Maybe[T] = T | _Missed
+Maybe = ty.Union[T, _Missed]
 """
 Nullable[int] == int | NULL
 """
 
 
-def is_provided[T](value: Maybe[T]) -> ty.TypeGuard[T]:
+def is_provided(value: Maybe[T]) -> tye.TypeGuard[T]:
     """
     Check if the value is not MISSING.
     """
     return value is not MISSING
 
 
-def use_var[
-    T
-](obj_type: type[T]) -> tuple[ty.Callable[[], Maybe[T]], ty.Callable[[T], None]]:
+def use_var(
+    obj_type: type[T],
+) -> tuple[ty.Callable[[], Maybe[T]], ty.Callable[[T], None]]:
     instance: Maybe[T] = MISSING
 
     def getter() -> Maybe[T]:

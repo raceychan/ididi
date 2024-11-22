@@ -2,28 +2,34 @@ import inspect
 import typing as ty
 from typing import _eval_type as ty_eval_type  # type: ignore
 
-type PrimitiveBuiltins = type[int | float | complex | str | bool | bytes | bytearray]
-type ContainerBuiltins[T] = type[
-    list[T] | tuple[T, ...] | dict[ty.Any, T] | set[T] | frozenset[T]
+import typing_extensions as tye
+
+T = ty.TypeVar("T")
+
+PrimitiveBuiltins = type[ty.Union[int, float, complex, str, bool, bytes, bytearray]]
+ContainerBuiltins = type[
+    ty.Union[list[T], tuple[T, ...], dict[ty.Any, T], set[T], frozenset[T]]
 ]
-type BuiltinSingleton = type[None]
+BuiltinSingleton = type[None]
 
 
-def is_builtin_primitive(t: ty.Any) -> ty.TypeGuard[PrimitiveBuiltins]:
+def is_builtin_primitive(t: ty.Any) -> tye.TypeGuard[PrimitiveBuiltins]:
     return t in {int, float, complex, str, bool, bytes, bytearray, type}
 
 
-def is_builtin_container(t: ty.Any) -> ty.TypeGuard[ContainerBuiltins[ty.Any]]:
+def is_builtin_container(t: ty.Any) -> tye.TypeGuard[ContainerBuiltins[ty.Any]]:
     return t in {list, tuple, dict, set, frozenset}
 
 
-def is_builtin_singleton(t: ty.Any) -> ty.TypeGuard[BuiltinSingleton]:
+def is_builtin_singleton(t: ty.Any) -> tye.TypeGuard[BuiltinSingleton]:
     return t is None
 
 
 def is_builtin_type(
     t: ty.Any,
-) -> ty.TypeGuard[PrimitiveBuiltins | ContainerBuiltins[ty.Any] | BuiltinSingleton]:
+) -> tye.TypeGuard[
+    ty.Union[PrimitiveBuiltins, ContainerBuiltins[ty.Any], BuiltinSingleton]
+]:
     """
     Builtin types are ignored at type resolving.
     It must be provided by default value, or use a factory to override it.
@@ -39,8 +45,8 @@ def is_builtin_type(
 
 def eval_type(
     value: ty.ForwardRef,
-    globalns: dict[str, ty.Any] | None = None,
-    localns: ty.Mapping[str, ty.Any] | None = None,
+    globalns: ty.Union[dict[str, ty.Any], None] = None,
+    localns: ty.Union[ty.Mapping[str, ty.Any], None] = None,
     *,
     lenient: bool = False,
 ) -> ty.Any:
@@ -66,12 +72,12 @@ def eval_type(
 
 def get_typed_annotation(annotation: ty.Any, globalns: dict[str, ty.Any]) -> ty.Any:
     if isinstance(annotation, str):
-        annotation = ty.ForwardRef(annotation, is_argument=False, is_class=True)
+        annotation = ty.ForwardRef(annotation, is_argument=False)
         annotation = eval_type(annotation, globalns, globalns, lenient=True)
     return annotation
 
 
-def get_typed_params[T](call: ty.Callable[..., T]) -> list[inspect.Parameter]:
+def get_typed_params(call: ty.Callable[..., T]) -> list[inspect.Parameter]:
     signature = inspect.signature(call)
     globalns = getattr(call, "__globals__", {})
     globalns.pop("copyright", None)  #
@@ -87,7 +93,7 @@ def get_typed_params[T](call: ty.Callable[..., T]) -> list[inspect.Parameter]:
     return typed_params
 
 
-def get_full_typed_signature[T](call: ty.Callable[..., T]) -> inspect.Signature:
+def get_full_typed_signature(call: ty.Callable[..., T]) -> inspect.Signature:
     """
     Get a full typed signature from a callable.
     check_return: bool
@@ -102,12 +108,10 @@ def get_full_typed_signature[T](call: ty.Callable[..., T]) -> inspect.Signature:
     )
 
 
-def get_factory_sig_from_cls[T](cls: type[T]) -> inspect.Signature:
+def get_factory_sig_from_cls(cls: type[T]) -> inspect.Signature:
     """
     Generate a signature from a class via its __init__ method.
     annotate the return type with the class itself.
     """
     params = get_typed_params(cls.__init__)
     return inspect.Signature(parameters=params, return_annotation=cls)
-
-

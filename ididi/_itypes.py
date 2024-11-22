@@ -1,41 +1,53 @@
 import inspect
 import typing as ty
-from dataclasses import dataclass
+
+from typing_extensions import ParamSpec
+
+R = ty.TypeVar("R")
+P = ParamSpec("P")
+T = ty.TypeVar("T")
 
 EMPTY_SIGNATURE = inspect.Signature()
 INSPECT_EMPTY = inspect.Signature.empty
 
-type IFactory[**P, R] = ty.Callable[P, R]
-type IAsyncFactory[**P, R] = ty.Callable[P, ty.Awaitable[R]]
-type IResourceFactory[**P, R] = ty.Callable[P, ty.Generator[R]]
-type IAsyncResourceFactory[**P, R] = ty.Callable[P, ty.AsyncGenerator[R]]
-type INode[**P, R] = IFactory[P, R] | IAsyncFactory[P, R] | IResourceFactory[
-    P, R
-] | IAsyncResourceFactory[P, R] | type[R]
+
+IFactory = ty.Callable[P, R]
+IAnyFactory = ty.Callable[..., R]
+IAsyncFactory = ty.Callable[P, ty.Awaitable[R]]
+IAnyAsyncFactory = ty.Callable[..., ty.Awaitable[R]]
+IResourceFactory = ty.Callable[P, ty.Generator[R, None, None]]
+IAsyncResourceFactory = ty.Callable[P, ty.AsyncGenerator[R, None]]
+INode = ty.Union[
+    IFactory[P, R],
+    IAnyFactory[R],
+    IAsyncFactory[P, R],
+    IAnyAsyncFactory[R],
+    IResourceFactory[P, R],
+    IAsyncResourceFactory[P, R],
+    type[R],
+]
 
 
 class TDecor(ty.Protocol):
     @ty.overload
-    def __call__[I](self, factory: type[I]) -> type[I]: ...
+    def __call__(self, factory: type[T]) -> type[T]: ...
 
     @ty.overload
-    def __call__[
-        **P, I
-    ](self, factory: IResourceFactory[P, I]) -> IResourceFactory[P, I]: ...
+    def __call__(self, factory: IResourceFactory[P, T]) -> IResourceFactory[P, T]: ...
 
     @ty.overload
-    def __call__[
-        **P, I
-    ](self, factory: IAsyncResourceFactory[P, I]) -> IAsyncResourceFactory[P, I]: ...
+    def __call__(
+        self, factory: IAsyncResourceFactory[P, T]
+    ) -> IAsyncResourceFactory[P, T]: ...
 
     @ty.overload
-    def __call__[**P, I](self, factory: IAsyncFactory[P, I]) -> IAsyncFactory[P, I]: ...
+    def __call__(self, factory: IAsyncFactory[P, T]) -> IAsyncFactory[P, T]: ...
 
     @ty.overload
-    def __call__[**P, I](self, factory: IFactory[P, I]) -> IFactory[P, I]: ...
+    def __call__(self, factory: IFactory[P, T]) -> IFactory[P, T]: ...
 
     @ty.overload
-    def __call__[**P, I](self, factory: INode[P, I]) -> INode[P, I]: ...
+    def __call__(self, factory: INode[P, T]) -> INode[P, T]: ...
 
 
 class INodeConfig(ty.TypedDict, total=False):
@@ -54,16 +66,24 @@ class INodeConfig(ty.TypedDict, total=False):
     partial: bool
 
 
-@dataclass(kw_only=True, frozen=True, slots=True, unsafe_hash=True)
 class NodeConfig:
-    reuse: bool = True
-    lazy: bool = False
-    partial: bool = False
+    __slots__ = ("reuse", "lazy", "partial")
+
+    def __init__(
+        self, *, reuse: bool = True, lazy: bool = False, partial: bool = False
+    ):
+        self.reuse = reuse
+        self.lazy = lazy
+        self.partial = partial
 
 
-@dataclass(kw_only=True, frozen=True, slots=True, unsafe_hash=True)
 class GraphConfig:
-    static_resolve: bool = True
+    __slots__ = "static_resolve"
+
+    static_resolve: bool
+
+    def __init__(self, *, static_resolve: bool = True):
+        self.static_resolve = static_resolve
 
 
 @ty.runtime_checkable

@@ -1,11 +1,21 @@
 import abc
 import inspect
 import typing as ty
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import lru_cache
 from inspect import Parameter
 
-from ._itypes import EMPTY_SIGNATURE, INSPECT_EMPTY, IAsyncFactory, IFactory, NodeConfig
+import typing_extensions as tye
+
+from ._itypes import (
+    EMPTY_SIGNATURE,
+    INSPECT_EMPTY,
+    IAnyAsyncFactory,
+    IAnyFactory,
+    IAsyncFactory,
+    IFactory,
+    NodeConfig,
+)
 from ._type_resolve import (
     get_typed_signature,
     is_class,
@@ -25,12 +35,19 @@ from .errors import (
 from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import get_factory_sig_from_cls
 
+T = ty.TypeVar("T")
+P = tye.ParamSpec("P")
 
-@dataclass(slots=True)
-class Dependent[T]:
+
+class Dependent(ty.Generic[T]):
     """Represents a concrete (non-forward-reference) dependent type."""
 
+    __slots__ = ("dependent_type",)
+
     dependent_type: type[T]
+
+    def __init__(self, dependent_type: type[T]):
+        self.dependent_type = dependent_type
 
     @property
     def dependent_name(self) -> str:
@@ -40,13 +57,35 @@ class Dependent[T]:
 # NOTE: we might want to make this a descriptor
 # for dpram in node.signature
 #     setattr(node.dependent_type, LazyDescriptor)
-@dataclass(slots=True)
-class LazyDependent[T](Dependent[T]):
+class LazyDependent(Dependent[T]):
+    __slots__ = (
+        "dependent_type",
+        "factory",
+        "signature",
+        "resolver",
+        "cached_instance",
+    )
+
     dependent_type: type[T]
-    factory: IFactory[..., T] | IAsyncFactory[..., T]
+    factory: ty.Union[IAnyFactory[T], IAnyAsyncFactory[T]]
     signature: "DependentSignature[T]"
     resolver: ty.Callable[[type[T]], T]
-    cached_instance: Maybe[T | ty.Awaitable[T]] = MISSING
+    cached_instance: Maybe[ty.Union[T, ty.Awaitable[T]]]
+
+    def __init__(
+        self,
+        *,
+        dependent_type: type[T],
+        factory: ty.Union[IAnyFactory[T], IAnyAsyncFactory[T]],
+        signature: "DependentSignature[T]",
+        resolver: ty.Callable[[type[T]], T],
+        cached_instance: Maybe[ty.Union[T, ty.Awaitable[T]]] = MISSING,
+    ):
+        self.dependent_type = dependent_type
+        self.factory = factory
+        self.signature = signature
+        self.resolver = resolver
+        self.cached_instance = cached_instance
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.dependent_type})"
@@ -75,8 +114,8 @@ class LazyDependent[T](Dependent[T]):
 # ======================= Signature =====================================
 
 
-@dataclass(kw_only=True, slots=True, frozen=True)
-class DependencyParam[T]:
+@dataclass(frozen=True)
+class DependencyParam(ty.Generic[T]):
     """'dpram' for short
     Represents a parameter and its corresponding dependency node
 
@@ -94,6 +133,8 @@ class DependencyParam[T]:
     param_type: an ididi-friendly type resolved from annotation, int, in this case.
     default: the default value of the param, 5, in this case.
     """
+
+    __slots__ = ("name", "param", "param_annotation", "param_type", "default")
 
     name: str
     param: inspect.Parameter
@@ -119,10 +160,20 @@ class DependencyParam[T]:
         return False
 
 
-@dataclass(slots=True, frozen=True, kw_only=True)
-class DependentSignature[T]:
-    dependent: type[T | None] = field(default=type(None))
-    dprams: dict[str, DependencyParam[ty.Any]] = field(default_factory=dict, repr=False)
+class DependentSignature(ty.Generic[T]):
+    __slots__ = ("dependent", "dprams")
+
+    dependent: type[ty.Union[T, None]]
+    dprams: dict[str, DependencyParam[ty.Any]]
+
+    def __init__(
+        self,
+        *,
+        dependent: type[ty.Union[T, None]] = type(None),
+        dprams: ty.Union[dict[str, DependencyParam[ty.Any]], None],
+    ):
+        self.dependent = dependent
+        self.dprams = dprams or {}
 
     """
     # hash by dependent, and param names
@@ -156,7 +207,7 @@ class DependentSignature[T]:
 
     def actualized_params(self):
         for param_name, param in self:
-            param_type = ty.cast(type | ty.ForwardRef, param.param_type)
+            param_type = ty.cast(ty.Union[type, ty.ForwardRef], param.param_type)
             if isinstance(param_type, ty.ForwardRef):
                 param_type = resolve_forwardref(self.dependent, param_type)
                 param = DependencyParam(
@@ -173,9 +224,7 @@ class DependentSignature[T]:
 # ======================= Node =====================================
 
 
-def _create_sig[
-    T
-](
+def _create_sig(
     *, dependent: type[T], params: ty.Sequence[Parameter], config: NodeConfig
 ) -> DependentSignature[T]:
     """
@@ -208,8 +257,7 @@ def _create_sig[
     return DependentSignature(dprams=dep_params, dependent=dependent)
 
 
-@dataclass(kw_only=True, slots=True)
-class DependentNode[T]:
+class DependentNode(ty.Generic[T]):
     """
     A DAG node that represents a dependency
 
@@ -248,11 +296,22 @@ class DependentNode[T]:
     whether this node is reusable, default is True
     """
 
-    dependent: Dependent[T]
-    factory: IFactory[..., T] | IAsyncFactory[..., T]
-    default: Maybe[T] = MISSING
-    signature: DependentSignature[T]
-    config: NodeConfig
+    __slots__ = ("dependent", "factory", "default", "signature", "config")
+
+    def __init__(
+        self,
+        *,
+        dependent: Dependent[T],
+        factory: ty.Union[IAnyFactory[T], IAnyAsyncFactory[T]],
+        signature: DependentSignature[T],
+        config: NodeConfig,
+        default: Maybe[T] = MISSING,
+    ):
+        self.dependent = dependent
+        self.factory = factory
+        self.signature = signature
+        self.config = config
+        self.default = default
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.dependent})"
@@ -273,16 +332,14 @@ class DependentNode[T]:
                 raise ABCNotImplementedError(self.factory, abstract_methods)
 
     @classmethod
-    def create[
-        **P, R
-    ](
+    def create(
         cls,
         *,
-        dependent: type[R],
-        factory: IFactory[P, R] | IAsyncFactory[P, R],
+        dependent: type[T],
+        factory: ty.Union[IFactory[P, T], IAsyncFactory[P, T]],
         signature: inspect.Signature,
         config: NodeConfig,
-    ) -> "DependentNode[R]":
+    ) -> "DependentNode[T]":
         params = tuple(signature.parameters.values())
 
         if is_class_or_method(factory):
@@ -300,22 +357,23 @@ class DependentNode[T]:
         return node
 
     @classmethod
-    def from_factory[
-        I, **P
-    ](
-        cls, *, factory: IFactory[P, I] | IAsyncFactory[P, I], config: NodeConfig
-    ) -> "DependentNode[I]":
+    def from_factory(
+        cls,
+        *,
+        factory: ty.Union[IFactory[P, T], IAsyncFactory[P, T]],
+        config: NodeConfig,
+    ) -> "DependentNode[T]":
         signature = get_typed_signature(factory, check_return=True)
-        dependent: type[I] = resolve_factory_return(signature.return_annotation)
+        dependent: type[T] = resolve_factory_return(signature.return_annotation)
         node = cls.create(
             dependent=dependent, factory=factory, signature=signature, config=config
         )
         return node
 
     @classmethod
-    def from_class[
-        I
-    ](cls, *, dependent: type[I], config: NodeConfig) -> "DependentNode[I]":
+    def from_class(
+        cls, *, dependent: type[T], config: NodeConfig
+    ) -> "DependentNode[T]":
         if hasattr(dependent, "__origin__"):
             if res := ty.get_origin(dependent):
                 dependent = res
@@ -335,14 +393,12 @@ class DependentNode[T]:
 
     @classmethod
     @lru_cache(maxsize=1000)
-    def from_node[
-        I, **P
-    ](
+    def from_node(
         cls,
-        factory_or_class: type[I] | IFactory[P, I] | IAsyncFactory[P, I],
+        factory_or_class: ty.Union[type[T], IFactory[P, T], IAsyncFactory[P, T]],
         *,
         config: Maybe[NodeConfig] = MISSING,
-    ) -> "DependentNode[I]":
+    ) -> "DependentNode[T]":
         """
         Build a node from a class, a factory function of the class, or an async factory function of the class
         """
@@ -358,6 +414,8 @@ class DependentNode[T]:
                     "Lazy dependency is not supported for factories"
                 )
             return cls.from_factory(
-                factory=ty.cast(IFactory[P, I] | IAsyncFactory[P, I], factory_or_class),
+                factory=ty.cast(
+                    ty.Union[IFactory[P, T], IAsyncFactory[P, T]], factory_or_class
+                ),
                 config=config,
             )

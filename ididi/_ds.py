@@ -6,22 +6,24 @@ from ._type_resolve import get_bases
 from .node import DependentNode
 from .utils.param_utils import MISSING, Maybe
 
-type GraphNodes[I] = dict[type[I], DependentNode[I]]
+T = ty.TypeVar("T")
+
+GraphNodes = dict[type[T], DependentNode[T]]
 """
 ### mapping a type to its corresponding node
 """
 
-type GraphNodesView[I] = MappingProxyType[type[I], DependentNode[I]]
+GraphNodesView = MappingProxyType[type[T], DependentNode[T]]
 """
 ### a readonly view of GraphNodes
 """
 
-type ResolvedInstances[T] = dict[type[T], T]
+ResolvedInstances = dict[type[T], T]
 """
 mapping a type to its resolved instance
 """
 
-type TypeMappings[T] = dict[type[T], list[type[T]]]
+TypeMappings = dict[type[T], list[type[T]]]
 """
 ### mapping a type to its dependencies
 """
@@ -48,13 +50,13 @@ class TypeRegistry(BaseRegistry):
     def __init__(self):
         self._mappings: TypeMappings[ty.Any] = defaultdict(list)
 
-    def __getitem__[T](self, dependent_type: type[T]) -> list[type[T]]:
+    def __getitem__(self, dependent_type: type[T]) -> list[type[T]]:
         return self._mappings[dependent_type].copy()
 
     def update(self, other: "TypeRegistry"):
         self._mappings.update(other._mappings)
 
-    def register[T](self, dependent_type: type[T]) -> None:
+    def register(self, dependent_type: type[T]) -> None:
         self._mappings[dependent_type].append(dependent_type)
         for base in get_bases(dependent_type):
             self._mappings[base].append(dependent_type)
@@ -65,11 +67,9 @@ class TypeRegistry(BaseRegistry):
 
         del self._mappings[dependent_type]
 
-    def get[
-        T
-    ](
+    def get(
         self,
-        dependent_type: type[T] | ty.Callable[..., T],
+        dependent_type: ty.Union[type[T], ty.Callable[..., T]],
         /,
         default: Maybe[list[type[T]]] = MISSING,
     ) -> Maybe[list[type[T]]]:
@@ -85,7 +85,7 @@ class ResolutionRegistry(BaseRegistry):
     def __init__(self):
         self._mappings: ResolvedInstances[ty.Any] = {}
 
-    def __getitem__[T](self, dependent_type: type[T] | ty.Callable[..., T]) -> T:
+    def __getitem__(self, dependent_type: ty.Union[type[T], ty.Callable[..., T]]) -> T:
         return self._mappings[dependent_type]
 
     def remove(self, dependent_type: type) -> None:
@@ -94,9 +94,9 @@ class ResolutionRegistry(BaseRegistry):
     def update(self, other: "ResolutionRegistry"):
         self._mappings.update(other._mappings)
 
-    def register[
-        T
-    ](self, dependent_type: type[T] | ty.Callable[..., T], instance: T) -> None:
+    def register(
+        self, dependent_type: ty.Union[type[T], ty.Callable[..., T]], instance: T
+    ) -> None:
         if isinstance(dependent_type, type):
             instance_type: type[T] = type(instance)
             for base in get_bases(instance_type):
@@ -105,11 +105,9 @@ class ResolutionRegistry(BaseRegistry):
                 self._mappings[base] = instance
         self._mappings[dependent_type] = instance
 
-    def get[
-        T
-    ](
+    def get(
         self,
-        dependent_type: type[T] | ty.Callable[..., T],
+        dependent_type: ty.Union[type[T], ty.Callable[..., T]],
         /,
         default: Maybe[T] = MISSING,
     ) -> Maybe[T]:
