@@ -5,8 +5,6 @@ from dataclasses import dataclass
 from functools import lru_cache
 from inspect import Parameter
 
-import typing_extensions as tye
-
 from ._itypes import (
     EMPTY_SIGNATURE,
     INSPECT_EMPTY,
@@ -33,10 +31,7 @@ from .errors import (
     ProtocolFacotryNotProvidedError,
 )
 from .utils.param_utils import MISSING, Maybe, is_provided
-from .utils.typing_utils import get_factory_sig_from_cls
-
-T = ty.TypeVar("T")
-P = tye.ParamSpec("P")
+from .utils.typing_utils import P, T, get_factory_sig_from_cls
 
 
 class Dependent(ty.Generic[T]):

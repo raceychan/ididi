@@ -2,7 +2,7 @@ import typing as ty
 
 import typing_extensions as tye
 
-T = ty.TypeVar("T")
+from .typing_utils import T
 
 
 class _Missed:

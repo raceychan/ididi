@@ -1,11 +1,10 @@
 import typing as ty
 
+from .utils.typing_utils import T
 from graphviz import Digraph
 
 from .graph import DependencyGraph
 from .node import DependentNode as DependentNode
-
-T = ty.TypeVar("T")
 
 
 class Visualizer:

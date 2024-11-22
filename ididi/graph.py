@@ -43,10 +43,9 @@ from .errors import (
 )
 from .node import DependentNode, LazyDependent
 from .utils.param_utils import MISSING, Maybe, is_provided
+from .utils.typing_utils import P, T
 
-T = ty.TypeVar("T")
 Stack = ty.TypeVar("Stack", ExitStack, AsyncExitStack)
-P = tye.ParamSpec("P")
 
 
 class AbstractScope(ty.Generic[Stack]):
@@ -472,7 +471,7 @@ class DependencyGraph:
         return node
 
     def replace_node(
-        self, old_node: DependentNode[ty.Any], new_node: DependentNode[ty.Any]
+        self, old_node: DependentNode[T], new_node: DependentNode[T]
     ) -> None:
         """
         Replace an existing node with a new node.
@@ -527,7 +526,7 @@ class DependencyGraph:
         self,
         dependent: ty.Union[type, ty.Callable[P, T]],
         node_config: Maybe[NodeConfig] = MISSING,
-    ) -> DependentNode[ty.Any]:
+    ) -> DependentNode[T]:
         """
         Resolve a dependency without building its instance.
         Args:
@@ -542,7 +541,7 @@ class DependencyGraph:
         def dfs(
             dependent_factory: ty.Union[type, ty.Callable[P, T]],
             node_config: Maybe[NodeConfig],
-        ) -> DependentNode[ty.Any]:
+        ) -> DependentNode[T]:
 
             if is_function(dependent_factory):
                 sig = get_typed_signature(dependent_factory)

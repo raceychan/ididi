@@ -5,8 +5,7 @@ from types import MappingProxyType
 from ._type_resolve import get_bases
 from .node import DependentNode
 from .utils.param_utils import MISSING, Maybe
-
-T = ty.TypeVar("T")
+from .utils.typing_utils import T
 
 GraphNodes = dict[type[T], DependentNode[T]]
 """

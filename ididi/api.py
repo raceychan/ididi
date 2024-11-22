@@ -1,11 +1,7 @@
 import typing as ty
 
-import typing_extensions as tye
-
 from .graph import DependencyGraph as DependencyGraph
-
-T = ty.TypeVar("T")
-P = tye.ParamSpec("P")
+from .utils.typing_utils import P, T
 
 
 def entry(

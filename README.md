@@ -20,6 +20,8 @@
 
 ## Install
 
+ididi requires python >= 3.9
+
 ```bash
 pip install ididi
 ```
@@ -60,11 +62,9 @@ NOTE:
 2. async resource in a sync dependent is not supported, but sync resource in a async dependent is supported.  
 
 ```python
-from ididi import DependencyGraph
+import ididi
 
-dg = DependencyGraph()
 
-@dg.node
 async def get_db(client: Client) -> ty.AsyncGenerator[DataBase, None]:
     db = DataBase(client)
     assert client.is_opened
@@ -74,13 +74,14 @@ async def get_db(client: Client) -> ty.AsyncGenerator[DataBase, None]:
     finally:
         await db.close()
 
-@dg.entry
+@ididi.entry
 async def main(db: DataBase, sql: str) -> ty.Any:
     res = await db.execute(sql)
     return res
 
 assert await main(sql="select money from bank")
 ```
+
 > [!NOTE]
 > **`DependencyGraph.node` accepts a wide arrange of types, such as dependent class, sync/async facotry, sync/async resource factory, with typing support.**
 

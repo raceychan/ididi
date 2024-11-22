@@ -11,13 +11,13 @@ import typing as ty
 
 import typing_extensions as tye
 
-from ._itypes import AsyncClosable, Closable, T
+from ._itypes import AsyncClosable, Closable
 from .errors import (
     ForwardReferenceNotFoundError,
     GenericDependencyNotSupportedError,
     MissingReturnTypeError,
 )
-from .utils.typing_utils import eval_type, get_full_typed_signature, is_builtin_type
+from .utils.typing_utils import T, eval_type, get_full_typed_signature, is_builtin_type
 
 SyncResource = ty.Union[ty.ContextManager[ty.Any], Closable]
 AsyncResource = ty.Union[ty.AsyncContextManager[ty.Any], AsyncClosable]

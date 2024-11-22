@@ -2,9 +2,12 @@ import inspect
 import typing as ty
 from typing import _eval_type as ty_eval_type  # type: ignore
 
+
 import typing_extensions as tye
 
 T = ty.TypeVar("T")
+R = ty.TypeVar("R")
+P = tye.ParamSpec("P")
 
 PrimitiveBuiltins = type[ty.Union[int, float, complex, str, bool, bytes, bytearray]]
 ContainerBuiltins = type[

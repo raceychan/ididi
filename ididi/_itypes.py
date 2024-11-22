@@ -1,11 +1,7 @@
 import inspect
 import typing as ty
 
-from typing_extensions import ParamSpec
-
-R = ty.TypeVar("R")
-P = ParamSpec("P")
-T = ty.TypeVar("T")
+from .utils.typing_utils import P, R, T
 
 EMPTY_SIGNATURE = inspect.Signature()
 INSPECT_EMPTY = inspect.Signature.empty
