@@ -1,27 +1,30 @@
+import typing as ty
+
+from graphviz import Digraph
 
 from .graph import DependencyGraph
 from .node import DependentNode as DependentNode
 
+T = ty.TypeVar("T")
 
-from graphviz import Digraph
 
 class Visualizer:
     def __init__(
         self,
         graph: DependencyGraph,
         dot: "Digraph | None" = None,
-        graph_attrs: dict[str, str] | None = None,
+        graph_attrs: ty.Union[dict[str, str], None] = None,
     ):
         self._dg = graph
         self._dot = dot
         self._graph_attrs = graph_attrs
 
     @property
-    def dot(self) -> "Digraph | None":
+    def dot(self) -> ty.Union["Digraph", None]:
         return self._dot
 
     @property
-    def view(self) -> "Digraph | None":
+    def view(self) -> ty.Union[Digraph, None]:
         return self.make_graph().dot
 
     def make_graph(
@@ -52,9 +55,7 @@ class Visualizer:
 
         return self.__class__(self._dg, dot, self._graph_attrs)
 
-    def make_node[
-        T
-    ](
+    def make_node(
         self, node: type[T], node_attr: dict[str, str], edge_attr: dict[str, str]
     ) -> "Visualizer":
         """

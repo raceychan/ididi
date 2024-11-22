@@ -1,5 +1,6 @@
 import inspect
 import sys
+import typing as ty
 from abc import ABC, abstractmethod
 from unittest import mock
 
@@ -17,6 +18,7 @@ from ididi.errors import (
 )
 from ididi.graph import DependencyGraph
 
+T = ty.TypeVar("T")
 
 def test_import_graphviz_failure():
     with mock.patch.dict(sys.modules, {"graphviz": None}):
@@ -570,7 +572,7 @@ def test_resolve_node_without_annotation():
     assert service.config.a == 1
 
 
-class GenericService[T]:
+class GenericService(ty.Generic[T]):
     def __init__(self, item: T):
         self.item = item
 
@@ -581,7 +583,7 @@ def test_generic_service_not_supported(dg: DependencyGraph):
 
 
 def test_generic_service_with_default(dg: DependencyGraph):
-    class GenericService[T]:
+    class GenericService(ty.Generic[T]):
         def __init__(self, item: T = "5"):
             self.item = item
 

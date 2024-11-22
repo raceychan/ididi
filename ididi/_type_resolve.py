@@ -5,10 +5,13 @@ This module separates the type resolution logic between utils.typing_utils and t
 import collections.abc
 import contextlib
 import inspect
+import sys
 import types
 import typing as ty
 
-from ._itypes import AsyncClosable, Closable
+import typing_extensions as tye
+
+from ._itypes import AsyncClosable, Closable, T
 from .errors import (
     ForwardReferenceNotFoundError,
     GenericDependencyNotSupportedError,
@@ -16,16 +19,20 @@ from .errors import (
 )
 from .utils.typing_utils import eval_type, get_full_typed_signature, is_builtin_type
 
-type SyncResource = ty.ContextManager[ty.Any] | Closable
-type AsyncResource = ty.AsyncContextManager[ty.Any] | AsyncClosable
+SyncResource = ty.Union[ty.ContextManager[ty.Any], Closable]
+AsyncResource = ty.Union[ty.AsyncContextManager[ty.Any], AsyncClosable]
+
+
+P = tye.ParamSpec("P")
 
 
 class EmptyInitProtocol(ty.Protocol): ...
 
 
-def get_typed_signature[
-    T
-](call: ty.Callable[..., T], check_return: bool = False,) -> inspect.Signature:
+def get_typed_signature(
+    call: ty.Callable[..., T],
+    check_return: bool = False,
+) -> inspect.Signature:
     """
     Get a typed signature from a factory.
     """
@@ -36,7 +43,7 @@ def get_typed_signature[
     return sig
 
 
-def resolve_factory_return[T](sig_return: type[T]) -> type[T]:
+def resolve_factory_return(sig_return: type[T]) -> type[T]:
     """
     Get dependent type from a factory return
     """
@@ -63,11 +70,11 @@ def is_unresolved_type(t: ty.Any) -> bool:
     return is_builtin_type(t)
 
 
-def is_context_manager[T](t: T) -> ty.TypeGuard[ty.ContextManager[T]]:
+def is_context_manager(t: T) -> tye.TypeGuard[ty.ContextManager[T]]:
     return isinstance(t, contextlib.AbstractContextManager)
 
 
-def is_async_context_manager[T](t: T) -> ty.TypeGuard[ty.AsyncContextManager[T]]:
+def is_async_context_manager(t: T) -> tye.TypeGuard[ty.AsyncContextManager[T]]:
     return isinstance(t, contextlib.AbstractAsyncContextManager)
 
 
@@ -75,9 +82,9 @@ def is_class_or_method(obj: ty.Any) -> bool:
     return isinstance(obj, (type, types.MethodType, classmethod))
 
 
-def is_class[
-    T
-](obj: type[T] | ty.Callable[..., T | ty.Awaitable[T]]) -> ty.TypeGuard[type[T]]:
+def is_class(
+    obj: ty.Union[type[T], ty.Callable[..., ty.Union[T, ty.Awaitable[T]]]]
+) -> tye.TypeGuard[type[T]]:
     """
     check if obj is a class, since inspect only checks if obj is a class type.
     """
@@ -87,9 +94,9 @@ def is_class[
     return is_type or is_generic_alias
 
 
-def is_function[
-    T, **P
-](obj: type[T] | ty.Callable[P, T]) -> ty.TypeGuard[ty.Callable[P, T]]:
+def is_function(
+    obj: ty.Union[type[T], ty.Callable[P, T]]
+) -> tye.TypeGuard[ty.Callable[P, T]]:
     return isinstance(obj, types.FunctionType)
 
 
@@ -107,7 +114,7 @@ def is_class_with_empty_init(cls: type) -> bool:
 
 
 def resolve_forwardref(
-    dependent: type | ty.Callable[..., ty.Any], ref: ty.ForwardRef
+    dependent: ty.Union[type, ty.Callable[..., ty.Any]], ref: ty.ForwardRef
 ) -> ty.Any:
     if is_function(dependent):
         globalvs = dependent.__globals__
@@ -120,19 +127,37 @@ def resolve_forwardref(
         raise ForwardReferenceNotFoundError(ref) from e
 
 
-def resolve_annotation(annotation: ty.Any) -> type:
-    origin = ty.get_origin(annotation) or annotation
+if sys.version_info >= (3, 10):
 
-    if isinstance(annotation, ty.TypeVar):
-        raise GenericDependencyNotSupportedError(annotation)
+    def resolve_annotation(annotation: ty.Any) -> type:
+        origin = ty.get_origin(annotation) or annotation
 
-    # === Solvable dependency, NOTE: order matters!===
+        if isinstance(annotation, ty.TypeVar):
+            raise GenericDependencyNotSupportedError(annotation)
 
-    if origin in (types.UnionType, ty.Union):
-        union_types = ty.get_args(annotation)
-        # we don't care which type is correct, it would be provided by the factory
-        return union_types[0]
-    return origin
+        # === Solvable dependency, NOTE: order matters!===
+
+        if origin in (types.UnionType, ty.Union):
+            union_types = ty.get_args(annotation)
+            # we don't care which type is correct, it would be provided by the factory
+            return union_types[0]
+        return origin
+
+else:
+
+    def resolve_annotation(annotation: ty.Any) -> type:
+        origin = ty.get_origin(annotation) or annotation
+
+        if isinstance(annotation, ty.TypeVar):
+            raise GenericDependencyNotSupportedError(annotation)
+
+        # === Solvable dependency, NOTE: order matters!===
+
+        if origin is ty.Union:
+            union_types = ty.get_args(annotation)
+            # we don't care which type is correct, it would be provided by the factory
+            return union_types[0]
+        return origin
 
 
 def get_bases(dependent: type) -> tuple[type, ...]:
@@ -142,10 +167,3 @@ def get_bases(dependent: type) -> tuple[type, ...]:
     else:
         bases = dependent.__mro__[1:-1]
     return bases
-
-
-# def get_literal_values[T](literal: ty.TypeAliasType | T) -> tuple[T, ...]:
-#     if isinstance(literal, ty.TypeAliasType):
-#         literal = literal.__value__
-
-#     return ty.get_args(literal)

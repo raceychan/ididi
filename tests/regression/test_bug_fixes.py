@@ -146,14 +146,14 @@ def test_factory_with_builtin_type():
 def test_union_type():
     @dg.node
     class Service:
-        def __init__(self, a: int | str):
+        def __init__(self, a: ty.Union[int, str]):
             self.a = a
 
     with pytest.raises(UnsolvableDependencyError):
         dg.resolve(Service)
 
     @dg.node
-    def service_factory(abc: int | str = 3) -> Service:
+    def service_factory(abc: ty.Union[int, str] = 3) -> Service:
         return Service(3)
 
     dg.resolve(Service)

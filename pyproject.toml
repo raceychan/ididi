@@ -1,11 +1,11 @@
 [project]
-authors = [{ name = "raceychan", email = "raceychan@gmail.com" }]
+authors = [{name = "raceychan", email = "raceychan@gmail.com"}]
 description = "A dependency injection library for Python, Optimized for serverless applications"
 dynamic = ["version"]
 license = "MIT"
 name = "ididi"
 readme = "README.md"
-requires-python = ">= 3.12"
+requires-python = ">= 3.9"
 
 [project.optional-dependencies]
 graphviz = ["python-graphviz>=0.20.3,<0.21"]
@@ -47,13 +47,15 @@ channels = ["conda-forge"]
 platforms = ["linux-64"]
 
 [tool.pixi.environments]
-default = { solve-group = "default" }
-dev = { features = ["dev"], solve-group = "default" }
-publish = { features = ["publish"], solve-group = "default" }
-test = { features = ["test"], solve-group = "default" }
+default = {solve-group = "default"}
+dev = {features = ["dev"], solve-group = "default"}
+publish = {features = ["publish"], solve-group = "default"}
+test = {features = ["test"], solve-group = "default"}
 
 [tool.pixi.dependencies]
-python = ">=3.12"
+# python = ">=3.12"
+python = "3.9.0"
+typing_extensions = ">=4.12.2,<5"
 
 [tool.pixi.feature.dev.dependencies]
 jupyter = ">=1.1.1,<2"
@@ -71,12 +73,12 @@ twine = ">=5.1.1,<6"
 
 [tool.pixi.feature.publish.tasks]
 # Build into a wheel using hatch
-build = { cmd = "hatch build", inputs = ["didi/*"], outputs = ["dist/*"] }
+build = {cmd = "hatch build", inputs = ["didi/*"], outputs = ["dist/*"]}
 # Upload to custom GCP registry using twine
-check = { cmd = "twine check" }
-publish = { cmd = "twine upload --skip-existing dist/*", depends-on = [
+check = {cmd = "twine check"}
+publish = {cmd = "twine upload --skip-existing dist/*", depends-on = [
   "build",
-] }
-test-publish = { cmd = "twine upload --repository testpypi --skip-existing dist/" }
+]}
+test-publish = {cmd = "twine upload --repository testpypi --skip-existing dist/"}
 
-patch = { cmd = "hatch version patch" }
+patch = {cmd = "hatch version patch"}

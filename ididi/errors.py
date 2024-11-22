@@ -60,6 +60,13 @@ class PositionalOverrideError(NodeResolveError):
 
 
 class UnsolvableNodeError(NodeResolveError):
+    def __init__(self, message: str):
+        super().__init__(message)
+        self.__notes__: list[str] = []
+
+    def add_note(self, note: str) -> None:
+        self.__notes__.append(note)
+
     def add_context(self, dependent: type, param_name: str, param_annotation: type):
         self.add_note(
             f"<- {dependent.__name__}({param_name}: {param_annotation.__name__})"
@@ -75,7 +82,7 @@ class UnsolvableDependencyError(UnsolvableNodeError):
         self,
         *,
         dep_name: str,
-        factory: ty.Callable[..., ty.Any] | type,
+        factory: ty.Union[ty.Callable[..., ty.Any], type],
         required_type: type,
     ):
         self.message = f"Unable to resolve dependency for parameter: {dep_name} in {factory}, value of {required_type} must be provided"
@@ -149,7 +156,7 @@ class GenericDependencyNotSupportedError(NodeError):
     Raised when attempting to use a generic type that is not yet supported.
     """
 
-    def __init__(self, generic_type: type | ty.TypeVar):
+    def __init__(self, generic_type: ty.Union[type, ty.TypeVar]):
         super().__init__(
             f"Using generic a type as a dependency is not yet supported: {generic_type}"
         )
@@ -203,7 +210,7 @@ class TopLevelBulitinTypeError(GraphResolveError):
     >>> dag.resolve(int)
     """
 
-    def __init__(self, dependency_type: type | ty.Callable[..., ty.Any]):
+    def __init__(self, dependency_type: ty.Union[type, ty.Callable[..., ty.Any]]):
         super().__init__(
             f"Using builtin type {dependency_type} as a top level dependency is not supported"
         )
