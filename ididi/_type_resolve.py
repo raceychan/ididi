@@ -127,37 +127,24 @@ def resolve_forwardref(
         raise ForwardReferenceNotFoundError(ref) from e
 
 
-if sys.version_info >= (3, 10):
+def resolve_annotation(annotation: ty.Any) -> type:
+    origin = ty.get_origin(annotation) or annotation
 
-    def resolve_annotation(annotation: ty.Any) -> type:
-        origin = ty.get_origin(annotation) or annotation
+    if isinstance(annotation, ty.TypeVar):
+        raise GenericDependencyNotSupportedError(annotation)
 
-        if isinstance(annotation, ty.TypeVar):
-            raise GenericDependencyNotSupportedError(annotation)
+    # === Solvable dependency, NOTE: order matters!===
 
-        # === Solvable dependency, NOTE: order matters!===
+    if sys.version_info >= (3, 10):
+        union_meta = (types.UnionType, ty.Union)
+    else:
+        union_meta = (ty.Union,)
 
-        if origin in (types.UnionType, ty.Union):
-            union_types = ty.get_args(annotation)
-            # we don't care which type is correct, it would be provided by the factory
-            return union_types[0]
-        return origin
-
-else:
-
-    def resolve_annotation(annotation: ty.Any) -> type:
-        origin = ty.get_origin(annotation) or annotation
-
-        if isinstance(annotation, ty.TypeVar):
-            raise GenericDependencyNotSupportedError(annotation)
-
-        # === Solvable dependency, NOTE: order matters!===
-
-        if origin is ty.Union:
-            union_types = ty.get_args(annotation)
-            # we don't care which type is correct, it would be provided by the factory
-            return union_types[0]
-        return origin
+    if origin in union_meta:
+        union_types = ty.get_args(annotation)
+        # we don't care which type is correct, it would be provided by the factory
+        return union_types[0]
+    return origin
 
 
 def get_bases(dependent: type) -> tuple[type, ...]:

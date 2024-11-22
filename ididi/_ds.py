@@ -79,9 +79,6 @@ class TypeRegistry(BaseRegistry):
 class ResolutionRegistry(BaseRegistry):
     __slots__ = ("_mappings",)
 
-    # TODO: close_callback_registry
-    # type close_callback[T] = ty.Callable[[T], None | ty.Awaitable[None]]
-
     def __init__(self):
         self._mappings: ResolvedInstances[ty.Any] = {}
 

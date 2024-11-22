@@ -44,8 +44,6 @@ class Dependent(ty.Generic[T]):
 
     __slots__ = ("dependent_type",)
 
-    dependent_type: type[T]
-
     def __init__(self, dependent_type: type[T]):
         self.dependent_type = dependent_type
 
@@ -65,12 +63,6 @@ class LazyDependent(Dependent[T]):
         "resolver",
         "cached_instance",
     )
-
-    dependent_type: type[T]
-    factory: ty.Union[IAnyFactory[T], IAnyAsyncFactory[T]]
-    signature: "DependentSignature[T]"
-    resolver: ty.Callable[[type[T]], T]
-    cached_instance: Maybe[ty.Union[T, ty.Awaitable[T]]]
 
     def __init__(
         self,
@@ -162,9 +154,6 @@ class DependencyParam(ty.Generic[T]):
 
 class DependentSignature(ty.Generic[T]):
     __slots__ = ("dependent", "dprams")
-
-    dependent: type[ty.Union[T, None]]
-    dprams: dict[str, DependencyParam[ty.Any]]
 
     def __init__(
         self,
