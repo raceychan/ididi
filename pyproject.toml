@@ -7,6 +7,22 @@ name = "ididi"
 readme = "README.md"
 requires-python = ">= 3.9"
 
+classifiers = [
+  "Development Status :: 5 - Stable",
+  "Intended Audience :: Information Technology",
+  "Intended Audience :: System Administrators",
+  "Intended Audience :: Developers",
+  "Topic :: Software Development :: Dependency Injection",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "License :: OSI Approved :: MIT License",
+  "Framework :: Ididi",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
+
 [project.optional-dependencies]
 graphviz = ["python-graphviz>=0.20.3,<0.21"]
 

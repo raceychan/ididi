@@ -6,6 +6,7 @@
 
 [![codecov](https://codecov.io/github/raceychan/ididi/graph/badge.svg?token=8N1AYWWN5N)](https://codecov.io/github/raceychan/ididi)
 [![PyPI version](https://badge.fury.io/py/ididi.svg)](https://badge.fury.io/py/ididi)
+[![Python Version](https://pypi.org/project/ididi)](https://img.shields.io/pypi/pyversions/ididi)
 [![License](https://img.shields.io/github/license/raceychan/ididi)](https://github.com/raceychan/ididi/blob/master/LICENSE)
 [![Downloads](https://img.shields.io/pypi/dm/ididi.svg)](https://pypistats.org/packages/ididi)
 [![Github Pages](https://img.shields.io/badge/github%20pages-121013?style=for-the-badge&logo=github&logoColor=white)](https://raceychan.github.io/ididi)
@@ -46,8 +47,8 @@ user_service = ididi.resolve(UserService)
 
 **No Container, No Provider, No Wiring, just *Python***
 
-
 ## Features
+
 > [!TIP]
 > Ididi has a compact codebase with core part being < 600 LOC, feature requests, pull requests and issues are all welcome and appreciated.
 
