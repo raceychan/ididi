@@ -9,7 +9,7 @@ import sys
 import types
 import typing as ty
 
-import typing_extensions as tye
+import typing_extensions as tyex
 
 from ._itypes import AsyncClosable, Closable
 from .errors import (
@@ -23,7 +23,7 @@ SyncResource = ty.Union[ty.ContextManager[ty.Any], Closable]
 AsyncResource = ty.Union[ty.AsyncContextManager[ty.Any], AsyncClosable]
 
 
-P = tye.ParamSpec("P")
+P = tyex.ParamSpec("P")
 
 
 class EmptyInitProtocol(ty.Protocol): ...
@@ -70,11 +70,11 @@ def is_unresolved_type(t: ty.Any) -> bool:
     return is_builtin_type(t)
 
 
-def is_context_manager(t: T) -> tye.TypeGuard[ty.ContextManager[T]]:
+def is_context_manager(t: T) -> tyex.TypeGuard[ty.ContextManager[T]]:
     return isinstance(t, contextlib.AbstractContextManager)
 
 
-def is_async_context_manager(t: T) -> tye.TypeGuard[ty.AsyncContextManager[T]]:
+def is_async_context_manager(t: T) -> tyex.TypeGuard[ty.AsyncContextManager[T]]:
     return isinstance(t, contextlib.AbstractAsyncContextManager)
 
 
@@ -84,7 +84,7 @@ def is_class_or_method(obj: ty.Any) -> bool:
 
 def is_class(
     obj: ty.Union[type[T], ty.Callable[..., ty.Union[T, ty.Awaitable[T]]]]
-) -> tye.TypeGuard[type[T]]:
+) -> tyex.TypeGuard[type[T]]:
     """
     check if obj is a class, since inspect only checks if obj is a class type.
     """
@@ -96,7 +96,7 @@ def is_class(
 
 def is_function(
     obj: ty.Union[type[T], ty.Callable[P, T]]
-) -> tye.TypeGuard[ty.Callable[P, T]]:
+) -> tyex.TypeGuard[ty.Callable[P, T]]:
     return isinstance(obj, types.FunctionType)
 
 

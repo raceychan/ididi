@@ -263,3 +263,20 @@ dg.merge(user_dg)
 ```
 
 you might choose to merge one or more DependencyGraph into the main graph, so that you don't have to import a single dg to register all your classes.
+
+## version 1.0.7
+
+adding support for python 3.13
+
+## version 1.0.8
+
+improvements:
+
+now ididi will look for conflict in reusability,
+For example,
+when a dependency with `reuse=False` has a dependent with `reuse=True`, ididi would raise ReusabilityConflictError when statically resolve the nodes.
+
+```bash
+ididi.errors.ReusabilityConflictError: Transient dependency `Database` with reuse dependents
+make sure each of AuthService -> Repository is configured as `reuse=False`
+```

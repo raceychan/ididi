@@ -1,6 +1,6 @@
 import typing as ty
 
-import typing_extensions as tye
+import typing_extensions as tyex
 
 from .typing_utils import T
 
@@ -29,7 +29,7 @@ Nullable[int] == int | NULL
 """
 
 
-def is_provided(value: Maybe[T]) -> tye.TypeGuard[T]:
+def is_provided(value: Maybe[T]) -> tyex.TypeGuard[T]:
     """
     Check if the value is not MISSING.
     """

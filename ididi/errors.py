@@ -203,6 +203,15 @@ class CircularDependencyDetectedError(GraphResolveError):
         return self._cycle_path
 
 
+class ReusabilityConflictError(GraphResolveError):
+    def __init__(self, path: list[type], nonreuse: type):
+        conflict_str = " -> ".join(t.__name__ for t in path)
+        msg = f"""Transient dependency `{nonreuse.__name__}` with reuse dependents \
+        \n make sure each of {conflict_str} is configured as `reuse=False` \
+        """
+        super().__init__(msg)
+
+
 class TopLevelBulitinTypeError(GraphResolveError):
     """
     Raised when a builtin type is used as a top level dependency.

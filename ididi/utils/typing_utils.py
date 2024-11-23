@@ -2,12 +2,11 @@ import inspect
 import typing as ty
 from typing import _eval_type as ty_eval_type  # type: ignore
 
-
-import typing_extensions as tye
+import typing_extensions as tyex
 
 T = ty.TypeVar("T")
 R = ty.TypeVar("R")
-P = tye.ParamSpec("P")
+P = tyex.ParamSpec("P")
 
 PrimitiveBuiltins = type[ty.Union[int, float, complex, str, bool, bytes, bytearray]]
 ContainerBuiltins = type[
@@ -16,21 +15,21 @@ ContainerBuiltins = type[
 BuiltinSingleton = type[None]
 
 
-def is_builtin_primitive(t: ty.Any) -> tye.TypeGuard[PrimitiveBuiltins]:
+def is_builtin_primitive(t: ty.Any) -> tyex.TypeGuard[PrimitiveBuiltins]:
     return t in {int, float, complex, str, bool, bytes, bytearray, type}
 
 
-def is_builtin_container(t: ty.Any) -> tye.TypeGuard[ContainerBuiltins[ty.Any]]:
+def is_builtin_container(t: ty.Any) -> tyex.TypeGuard[ContainerBuiltins[ty.Any]]:
     return t in {list, tuple, dict, set, frozenset}
 
 
-def is_builtin_singleton(t: ty.Any) -> tye.TypeGuard[BuiltinSingleton]:
+def is_builtin_singleton(t: ty.Any) -> tyex.TypeGuard[BuiltinSingleton]:
     return t is None
 
 
 def is_builtin_type(
     t: ty.Any,
-) -> tye.TypeGuard[
+) -> tyex.TypeGuard[
     ty.Union[PrimitiveBuiltins, ContainerBuiltins[ty.Any], BuiltinSingleton]
 ]:
     """

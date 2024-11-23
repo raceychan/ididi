@@ -12,7 +12,7 @@ debug:
 
 .PHONY: feat
 feat:
-	pixi run -e test pytest -vx  tests/features/test_feat.py
+	pixi run -e test pytest -vx  tests/test_feat.py
 
 .PHONY: benchmark
 benchmark:

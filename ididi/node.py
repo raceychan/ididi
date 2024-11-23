@@ -42,6 +42,9 @@ class Dependent(ty.Generic[T]):
     def __init__(self, dependent_type: type[T]):
         self.dependent_type = dependent_type
 
+    def __repr__(self) -> str:
+        return self.dependent_name
+
     @property
     def dependent_name(self) -> str:
         return self.dependent_type.__name__

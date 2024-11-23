@@ -1,38 +1,58 @@
 import time
+import typing as ty
 
 import pytest
 
+from ididi import DependencyGraph
+
+from .test_data import CLASSES
+
+
+@pytest.fixture
+def dependents() -> ty.Sequence[type]:
+    deps = CLASSES.values()
+    return deps
+
+
+@pytest.fixture(scope="module")
+def dg() -> DependencyGraph:
+    return DependencyGraph()
+
 
 @pytest.mark.benchmark
-def test_static_resolve():
-
-    from ididi import DependencyGraph
-
-    from .test_data import CLASSES
-
-    dg = DependencyGraph()
+def test_register(dg: DependencyGraph, dependents: ty.Sequence[type]):
     pre = time.perf_counter()
-    for k, c in CLASSES.items():
+    for c in dependents:
         dg.node(c)
     aft = time.perf_counter()
     cost = round(aft - pre, 6)
-    print(f"{cost} seoncds to register {len(CLASSES)} classes")
+    print(f"\n{cost} seoncds to register {len(dependents)} classes")
+
+
+@pytest.mark.benchmark
+def test_static_resolve(dg: DependencyGraph, dependents: ty.Sequence[type]):
 
     pre = time.perf_counter()
     dg.static_resolve_all()
     aft = time.perf_counter()
-
     cost = round(aft - pre, 6)
-    print(f"{cost} seoncds to statically resolve {len(dg.nodes)} classes")
+    print(f"\n{cost} seoncds to statically resolve {len(dg.nodes)} classes")
 
-    t = CLASSES["ConflictResolver"]
+
+@pytest.mark.benchmark
+def test_resolve_instances(dg: DependencyGraph, dependents: list[type]):
+
     pre = time.perf_counter()
-    r = dg.resolve(t)
+    for c in dependents:
+        _ = dg.resolve(c)
     aft = time.perf_counter()
-
     cost = round(aft - pre, 6)
 
-    deps = dg.visitor.get_dependencies(t, recursive=True)
-    print(f"{cost} seoncds to resolve {t} with {len(deps)} dependencies")
+    print(f"\n{cost} seoncds to resolve {len(dependents)} instances")
 
-    # sorted_deps = dg.visitor.top_sorted_dependencies()
+
+"""
+0.012446 seoncds to register 122 classes
+0.010367 seoncds to statically resolve 122 classes
+0.001249 seoncds to resolve 122 instances
+"""

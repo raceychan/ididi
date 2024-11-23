@@ -108,3 +108,81 @@ class ResolutionRegistry(BaseRegistry):
         default: Maybe[T] = MISSING,
     ) -> Maybe[T]:
         return self._mappings.get(dependent_type, default)
+
+
+class Visitor:
+    def __init__(self, nodes: GraphNodes[ty.Any]):
+        self._nodes = nodes
+
+    def _dfs(
+        self,
+        start_types: ty.Union[list[type], type],
+        pre_visit: ty.Union[ty.Callable[[type], None], None] = None,
+        post_visit: ty.Union[ty.Callable[[type], None], None] = None,
+    ) -> None:
+        """Generic DFS traversal with customizable visit callbacks.
+
+        Args:
+            start_types: Starting type(s) for traversal
+            pre_visit: Called before visiting node's dependencies
+            post_visit: Called after visiting node's dependencies
+        """
+        if isinstance(start_types, type):
+            start_types = [start_types]
+
+        visited = set[type]()
+
+        def _get_deps(node_type: type) -> list[type]:
+            node = self._nodes[node_type]
+            return [
+                p.param_type for _, p in node.signature if p.param_type in self._nodes
+            ]
+
+        def dfs(node_type: type):
+            if node_type in visited:
+                return
+            visited.add(node_type)
+
+            if pre_visit:
+                pre_visit(node_type)
+
+            for dep_type in _get_deps(node_type):
+                dfs(dep_type)
+
+            if post_visit:
+                post_visit(node_type)
+
+        for node_type in start_types:
+            dfs(node_type)
+
+    def get_dependents(self, dependency: type) -> list[type]:
+        dependents: list[type] = []
+
+        def collect_dependent(node_type: type):
+            node = self._nodes[node_type]
+            if any(p.param_type is dependency for _, p in node.signature):
+                dependents.append(node_type)
+
+        self._dfs(list(self._nodes), pre_visit=collect_dependent)
+        return dependents
+
+    def get_dependencies(self, dependent: type, recursive: bool = False) -> list[type]:
+        if not recursive:
+            return [p.param_type for _, p in self._nodes[dependent].signature]
+
+        def collect_dependencies(t: type):
+            if t != dependent:
+                dependencies.append(t)
+
+        dependencies: list[type] = []
+        self._dfs(
+            dependent,
+            post_visit=collect_dependencies,
+        )
+        return dependencies
+
+    def top_sorted_dependencies(self) -> list[type]:
+        "Sort the whole graph, from lowest dependencies to toppest dependents"
+        order: list[type] = []
+        self._dfs(list(self._nodes), post_visit=order.append)
+        return order

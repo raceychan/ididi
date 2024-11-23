@@ -48,3 +48,8 @@ Node would be fully resolved when `dg.static_resolve` is called.
 ## version 1.0.0
 
 use contextvar.contextvar for global scope
+
+## version 1.1.0
+
+1. threading
+2. reuse should be reversed-transitive, meaning that a reused dependent that depends on a non-reused dependency should become non-reused as well

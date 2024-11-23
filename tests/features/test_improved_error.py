@@ -1,3 +1,5 @@
+import sys
+
 import pytest
 
 from ididi import DependencyGraph

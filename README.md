@@ -119,6 +119,9 @@ async with dg.scope() as scope:
     resource = await scope.resolve(Resource)
 ```
 
+> [!NOTE]
+> `dg.node` will leave your class/factory untouched, i.e., you can use it just like it is not decorated.
+
 #### Contexted Scope
 
 You can use dg.use_scope to retrive most recent scope, context-wise, this allows your to have
