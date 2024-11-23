@@ -605,7 +605,6 @@ class DependencyGraph:
         Resolve a dependency and build its instance.
         NOTE: overrides will only be applied to the current dependent.
         """
-
         if args:
             raise PositionalOverrideError(args)
 

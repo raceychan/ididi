@@ -1,6 +1,3 @@
-import asyncio
-import threading
-import time
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -35,7 +32,7 @@ def dg():
 
 @pytest.fixture
 def max_workers():
-    return 10
+    return 1000
 
 
 @pytest.fixture
@@ -43,6 +40,7 @@ def pool(max_workers: int):
     return ThreadPoolExecutor(max_workers)
 
 
+@pytest.mark.debug
 def test_threading_resolve_non_reuse(
     dg: DependencyGraph, pool: ThreadPoolExecutor, max_workers: int
 ):
