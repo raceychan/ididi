@@ -862,14 +862,15 @@ class DependencyGraph:
                 old_node = self._nodes[resolved_type]
                 self.remove_node(old_node)
 
-        if inspect.isgeneratorfunction(factory_or_class):
-            func_gen = contextmanager(factory_or_class)
-            node = DependentNode[T].from_node(func_gen, config=node_config)
-        elif inspect.isasyncgenfunction(factory_or_class):
-            func_gen = asynccontextmanager(factory_or_class)
-            node = DependentNode[T].from_node(func_gen, config=node_config)
-        else:
-            node = DependentNode[T].from_node(factory_or_class, config=node_config)
+        with self._lock:
+            if inspect.isgeneratorfunction(factory_or_class):
+                func_gen = contextmanager(factory_or_class)
+                node = DependentNode[T].from_node(func_gen, config=node_config)
+            elif inspect.isasyncgenfunction(factory_or_class):
+                func_gen = asynccontextmanager(factory_or_class)
+                node = DependentNode[T].from_node(func_gen, config=node_config)
+            else:
+                node = DependentNode[T].from_node(factory_or_class, config=node_config)
 
         self.register_node(node)
         return factory_or_class
