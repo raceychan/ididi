@@ -25,14 +25,14 @@ class AuthService:
         self.repo = repo
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def dg():
     return DependencyGraph()
 
 
 @pytest.fixture
 def max_workers():
-    return 1000
+    return 10000
 
 
 @pytest.fixture
@@ -40,7 +40,22 @@ def pool(max_workers: int):
     return ThreadPoolExecutor(max_workers)
 
 
-@pytest.mark.debug
+def test_repeat_resolve(dg: DependencyGraph):
+    instances: list[object] = []
+
+    dg.node(reuse=False)(AuthService)
+    dg.static_resolve(AuthService)
+
+    def resolve(dg: DependencyGraph):
+        obj = dg.resolve(AuthService)
+        instances.append(id(obj))
+        return obj
+
+    res = [resolve(dg) for _ in range(1000)]
+
+    assert len(set(res)) == len(res)
+
+
 def test_threading_resolve_non_reuse(
     dg: DependencyGraph, pool: ThreadPoolExecutor, max_workers: int
 ):
@@ -49,15 +64,18 @@ def test_threading_resolve_non_reuse(
     results: list[object] = []
 
     dg.node(reuse=False)(AuthService)
+    dg.static_resolve(AuthService)
 
     def resolve(dg: DependencyGraph):
-        return id(dg.resolve(AuthService))
+        obj = dg.resolve(AuthService)
+        results.append(obj)
+        return id(obj)
 
     with pool as executor:
         # Submit multiple resolve tasks
         futures = [executor.submit(resolve, dg) for _ in range(max_workers)]
         for future in futures:
-            results.append(future.result())  # Collect results
+            future.result()  # Collect results
 
     assert len(set(results)) == len(results)
 

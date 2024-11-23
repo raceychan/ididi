@@ -1,5 +1,4 @@
 import inspect
-import threading
 import typing as ty
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager, contextmanager
 from contextvars import ContextVar, Token
@@ -232,7 +231,6 @@ class DependencyGraph:
         "_type_registry",
         "_scope_context",
         "_visitor",
-        "_lock",
     )
 
     def __init__(self, static_resolve: bool = True):
@@ -245,7 +243,6 @@ class DependencyGraph:
             "connection_context"
         )
         self._visitor = Visitor(self._nodes)
-        self._lock = threading.RLock()
 
     def __repr__(self) -> str:
         return (
@@ -261,8 +258,7 @@ class DependencyGraph:
         if not self._config.static_resolve:
             return
 
-        with self._lock:
-            nodes = self._nodes.copy()
+        nodes = self._nodes.copy()
 
         for node_type in nodes:
             if node_type in self._resolved_nodes:
@@ -323,20 +319,18 @@ class DependencyGraph:
             others = other
 
         for other in others:
-            with self._lock:
-                self._nodes.update(other.nodes)
-                self._resolved_nodes.update(other._resolved_nodes)
-                self._resolution_registry.update(other._resolution_registry)
-                self._type_registry.update(other._type_registry)
-                try:
-                    other._scope_context.get()
-                except LookupError:
-                    pass
-                else:
-                    raise MergeWithScopeStartedError()
+            self._nodes.update(other.nodes)
+            self._resolved_nodes.update(other._resolved_nodes)
+            self._resolution_registry.update(other._resolution_registry)
+            self._type_registry.update(other._type_registry)
+            try:
+                other._scope_context.get()
+            except LookupError:
+                pass
+            else:
+                raise MergeWithScopeStartedError()
 
-        with self._lock:
-            self._visitor = Visitor(self._nodes)
+        self._visitor = Visitor(self._nodes)
 
     def set_context_scope(
         self, scope: ty.Union[SyncScope, AsyncScope]
@@ -352,28 +346,26 @@ class DependencyGraph:
         """
         dependent_type = node.dependent.dependent_type
 
-        with self._lock:
-            self._nodes.pop(dependent_type)
-            self._type_registry.remove(dependent_type)
-            self._resolution_registry.remove(dependent_type)
-            self._resolved_nodes.pop(dependent_type, None)
+        self._nodes.pop(dependent_type)
+        self._type_registry.remove(dependent_type)
+        self._resolution_registry.remove(dependent_type)
+        self._resolved_nodes.pop(dependent_type, None)
 
     def reset(self, clear_nodes: bool = False) -> None:
         """
         Clear all resolved instances while maintaining registrations.
 
-        clear_resolved: bool
+        clear_nodes: bool
         ---
         whether to clear:
-        - the node registry,
-        - the type registry,
+        - the node registry
+        - the type registry
         """
-        with self._lock:
-            self._resolution_registry.clear()
-            if clear_nodes:
-                self._type_registry.clear()
-                self._resolved_nodes.clear()
-                self._nodes.clear()
+        self._resolution_registry.clear()
+        if clear_nodes:
+            self._type_registry.clear()
+            self._resolved_nodes.clear()
+            self._nodes.clear()
 
     async def aclose(self) -> None:
         """
@@ -457,12 +449,11 @@ class DependencyGraph:
         if dependent_type in self._nodes:
             return
 
-        with self._lock:
-            # Register main type
-            self._nodes[dependent_type] = node
+        # Register main type
+        self._nodes[dependent_type] = node
 
-            # Register type mappings
-            self._type_registry.register(dependent_type)
+        # Register type mappings
+        self._type_registry.register(dependent_type)
 
     def static_resolve(
         self,
@@ -498,8 +489,7 @@ class DependencyGraph:
 
             node = self._resolve_concrete_node(dependent, node_config)
 
-            with self._lock:
-                current_path.append(dependent)
+            current_path.append(dependent)
 
             for param in node.signature.actualized_params():
                 param_type = param.param_type
@@ -536,13 +526,11 @@ class DependencyGraph:
                     raise
 
                 self.register_node(dep_node)
-                with self._lock:
-                    self._resolved_nodes[param_type] = dep_node
+                self._resolved_nodes[param_type] = dep_node
 
             node.check_for_resolvability()
-            with self._lock:
-                self._resolved_nodes[dependent] = node
-                current_path.pop()
+            self._resolved_nodes[dependent] = node
+            current_path.pop()
             return node
 
         return dfs(dependent, node_config)
@@ -621,24 +609,23 @@ class DependencyGraph:
 
         resolved_args: dict[str, ty.Any] = {}
 
-        with self._lock:
-            for param_name, dpram in node.signature:
-                param_type = dpram.param_type
+        for param_name, dpram in node.signature:
+            param_type = dpram.param_type
 
-                if param_name in overrides:
-                    resolved_args[param_name] = overrides[param_name]
-                    continue
+            if param_name in overrides:
+                resolved_args[param_name] = overrides[param_name]
+                continue
 
-                if is_provided(dpram.default):
-                    resolved_args[param_name] = dpram.default
-                    continue
+            if is_provided(dpram.default):
+                resolved_args[param_name] = dpram.default
+                continue
 
-                if node.config.lazy:
-                    dep_node = self.static_resolve(param_type, node.config)
-                    resolved_args[param_name] = self._create_lazy_dependent(dep_node)
-                    continue
+            if node.config.lazy:
+                dep_node = self.static_resolve(param_type, node.config)
+                resolved_args[param_name] = self._create_lazy_dependent(dep_node)
+                continue
 
-                resolved_args[param_name] = self.resolve(param_type, scope)
+            resolved_args[param_name] = self.resolve(param_type, scope)
 
         bound_args = node.signature.bind_arguments(resolved_args)
         resolved = node.factory(**bound_args.arguments)
@@ -648,14 +635,12 @@ class DependencyGraph:
                 raise ResourceOutsideScopeError(node.dependent_type)
             instance = scope.enter_context(resolved)
             if node.config.reuse:
-                with self._lock:
-                    scope.cache_result(dependent, instance)
+                scope.cache_result(dependent, instance)
         elif is_async_context_manager(resolved):
             raise AsyncResourceInSyncError(node.factory)
         else:
             if node.config.reuse:
-                with self._lock:
-                    self._resolution_registry.register(dependent, resolved)
+                self._resolution_registry.register(dependent, resolved)
             instance = resolved
         return ty.cast(T, instance)
 
@@ -707,15 +692,13 @@ class DependencyGraph:
                 raise ResourceOutsideScopeError(node.dependent_type)
             instance = await scope.enter_async_context(resolved)
             if node.config.reuse:
-                with self._lock:
-                    scope.cache_result(dependent, instance)
+                scope.cache_result(dependent, instance)
         elif is_context_manager(resolved):
             if not scope:
                 raise ResourceOutsideScopeError(node.dependent_type)
             instance = scope.enter_context(resolved)
             if node.config.reuse:
-                with self._lock:
-                    scope.cache_result(dependent, instance)
+                scope.cache_result(dependent, instance)
         else:
             if inspect.isawaitable(resolved):
                 instance = await resolved
@@ -723,8 +706,7 @@ class DependencyGraph:
                 instance = resolved
 
             if node.config.reuse:
-                with self._lock:
-                    self._resolution_registry.register(dependent, instance)
+                self._resolution_registry.register(dependent, instance)
         return ty.cast(T, instance)
 
     @ty.overload
@@ -861,15 +843,14 @@ class DependencyGraph:
                 old_node = self._nodes[resolved_type]
                 self.remove_node(old_node)
 
-        with self._lock:
-            if inspect.isgeneratorfunction(factory_or_class):
-                func_gen = contextmanager(factory_or_class)
-                node = DependentNode[T].from_node(func_gen, config=node_config)
-            elif inspect.isasyncgenfunction(factory_or_class):
-                func_gen = asynccontextmanager(factory_or_class)
-                node = DependentNode[T].from_node(func_gen, config=node_config)
-            else:
-                node = DependentNode[T].from_node(factory_or_class, config=node_config)
+        if inspect.isgeneratorfunction(factory_or_class):
+            func_gen = contextmanager(factory_or_class)
+            node = DependentNode[T].from_node(func_gen, config=node_config)
+        elif inspect.isasyncgenfunction(factory_or_class):
+            func_gen = asynccontextmanager(factory_or_class)
+            node = DependentNode[T].from_node(func_gen, config=node_config)
+        else:
+            node = DependentNode[T].from_node(factory_or_class, config=node_config)
 
         self.register_node(node)
         return factory_or_class

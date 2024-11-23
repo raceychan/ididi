@@ -76,7 +76,7 @@ class TypeRegistry(BaseRegistry):
 
 
 class ResolutionRegistry(BaseRegistry):
-    __slots__ = ("_mappings",)
+    __slots__ = "_mappings"
 
     def __init__(self):
         self._mappings: ResolvedInstances[ty.Any] = {}
