@@ -56,3 +56,5 @@ def test_resolve_instances(dg: DependencyGraph, dependents: list[type]):
 0.010367 seoncds to statically resolve 122 classes
 0.001249 seoncds to resolve 122 instances
 """
+
+
