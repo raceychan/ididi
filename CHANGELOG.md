@@ -278,3 +278,8 @@ when a dependency with `reuse=False` has a dependent with `reuse=True`, ididi wo
 ididi.errors.ReusabilityConflictError: Transient dependency `Database` with reuse dependents
 make sure each of AuthService -> Repository is configured as `reuse=False`
 ```
+
+## version 1.0.9
+
+- remove `import typing as ty`, `import typing_extensions as tyex` to reduce global lookup
+- fix a potential bug where when resolve dependent return None or False it could be re-resolved

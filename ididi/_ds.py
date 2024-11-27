@@ -1,6 +1,6 @@
-import typing as ty
 from collections import defaultdict
 from types import MappingProxyType
+from typing import Any, Callable, Union
 
 from ._type_resolve import get_bases
 from .node import DependentNode
@@ -29,9 +29,9 @@ TypeMappings = dict[type[T], list[type[T]]]
 
 
 class BaseRegistry:
-    """Base registry class with common functionality."""
+    """Base registry class with common functionali"""
 
-    _mappings: dict[type, ty.Any]
+    _mappings: dict[type, Any]
 
     def __len__(self) -> int:
         return len(self._mappings)
@@ -47,7 +47,7 @@ class TypeRegistry(BaseRegistry):
     __slots__ = ("_mappings",)
 
     def __init__(self):
-        self._mappings: TypeMappings[ty.Any] = defaultdict(list)
+        self._mappings: TypeMappings[Any] = defaultdict(list)
 
     def __getitem__(self, dependent_type: type[T]) -> list[type[T]]:
         return self._mappings[dependent_type].copy()
@@ -68,7 +68,7 @@ class TypeRegistry(BaseRegistry):
 
     def get(
         self,
-        dependent_type: ty.Union[type[T], ty.Callable[..., T]],
+        dependent_type: Union[type[T], Callable[..., T]],
         /,
         default: Maybe[list[type[T]]] = MISSING,
     ) -> Maybe[list[type[T]]]:
@@ -79,9 +79,9 @@ class ResolutionRegistry(BaseRegistry):
     __slots__ = "_mappings"
 
     def __init__(self):
-        self._mappings: ResolvedInstances[ty.Any] = {}
+        self._mappings: ResolvedInstances[Any] = {}
 
-    def __getitem__(self, dependent_type: ty.Union[type[T], ty.Callable[..., T]]) -> T:
+    def __getitem__(self, dependent_type: Union[type[T], Callable[..., T]]) -> T:
         return self._mappings[dependent_type]
 
     def remove(self, dependent_type: type) -> None:
@@ -91,7 +91,7 @@ class ResolutionRegistry(BaseRegistry):
         self._mappings.update(other._mappings)
 
     def register(
-        self, dependent_type: ty.Union[type[T], ty.Callable[..., T]], instance: T
+        self, dependent_type: Union[type[T], Callable[..., T]], instance: T
     ) -> None:
         if isinstance(dependent_type, type):
             instance_type: type[T] = type(instance)
@@ -103,7 +103,7 @@ class ResolutionRegistry(BaseRegistry):
 
     def get(
         self,
-        dependent_type: ty.Union[type[T], ty.Callable[..., T]],
+        dependent_type: Union[type[T], Callable[..., T]],
         /,
         default: Maybe[T] = MISSING,
     ) -> Maybe[T]:
@@ -111,14 +111,14 @@ class ResolutionRegistry(BaseRegistry):
 
 
 class Visitor:
-    def __init__(self, nodes: GraphNodes[ty.Any]):
+    def __init__(self, nodes: GraphNodes[Any]):
         self._nodes = nodes
 
     def _dfs(
         self,
-        start_types: ty.Union[list[type], type],
-        pre_visit: ty.Union[ty.Callable[[type], None], None] = None,
-        post_visit: ty.Union[ty.Callable[[type], None], None] = None,
+        start_types: Union[list[type], type],
+        pre_visit: Union[Callable[[type], None], None] = None,
+        post_visit: Union[Callable[[type], None], None] = None,
     ) -> None:
         """Generic DFS traversal with customizable visit callbacks.
 

@@ -1,5 +1,17 @@
 import inspect
-import typing as ty
+from typing import (
+    Any,
+    AsyncGenerator,
+    Awaitable,
+    Callable,
+    Coroutine,
+    Generator,
+    Protocol,
+    TypedDict,
+    Union,
+    overload,
+    runtime_checkable,
+)
 
 from .utils.typing_utils import P, R, T
 
@@ -7,13 +19,13 @@ EMPTY_SIGNATURE = inspect.Signature()
 INSPECT_EMPTY = inspect.Signature.empty
 
 
-IFactory = ty.Callable[P, R]
-IAnyFactory = ty.Callable[..., R]
-IAsyncFactory = ty.Callable[P, ty.Awaitable[R]]
-IAnyAsyncFactory = ty.Callable[..., ty.Awaitable[R]]
-IResourceFactory = ty.Callable[P, ty.Generator[R, None, None]]
-IAsyncResourceFactory = ty.Callable[P, ty.AsyncGenerator[R, None]]
-INode = ty.Union[
+IFactory = Callable[P, R]
+IAnyFactory = Callable[..., R]
+IAsyncFactory = Callable[P, Awaitable[R]]
+IAnyAsyncFactory = Callable[..., Awaitable[R]]
+IResourceFactory = Callable[P, Generator[R, None, None]]
+IAsyncResourceFactory = Callable[P, AsyncGenerator[R, None]]
+INode = Union[
     IFactory[P, R],
     IAnyFactory[R],
     IAsyncFactory[P, R],
@@ -24,29 +36,29 @@ INode = ty.Union[
 ]
 
 
-class TDecor(ty.Protocol):
-    @ty.overload
+class TDecor(Protocol):
+    @overload
     def __call__(self, factory: type[T]) -> type[T]: ...
 
-    @ty.overload
+    @overload
     def __call__(self, factory: IResourceFactory[P, T]) -> IResourceFactory[P, T]: ...
 
-    @ty.overload
+    @overload
     def __call__(
         self, factory: IAsyncResourceFactory[P, T]
     ) -> IAsyncResourceFactory[P, T]: ...
 
-    @ty.overload
+    @overload
     def __call__(self, factory: IAsyncFactory[P, T]) -> IAsyncFactory[P, T]: ...
 
-    @ty.overload
+    @overload
     def __call__(self, factory: IFactory[P, T]) -> IFactory[P, T]: ...
 
-    @ty.overload
+    @overload
     def __call__(self, factory: INode[P, T]) -> INode[P, T]: ...
 
 
-class INodeConfig(ty.TypedDict, total=False):
+class INodeConfig(TypedDict, total=False):
     """
     reuse: bool
     ---
@@ -80,11 +92,11 @@ class GraphConfig:
         self.static_resolve = static_resolve
 
 
-@ty.runtime_checkable
-class Closable(ty.Protocol):
+@runtime_checkable
+class Closable(Protocol):
     def close(self) -> None: ...
 
 
-@ty.runtime_checkable
-class AsyncClosable(ty.Protocol):
-    async def close(self) -> ty.Coroutine[ty.Any, ty.Any, None]: ...
+@runtime_checkable
+class AsyncClosable(Protocol):
+    async def close(self) -> Coroutine[Any, Any, None]: ...

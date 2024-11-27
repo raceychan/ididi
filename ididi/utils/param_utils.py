@@ -1,6 +1,6 @@
-import typing as ty
+from typing import Callable, Literal, Union
 
-import typing_extensions as tyex
+from typing_extensions import TypeGuard
 
 from .typing_utils import T
 
@@ -16,20 +16,20 @@ class _Missed:
     def __repr__(self) -> str:
         return "MISSING"
 
-    def __bool__(self) -> ty.Literal[False]:
+    def __bool__(self) -> Literal[False]:
         return False
 
 
 MISSING = _Missed()
 
 
-Maybe = ty.Union[T, _Missed]
+Maybe = Union[T, _Missed]
 """
 Nullable[int] == int | NULL
 """
 
 
-def is_provided(value: Maybe[T]) -> tyex.TypeGuard[T]:
+def is_provided(value: Maybe[T]) -> TypeGuard[T]:
     """
     Check if the value is not MISSING.
     """
@@ -38,7 +38,7 @@ def is_provided(value: Maybe[T]) -> tyex.TypeGuard[T]:
 
 def use_var(
     obj_type: type[T],
-) -> tuple[ty.Callable[[], Maybe[T]], ty.Callable[[T], None]]:
+) -> tuple[Callable[[], Maybe[T]], Callable[[T], None]]:
     instance: Maybe[T] = MISSING
 
     def getter() -> Maybe[T]:

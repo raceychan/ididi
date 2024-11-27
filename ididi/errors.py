@@ -1,4 +1,4 @@
-import typing as ty
+from typing import Any, Callable, ForwardRef, Hashable, TypeVar, Union
 
 
 class IDIDIError(Exception):
@@ -36,7 +36,7 @@ class NodeResolveError(IDIDIError):
 
 
 class AsyncResourceInSyncError(NodeResolveError):
-    def __init__(self, factory: ty.Callable[..., ty.Any]):
+    def __init__(self, factory: Callable[..., Any]):
         self.factory = factory
         super().__init__(
             f"Requiring async resource {factory} in a sync scope is not supported"
@@ -53,7 +53,7 @@ class PositionalOverrideError(NodeResolveError):
     Raised when a positional override is used.
     """
 
-    def __init__(self, args: tuple[ty.Any, ...]):
+    def __init__(self, args: tuple[Any, ...]):
         super().__init__(
             f"Positional overrides {args} are not supported, use keyword arguments instead"
         )
@@ -82,7 +82,7 @@ class UnsolvableDependencyError(UnsolvableNodeError):
         self,
         *,
         dep_name: str,
-        factory: ty.Union[ty.Callable[..., ty.Any], type],
+        factory: Union[Callable[..., Any], type],
         required_type: type,
     ):
         self.message = f"Unable to resolve dependency for parameter: {dep_name} in {factory}, value of {required_type} must be provided"
@@ -122,7 +122,7 @@ class ForwardReferenceNotFoundError(UnsolvableParameterError):
     Raised when a forward reference can't be found in the global namespace.
     """
 
-    def __init__(self, forward_ref: ty.ForwardRef):
+    def __init__(self, forward_ref: ForwardRef):
         msg = f"Unable to resolve forward reference: {forward_ref}, make sure it has been defined in the global namespace"
         super().__init__(msg)
 
@@ -145,7 +145,7 @@ class MissingReturnTypeError(UnsolvableParameterError):
     Thus can't be determined what it is trying to override
     """
 
-    def __init__(self, factory: ty.Callable[..., ty.Any]):
+    def __init__(self, factory: Callable[..., Any]):
         self.factory = factory
         msg = f"Factory {factory} must have a return type"
         super().__init__(msg)
@@ -156,7 +156,7 @@ class GenericDependencyNotSupportedError(NodeError):
     Raised when attempting to use a generic type that is not yet supported.
     """
 
-    def __init__(self, generic_type: ty.Union[type, ty.TypeVar]):
+    def __init__(self, generic_type: Union[type, TypeVar]):
         super().__init__(
             f"Using generic a type as a dependency is not yet supported: {generic_type}"
         )
@@ -170,7 +170,7 @@ class GraphError(IDIDIError):
 
 
 class OutOfScopeError(GraphError):
-    def __init__(self, name: ty.Hashable = ""):
+    def __init__(self, name: Hashable = ""):
         if name:
             msg = f"scope with {name=} not found in current context"
         else:
@@ -219,7 +219,7 @@ class TopLevelBulitinTypeError(GraphResolveError):
     >>> dag.resolve(int)
     """
 
-    def __init__(self, dependency_type: ty.Union[type, ty.Callable[..., ty.Any]]):
+    def __init__(self, dependency_type: Union[type, Callable[..., Any]]):
         super().__init__(
             f"Using builtin type {dependency_type} as a top level dependency is not supported"
         )

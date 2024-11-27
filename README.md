@@ -85,6 +85,8 @@ assert await main(sql="select money from bank")
 > [!NOTE]
 > **`DependencyGraph.node` accepts a wide arrange of types, such as dependent class, sync/async facotry, sync/async resource factory, with typing support.**
 
+
+
 ### Using Scope to manage resources
 
 - **Infinite nested scope is supported.**
@@ -319,6 +321,14 @@ def write_notification(scope: SyncScope, email: str, message=""):
     # To search parent scope:
     parent_scope = scope.get_scope(name)
 ```
+
+### Resolve Order
+
+`DependencyGraph.resolve`, rsolves dpendent with this order:
+
+1. override
+2. default value
+3. factory
 
 ### Usage of factory
 

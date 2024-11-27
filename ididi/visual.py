@@ -1,10 +1,10 @@
-import typing as ty
+from typing import Union
 
-from .utils.typing_utils import T
 from graphviz import Digraph
 
 from .graph import DependencyGraph
 from .node import DependentNode as DependentNode
+from .utils.typing_utils import T
 
 
 class Visualizer:
@@ -12,18 +12,18 @@ class Visualizer:
         self,
         graph: DependencyGraph,
         dot: "Digraph | None" = None,
-        graph_attrs: ty.Union[dict[str, str], None] = None,
+        graph_attrs: Union[dict[str, str], None] = None,
     ):
         self._dg = graph
         self._dot = dot
         self._graph_attrs = graph_attrs
 
     @property
-    def dot(self) -> ty.Union["Digraph", None]:
+    def dot(self) -> Union["Digraph", None]:
         return self._dot
 
     @property
-    def view(self) -> ty.Union[Digraph, None]:
+    def view(self) -> Union[Digraph, None]:
         return self.make_graph().dot
 
     def make_graph(
