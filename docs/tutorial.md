@@ -50,11 +50,11 @@ from ididi import DependencyGraph
 app = FastAPI()
 dg = DependencyGraph()
 
-def auth_service_factory(db: DataBase) -> AuthService:
+def auth_service_factory() -> AuthService:
     async with dg.scope() as scope
         yield dg.resolve(AuthService)
 
-Service = ty.Annotated[AuthService, Depends(dg.factory(auth_service_factory))]
+Service = ty.Annotated[AuthService, Depends(auth_service_factory)]
 
 @app.get("/")
 def get_service(service: Service):

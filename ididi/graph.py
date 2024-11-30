@@ -46,6 +46,7 @@ from ._type_resolve import (
 )
 from .errors import (
     AsyncResourceInSyncError,
+    BuiltinTypeFactoryError,
     CircularDependencyDetectedError,
     MergeWithScopeStartedError,
     MissingImplementationError,
@@ -486,10 +487,7 @@ class DependencyGraph:
 
         current_path: list[type] = []
 
-        def dfs(
-            dependent_factory: Union[type, Callable[P, T]],
-            node_config: Maybe[NodeConfig],
-        ) -> DependentNode[T]:
+        def dfs(dependent_factory: Union[type, Callable[P, T]]) -> DependentNode[T]:
             if is_function(dependent_factory):
                 sig = get_typed_signature(dependent_factory)
                 dependent: type = sig.return_annotation
@@ -506,8 +504,14 @@ class DependencyGraph:
 
             current_path.append(dependent)
 
+            # TODO: we might let node return what params should be resolved
+            # param with default, or set to be ignored should not be checked here at all
+
             for param in node.signature.actualized_params():
                 param_type = param.param_type
+                ignore_params = node.config.ignore
+                if param.name in ignore_params or param_type in ignore_params:
+                    continue
                 if param_type in current_path:
                     i = current_path.index(param_type)
                     cycle = current_path[i:] + [param_type]
@@ -522,6 +526,7 @@ class DependencyGraph:
                 if is_provided(param.default):
                     continue
                 if param.unresolvable:
+                    # NOTE: node.config and note_config might not be the same
                     if node.config.partial:
                         continue
                     raise UnsolvableDependencyError(
@@ -531,7 +536,7 @@ class DependencyGraph:
                     )
 
                 try:
-                    dep_node = dfs(param_type, node_config)
+                    dep_node = dfs(param_type)
                 except UnsolvableNodeError as une:
                     une.add_context(
                         node.dependent_type, param.name, param.param_annotation
@@ -546,7 +551,7 @@ class DependencyGraph:
             current_path.pop()
             return node
 
-        return dfs(dependent, node_config)
+        return dfs(dependent)
 
     @overload
     def use_scope(
@@ -765,6 +770,15 @@ class DependencyGraph:
     def entry(
         self, func: Union[IFactory[P, T], IAsyncFactory[P, T]]
     ) -> Union[IAnyFactory[T], IAnyAsyncFactory[T]]:
+        """
+        TODO:
+        1. add more generic vars to func
+        checkout https://github.com/dbrattli/Expression/blob/main/expression/core/pipe.py
+        TypeVarTuple
+        Unpack[TypeVarTuple]
+        2. allow ignore params, to support hook param like fastapi.Query
+        """
+
         def func_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
             with self.scope() as scope:
                 r = self.resolve(dep, scope, *args, **kwargs)
@@ -842,8 +856,14 @@ class DependencyGraph:
 
         node_config = NodeConfig(**config)
 
+        if is_unresolved_type(factory_or_class):
+            raise TopLevelBulitinTypeError(factory_or_class)
+
         sig = get_typed_signature(factory_or_class)
         return_type: Union[type[T], ForwardRef] = sig.return_annotation
+
+        if is_unresolved_type(return_type):
+            raise BuiltinTypeFactoryError(factory_or_class, return_type)
 
         if isinstance(return_type, ForwardRef):
             return_type = resolve_forwardref(factory_or_class, return_type)

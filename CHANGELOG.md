@@ -283,3 +283,11 @@ make sure each of AuthService -> Repository is configured as `reuse=False`
 
 - remove `import typing as ty`, `import typing_extensions as tyex` to reduce global lookup
 - fix a potential bug where when resolve dependent return None or False it could be re-resolved
+
+TODO: add a ignore part to ignore
+
+```py
+@dg.entry(ignore=[Query])
+async def create_user(q: Query(max_length=5)):
+    ...
+```

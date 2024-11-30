@@ -662,6 +662,7 @@ def test_graph_static_resolved():
     c = dg.resolve(ComplianceChecker)
     dg2.static_resolve(DatabaseConfig)
     d = dg2.resolve(DatabaseConfig)
+    repr(dg.nodes[ComplianceChecker].config)
 
     dg.merge(dg2)
     assert ComplianceChecker in dg and DatabaseConfig in dg

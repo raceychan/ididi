@@ -67,22 +67,42 @@ class INodeConfig(TypedDict, total=False):
     lazy: bool
     ---
     whether the resolved instance should be a `lazy` dependent, meaning that its dependencies would not be resolved untill the attribute is accessed.
+
+    partial
+    ---
+    whether to ignore bulitin types when statically resolve
+
+    ignore
+    ---
+    types or names to ignore
     """
 
     reuse: bool
     lazy: bool
     partial: bool
+    ignore: tuple[Union[str, type], ...]
 
 
 class NodeConfig:
-    __slots__ = ("reuse", "lazy", "partial")
+    __slots__ = ("reuse", "lazy", "partial", "ignore")
+
+    ignore: tuple[Union[str, type], ...]
 
     def __init__(
-        self, *, reuse: bool = True, lazy: bool = False, partial: bool = False
+        self,
+        *,
+        reuse: bool = True,
+        lazy: bool = False,
+        partial: bool = False,
+        ignore: Union[tuple[Union[str, type], ...], None] = None,
     ):
         self.reuse = reuse
         self.lazy = lazy
         self.partial = partial
+        self.ignore = ignore or ()
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.reuse=}, {self.lazy=}, {self.partial=}, {self.ignore=})"
 
 
 class GraphConfig:

@@ -162,6 +162,13 @@ class GenericDependencyNotSupportedError(NodeError):
         )
 
 
+class BuiltinTypeFactoryError(NodeError):
+    def __init__(self, factory: Callable[..., Any], return_type: Any):
+        super().__init__(
+            f"factory {factory} is returning a unresolvable type {return_type}, were you trying to use `entry`?"
+        )
+
+
 # =============== Graph Errors ===============
 class GraphError(IDIDIError):
     """

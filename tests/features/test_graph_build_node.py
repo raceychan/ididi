@@ -1,6 +1,5 @@
 import pytest
 
-from ididi.errors import UnsolvableDependencyError
 from ididi.graph import DependencyGraph
 
 

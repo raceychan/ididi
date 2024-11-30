@@ -136,7 +136,7 @@ async def service_factory():
         yield service
 
 @app.get("users")
-async def get_user(service: Service = Depends(dg.factory(service_factory)))
+async def get_user(service: Service = Depends(service_factory))
     await service.create_user(...)
 ```
 
