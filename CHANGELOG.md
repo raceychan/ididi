@@ -282,12 +282,31 @@ make sure each of AuthService -> Repository is configured as `reuse=False`
 ## version 1.0.9
 
 - remove `import typing as ty`, `import typing_extensions as tyex` to reduce global lookup
-- fix a potential bug where when resolve dependent return None or False it could be re-resolved
 
-TODO: add a ignore part to ignore
+- add an `ignore` field to node config, where these ignored param names or types will be ignored at statical resolve phase
 
 ```py
-@dg.entry(ignore=[Query])
-async def create_user(q: Query(max_length=5)):
+@dg.node(ignore=("name", int))
+class User:
+    name: str
+    age: int
+
+dg = DependencyGraph()
+dg.node(ignore=("name", int))(User)
+with pytest.raises(TypeError):
+    dg.resolve(User)
+
+n = dg.resolve(User, name="test", age=3)
+assert n.name == "test"
+assert n.age == 3
+```
+
+- fix a potential bug where when resolve dependent return None or False it could be re-resolved
+
+- rasie error when a factory returns a builtin type
+
+```py
+@dg.node
+def create_user() -> str:
     ...
 ```

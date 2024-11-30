@@ -625,6 +625,7 @@ class DependencyGraph:
 
         node: DependentNode[T] = self.static_resolve(dependent)
 
+        ignore_params = node.config.ignore
         resolved_params: dict[str, Any] = overrides
 
         for param_name, dpram in node.signature:
@@ -632,6 +633,9 @@ class DependencyGraph:
                 continue
 
             param_type = dpram.param_type
+
+            if param_name in ignore_params or param_type in ignore_params:
+                continue
 
             if is_provided(dpram.default):
                 resolved_params[param_name] = dpram.default
