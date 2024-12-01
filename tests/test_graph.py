@@ -20,6 +20,7 @@ from ididi.graph import DependencyGraph
 
 T = ty.TypeVar("T")
 
+
 def test_import_graphviz_failure():
     with mock.patch.dict(sys.modules, {"graphviz": None}):
         # Remove cached ididi module

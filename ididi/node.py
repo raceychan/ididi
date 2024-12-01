@@ -77,7 +77,7 @@ class LazyDependent(Dependent[T]):
         self,
         *,
         dependent_type: type[T],
-        factory: Union[IAnyFactory[T], IAnyAsyncFactory[T]],
+        factory: Union[IFactory[P, T], IAsyncFactory[P, T]],
         signature: "DependentSignature[T]",
         resolver: Callable[[type[T]], T],
         cached_instance: Maybe[Union[T, Awaitable[T]]] = MISSING,
@@ -188,7 +188,7 @@ class DependentSignature(Generic[T]):
     def __getitem__(self, param_name: str) -> DependencyParam[Any]:
         return self.dprams[param_name]
 
-    def get_signature(self) -> inspect.Signature:
+    def generate_signature(self) -> inspect.Signature:
         return inspect.Signature(
             parameters=[p.param for p in self.dprams.values()],
             return_annotation=self.dependent,
@@ -196,7 +196,7 @@ class DependentSignature(Generic[T]):
 
     def bind_arguments(self, resolved_args: dict[str, Any]) -> inspect.BoundArguments:
         """Bind resolved arguments to the signature."""
-        sig = self.get_signature()
+        sig = self.generate_signature()
         bound_args = sig.bind_partial(**resolved_args)
         bound_args.apply_defaults()
         return bound_args
@@ -316,6 +316,10 @@ class DependentNode(Generic[T]):
     def dependent_type(self) -> type[T]:
         return self.dependent.dependent_type
 
+    def crate_dependent(self, params: dict[str, Any]) -> Union[T, Awaitable[T]]:
+        "Create dependent using its factory and prepare params according to its signature"
+        return self.factory(**self.signature.bind_arguments(params).arguments)
+
     def check_for_resolvability(self) -> None:
         if isinstance(self.factory, type):
             # no factory override
@@ -336,6 +340,7 @@ class DependentNode(Generic[T]):
         signature: inspect.Signature,
         config: NodeConfig,
     ) -> "DependentNode[T]":
+        # ignore config.ignore
         params = tuple(signature.parameters.values())
 
         if is_class_or_method(factory):

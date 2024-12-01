@@ -5,10 +5,12 @@ from functools import partial
 from types import MappingProxyType, TracebackType
 from typing import (
     Any,
-    AsyncContextManager,
     Callable,
+    AsyncContextManager,
+    AsyncGenerator,
     ContextManager,
     ForwardRef,
+    Generator,
     Generic,
     Hashable,
     Literal,
@@ -23,12 +25,13 @@ from typing import (
 from typing_extensions import Self, Unpack
 
 from ._ds import GraphNodes, GraphNodesView, ResolutionRegistry, TypeRegistry, Visitor
-from ._itypes import (
+from ._itypes import (  # IAsyncResourceFactory,; IResourceFactory,
     INSPECT_EMPTY,
     GraphConfig,
-    IAnyAsyncFactory,
     IAnyFactory,
     IAsyncFactory,
+    IEmptyAsyncFactory,
+    IEmptyFactory,
     IFactory,
     INode,
     INodeConfig,
@@ -38,10 +41,12 @@ from ._itypes import (
 from ._type_resolve import (
     get_typed_signature,
     is_async_context_manager,
+    is_class,
     is_context_manager,
     is_function,
     is_unresolved_type,
     resolve_annotation,
+    resolve_factory_return,
     resolve_forwardref,
 )
 from .errors import (
@@ -75,7 +80,7 @@ class AbstractScope(Generic[Stack]):
     def __repr__(self):
         return f"{self.__class__.__name__}(id={self._name})"
 
-    def cache_result(self, dependent: IAnyFactory[T], result: T) -> None:
+    def cache_result(self, dependent: IEmptyFactory[T], result: T) -> None:
         self.resolutions.register(dependent, result)
 
     def enter_context(self, context: ContextManager[T]) -> T:
@@ -126,13 +131,28 @@ class SyncScope(AbstractScope[ExitStack]):
 
     @overload
     def resolve(
+        self,
+        dependent: IFactory[P, Generator[T, None, None]],
+        /,
+        *args: P.args,
+        **overrides: P.kwargs,
+    ) -> T: ...
+
+    @overload
+    def resolve(
         self, dependent: IFactory[P, T], /, *args: P.args, **overrides: P.kwargs
     ) -> T: ...
 
     def resolve(
-        self, dependent: IFactory[P, T], /, *args: P.args, **overrides: P.kwargs
+        self,
+        dependent: IFactory[P, Union[T, Generator[T, None, None]]],
+        /,
+        *args: P.args,
+        **overrides: P.kwargs,
     ) -> T:
-        return self._graph.resolve(dependent, self, *args, **overrides)
+        # TODO: fix typing of _graph.resolve, get rid of cast
+        r = self._graph.resolve(dependent, self, *args, **overrides)
+        return cast(T, r)
 
 
 class AsyncScope(AbstractScope[AsyncExitStack]):
@@ -163,17 +183,31 @@ class AsyncScope(AbstractScope[AsyncExitStack]):
         await self._stack.__aexit__(exc_type, exc_value, traceback)
 
     @overload
-    async def resolve(self, dependent: Callable[..., T], /) -> T: ...
+    async def resolve(self, dependent: IAnyFactory[T], /) -> T: ...
 
     @overload
     async def resolve(
-        self, dependent: Callable[P, T], /, *args: P.args, **overrides: P.kwargs
+        self,
+        dependent: IFactory[P, AsyncGenerator[T, None]],
+        /,
+        *args: P.args,
+        **overrides: P.kwargs,
+    ) -> T: ...
+
+    @overload
+    async def resolve(
+        self, dependent: IFactory[P, T], /, *args: P.args, **overrides: P.kwargs
     ) -> T: ...
 
     async def resolve(
-        self, dependent: Callable[P, T], /, *args: P.args, **overrides: P.kwargs
+        self,
+        dependent: IFactory[P, Union[T, AsyncGenerator[T, None]]],
+        /,
+        *args: P.args,
+        **overrides: P.kwargs,
     ) -> T:
-        return await self._graph.aresolve(dependent, self, *args, **overrides)
+        r = await self._graph.aresolve(dependent, self, *args, **overrides)
+        return cast(T, r)
 
     async def enter_async_context(self, context: AsyncContextManager[T]) -> T:
         return await self._stack.enter_async_context(context)
@@ -473,8 +507,8 @@ class DependencyGraph:
 
     def static_resolve(
         self,
-        dependent: Union[type, Callable[P, T]],
-        node_config: Maybe[NodeConfig] = MISSING,
+        dependent: IFactory[P, T],
+        resolve_node_config: Maybe[NodeConfig] = MISSING,
     ) -> DependentNode[T]:
         """
         Resolve a dependency without building its instance.
@@ -487,29 +521,30 @@ class DependencyGraph:
 
         current_path: list[type] = []
 
-        def dfs(dependent_factory: Union[type, Callable[P, T]]) -> DependentNode[T]:
-            if is_function(dependent_factory):
-                sig = get_typed_signature(dependent_factory)
-                dependent: type = sig.return_annotation
-                if dependent not in self.nodes:
-                    # create node and register
-                    self.node(dependent_factory)
-            else:
+        def dfs(dependent_factory: Union[type, IFactory[P, T]]) -> DependentNode[T]:
+            if is_class(dependent_factory):
                 dependent = cast(type, dependent_factory)
+            else:
+                sig = get_typed_signature(dependent_factory)
+                dependent = resolve_factory_return(sig.return_annotation)
+                if (dependent) not in self.nodes:
+                    self.node(dependent_factory)
+
+            current_path.append(dependent)
 
             if dependent in self._resolved_nodes:
                 return self._resolved_nodes[dependent]
 
-            node = self._resolve_concrete_node(dependent, node_config)
-
-            current_path.append(dependent)
+            node = self._resolve_concrete_node(dependent, resolve_node_config)
+            current_config = node.config
 
             # TODO: we might let node return what params should be resolved
             # param with default, or set to be ignored should not be checked here at all
+            ignore_params = current_config.ignore
+            is_partial = current_config.partial
 
             for param in node.signature.actualized_params():
                 param_type = param.param_type
-                ignore_params = node.config.ignore
                 if param.name in ignore_params or param_type in ignore_params:
                     continue
                 if param_type in current_path:
@@ -517,17 +552,18 @@ class DependencyGraph:
                     cycle = current_path[i:] + [param_type]
                     raise CircularDependencyDetectedError(cycle)
                 if sub_node := self._nodes.get(param_type):
-                    if sub_node.config.reuse:
+                    sub_config = sub_node.config
+                    if sub_config.reuse:
                         continue
-                    for t in current_path:
-                        if self._nodes[t].config.reuse:
+                    for n in current_path:
+                        parent_config = self._nodes[n].config
+                        if parent_config.reuse:
                             raise ReusabilityConflictError(current_path, param_type)
                     continue
                 if is_provided(param.default):
                     continue
                 if param.unresolvable:
-                    # NOTE: node.config and note_config might not be the same
-                    if node.config.partial:
+                    if is_partial:
                         continue
                     raise UnsolvableDependencyError(
                         dep_name=param.name,
@@ -584,7 +620,7 @@ class DependencyGraph:
     @overload
     def resolve(
         self,
-        dependent: IAnyFactory[T],
+        dependent: Callable[..., T],
         scope: Maybe[SyncScope] = MISSING,
         /,
     ) -> T: ...
@@ -592,7 +628,7 @@ class DependencyGraph:
     @overload
     def resolve(
         self,
-        dependent: Callable[P, T],
+        dependent: IFactory[P, T],
         scope: Maybe[SyncScope] = MISSING,
         /,
         *args: P.args,
@@ -601,7 +637,7 @@ class DependencyGraph:
 
     def resolve(
         self,
-        dependent: Callable[P, T],
+        dependent: IFactory[P, T],
         scope: Maybe[SyncScope] = MISSING,
         /,
         *args: P.args,
@@ -624,8 +660,9 @@ class DependencyGraph:
             return solution
 
         node: DependentNode[T] = self.static_resolve(dependent)
+        current_config = node.config
+        ignore_params = current_config.ignore
 
-        ignore_params = node.config.ignore
         resolved_params: dict[str, Any] = overrides
 
         for param_name, dpram in node.signature:
@@ -641,33 +678,32 @@ class DependencyGraph:
                 resolved_params[param_name] = dpram.default
                 continue
 
-            if node.config.lazy:
-                dep_node = self.static_resolve(param_type, node.config)
+            if current_config.lazy:
+                dep_node = self.static_resolve(param_type, current_config)
                 resolved_params[param_name] = self._create_lazy_dependent(dep_node)
                 continue
 
             resolved_params[param_name] = self.resolve(param_type, scope)
 
-        bound_args = node.signature.bind_arguments(resolved_params)
-        resolved = node.factory(**bound_args.arguments)
+        resolved = node.crate_dependent(resolved_params)
 
         if is_context_manager(resolved):
             if not scope:
                 raise ResourceOutsideScopeError(node.dependent_type)
             instance = scope.enter_context(resolved)
-            if node.config.reuse:
+            if current_config.reuse:
                 scope.cache_result(dependent, instance)
         elif is_async_context_manager(resolved):
             raise AsyncResourceInSyncError(node.factory)
         else:
-            if node.config.reuse:
+            if current_config.reuse:
                 self._resolution_registry.register(dependent, resolved)
             instance = resolved
         return cast(T, instance)
 
     async def aresolve(
         self,
-        dependent: Callable[P, T],
+        dependent: IFactory[P, T],
         scope: Maybe[AsyncScope] = MISSING,
         /,
         *args: P.args,
@@ -690,6 +726,8 @@ class DependencyGraph:
             return solution
 
         node: DependentNode[T] = self.static_resolve(dependent)
+        current_config = node.config
+        ignore_params = current_config.ignore
 
         resolved_params: dict[str, Any] = overrides
 
@@ -698,6 +736,8 @@ class DependencyGraph:
                 continue
 
             param_type = dpram.param_type
+            if param_name in ignore_params or param_type in ignore_params:
+                continue
 
             if is_provided(dpram.default):
                 resolved_params[param_name] = dpram.default
@@ -705,20 +745,19 @@ class DependencyGraph:
 
             resolved_params[param_name] = await self.aresolve(param_type, scope)
 
-        bound_args = node.signature.bind_arguments(resolved_params)
-        resolved = node.factory(**bound_args.arguments)
+        resolved = node.crate_dependent(resolved_params)
 
         if is_async_context_manager(resolved):
             if not scope:
                 raise ResourceOutsideScopeError(node.dependent_type)
             instance = await scope.enter_async_context(resolved)
-            if node.config.reuse:
+            if current_config.reuse:
                 scope.cache_result(dependent, instance)
         elif is_context_manager(resolved):
             if not scope:
                 raise ResourceOutsideScopeError(node.dependent_type)
             instance = scope.enter_context(resolved)
-            if node.config.reuse:
+            if current_config.reuse:
                 scope.cache_result(dependent, instance)
         else:
             if inspect.isawaitable(resolved):
@@ -726,23 +765,26 @@ class DependencyGraph:
             else:
                 instance = resolved
 
-            if node.config.reuse:
+            if current_config.reuse:
                 self._resolution_registry.register(dependent, instance)
         return cast(T, instance)
 
     @overload
     def factory(
-        self, dependent: IAnyFactory[T], *, use_async: Literal[True] = True
-    ) -> IAnyAsyncFactory[T]: ...
+        self, dependent: IFactory[P, T], *, use_async: Literal[True] = True
+    ) -> IEmptyAsyncFactory[T]: ...
 
     @overload
     def factory(
-        self, dependent: IAnyFactory[T], *, use_async: Literal[False] = False
-    ) -> IAnyFactory[T]: ...
+        self, dependent: IFactory[P, T], *, use_async: Literal[False] = False
+    ) -> IEmptyFactory[T]: ...
 
     def factory(
-        self, dependent: IAnyFactory[T], *, use_async: bool = True
-    ) -> Union[IAnyFactory[T], IAnyAsyncFactory[T]]:
+        self,
+        dependent: Union[IFactory[P, T], IAsyncFactory[P, T]],
+        *,
+        use_async: bool = True,
+    ) -> Union[IEmptyFactory[T], IEmptyAsyncFactory[T]]:
         """
         A helper function that creates a resolver(a factory) for a given type.
 
@@ -757,23 +799,25 @@ class DependencyGraph:
 
         def resolver() -> T:
             with self.scope() as scope:
-                return self.resolve(dependent, scope)
+                r = self.resolve(cast(Callable[..., T], dependent), scope)
+                return r
 
         async def aresolver() -> T:
             async with self.scope() as scope:
-                return await self.aresolve(dependent, scope)
+                r = await self.aresolve(cast(Callable[..., T], dependent), scope)
+                return r
 
         return aresolver if use_async else resolver
 
     @overload
-    def entry(self, func: IAsyncFactory[P, T]) -> IAnyAsyncFactory[T]: ...
+    def entry(self, func: IAsyncFactory[P, T]) -> IEmptyAsyncFactory[T]: ...
 
     @overload
-    def entry(self, func: IFactory[P, T]) -> IAnyFactory[T]: ...
+    def entry(self, func: IFactory[P, T]) -> IEmptyFactory[T]: ...
 
     def entry(
         self, func: Union[IFactory[P, T], IAsyncFactory[P, T]]
-    ) -> Union[IAnyFactory[T], IAnyAsyncFactory[T]]:
+    ) -> Union[IEmptyFactory[T], IEmptyAsyncFactory[T]]:
         """
         TODO:
         1. add more generic vars to func
@@ -791,7 +835,7 @@ class DependencyGraph:
         async def async_func_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
             async with self.scope() as scope:
                 r = await self.aresolve(dep, scope, *args, **kwargs)
-                return r
+                return cast(T, r)
 
         entry_type = type(f"entry_node_{func.__name__}", (object,), {})
         dep = cast(type[T], entry_type)

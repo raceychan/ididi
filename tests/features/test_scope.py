@@ -409,4 +409,4 @@ async def test_db_exec():
         return res
 
     sql = "select moeny from bank"
-    assert await main(sql=sql) == sql 
+    assert await main(sql=sql) == sql

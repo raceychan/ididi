@@ -18,13 +18,16 @@ from .utils.typing_utils import P, R, T
 EMPTY_SIGNATURE = inspect.Signature()
 INSPECT_EMPTY = inspect.Signature.empty
 
+IEmptyFactory = Callable[[], R]
+IEmptyAsyncFactory = Callable[[], Awaitable[R]]
 
 IFactory = Callable[P, R]
 IAnyFactory = Callable[..., R]
 IAsyncFactory = Callable[P, Awaitable[R]]
 IAnyAsyncFactory = Callable[..., Awaitable[R]]
-IResourceFactory = Callable[P, Generator[R, None, None]]
+IResourceFactory = IFactory[P, Generator[R, None, None]]
 IAsyncResourceFactory = Callable[P, AsyncGenerator[R, None]]
+
 INode = Union[
     IFactory[P, R],
     IAnyFactory[R],

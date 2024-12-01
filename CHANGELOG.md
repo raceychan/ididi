@@ -283,7 +283,7 @@ make sure each of AuthService -> Repository is configured as `reuse=False`
 
 - remove `import typing as ty`, `import typing_extensions as tyex` to reduce global lookup
 
-- add an `ignore` field to node config, where these ignored param names or types will be ignored at statical resolve phase
+- add an `ignore` field to node config, where these ignored param names or types will be ignored at statical resolve / resolve phase
 
 ```py
 @dg.node(ignore=("name", int))
@@ -310,3 +310,20 @@ assert n.age == 3
 def create_user() -> str:
     ...
 ```
+
+## version 1.0.10
+
+- fix a bug where error would happen when user use `dg.resolve` to resolve a resource factor, example:
+
+```py
+def user_factory() -> ty.Generator[User, None, None]:
+    u = User(1, "test")
+    yield u
+dg.static_resolve(user_factory)
+with dg.scope() as scope:
+    # this would fail before 1.0.10
+    u = scope.resolve(user_factory)
+```
+
+improvement
+improve typing support for scope.resolve, now it recognize resource better.
