@@ -34,8 +34,10 @@ async def test_graph_resolve_complex_factory():
             self.age = age
             self.address = address
 
-    @dg.node(ignore=("address",))
-    async def user_factory(address: str) -> ty.AsyncGenerator[User, None]:
+    @dg.node(ignore=("address", float))
+    async def user_factory(
+        address: str, name: float = 3.4
+    ) -> ty.AsyncGenerator[User, None]:
         u = User(1, address)
         yield u
 

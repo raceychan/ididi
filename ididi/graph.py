@@ -5,9 +5,9 @@ from functools import partial
 from types import MappingProxyType, TracebackType
 from typing import (
     Any,
-    Callable,
     AsyncContextManager,
     AsyncGenerator,
+    Callable,
     ContextManager,
     ForwardRef,
     Generator,
