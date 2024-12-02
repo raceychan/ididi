@@ -28,15 +28,19 @@ IAnyAsyncFactory = Callable[..., Awaitable[R]]
 IResourceFactory = IFactory[P, Generator[R, None, None]]
 IAsyncResourceFactory = Callable[P, AsyncGenerator[R, None]]
 
-INode = Union[
+INodeAnyFactory = Union[
+    Callable[..., R],
+    Callable[..., Awaitable[R]],
+    Callable[..., Generator[R, None, None]],
+    Callable[..., AsyncGenerator[R, None]],
+]
+INodeFactory = Union[
     IFactory[P, R],
-    IAnyFactory[R],
     IAsyncFactory[P, R],
-    IAnyAsyncFactory[R],
     IResourceFactory[P, R],
     IAsyncResourceFactory[P, R],
-    type[R],
 ]
+INode = Union[INodeFactory[P, R], type[R]]
 
 
 class TDecor(Protocol):
@@ -90,6 +94,7 @@ class NodeConfig:
     __slots__ = ("reuse", "lazy", "partial", "ignore")
 
     ignore: tuple[Union[str, type], ...]
+    # should be a set? but tuple is more performant with small num of ignores
 
     def __init__(
         self,

@@ -1,5 +1,5 @@
 [project]
-authors = [{name = "raceychan", email = "raceychan@gmail.com"}]
+authors = [{ name = "raceychan", email = "raceychan@gmail.com" }]
 description = "A dependency injection library for Python, Optimized for serverless applications"
 dynamic = ["version"]
 license = "MIT"
@@ -44,6 +44,7 @@ markers = [
   "benchmark: marks tests as benchmark tests (deselect with '-m \"not benchmark\"')",
 ]
 testpaths = ["tests"]
+asyncio_mode = "auto"
 
 [tool.coverage.run]
 omit = [
@@ -62,10 +63,10 @@ channels = ["conda-forge"]
 platforms = ["linux-64"]
 
 [tool.pixi.environments]
-default = {solve-group = "default"}
-dev = {features = ["dev"], solve-group = "default"}
-publish = {features = ["publish"], solve-group = "default"}
-test = {features = ["test"], solve-group = "default"}
+default = { solve-group = "default" }
+dev = { features = ["dev"], solve-group = "default" }
+publish = { features = ["publish"], solve-group = "default" }
+test = { features = ["test"], solve-group = "default" }
 
 [tool.pixi.dependencies]
 python = "3.9.0"
@@ -87,12 +88,12 @@ twine = ">=5.1.1,<6"
 
 [tool.pixi.feature.publish.tasks]
 # Build into a wheel using hatch
-build = {cmd = "hatch build", inputs = ["didi/*"], outputs = ["dist/*"]}
+build = { cmd = "hatch build", inputs = ["didi/*"], outputs = ["dist/*"] }
 # Upload to custom GCP registry using twine
-check = {cmd = "twine check"}
-publish = {cmd = "twine upload --skip-existing dist/*", depends-on = [
+check = { cmd = "twine check" }
+publish = { cmd = "twine upload --skip-existing dist/*", depends-on = [
   "build",
-]}
-test-publish = {cmd = "twine upload --repository testpypi --skip-existing dist/"}
+] }
+test-publish = { cmd = "twine upload --repository testpypi --skip-existing dist/" }
 
-patch = {cmd = "hatch version patch"}
+patch = { cmd = "hatch version patch" }

@@ -1,15 +1,15 @@
 import inspect
-from contextlib import AsyncExitStack, ExitStack, asynccontextmanager, contextmanager
+from contextlib import AsyncExitStack, ExitStack
 from contextvars import ContextVar, Token
 from functools import partial
 from types import MappingProxyType, TracebackType
 from typing import (
+    Annotated,
     Any,
     AsyncContextManager,
     AsyncGenerator,
     Callable,
     ContextManager,
-    ForwardRef,
     Generator,
     Generic,
     Hashable,
@@ -25,7 +25,7 @@ from typing import (
 from typing_extensions import Self, Unpack
 
 from ._ds import GraphNodes, GraphNodesView, ResolutionRegistry, TypeRegistry, Visitor
-from ._itypes import (  # IAsyncResourceFactory,; IResourceFactory,
+from ._itypes import (
     INSPECT_EMPTY,
     GraphConfig,
     IAnyFactory,
@@ -47,11 +47,9 @@ from ._type_resolve import (
     is_unresolved_type,
     resolve_annotation,
     resolve_factory_return,
-    resolve_forwardref,
 )
 from .errors import (
     AsyncResourceInSyncError,
-    BuiltinTypeFactoryError,
     CircularDependencyDetectedError,
     MergeWithScopeStartedError,
     MissingImplementationError,
@@ -283,7 +281,7 @@ class DependencyGraph:
         "_visitor",
     )
 
-    def __init__(self, static_resolve: bool = True):
+    def __init__(self, *, static_resolve: bool = True):
         self._config = GraphConfig(static_resolve=static_resolve)
         self._nodes: GraphNodes[Any] = {}
         self._resolved_nodes: GraphNodes[Any] = {}
@@ -314,18 +312,6 @@ class DependencyGraph:
             if node_type in self._resolved_nodes:
                 continue
             self.static_resolve(node_type)
-
-    async def __aenter__(self) -> "DependencyGraph":
-        self.static_resolve_all()
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: Union[type, None],
-        exc_value: Any,
-        traceback: Union[TracebackType, None],
-    ) -> None:
-        await self.aclose()
 
     @property
     def nodes(self) -> GraphNodesView[Any]:
@@ -394,7 +380,7 @@ class DependencyGraph:
         """
         Remove a node from the graph and clean up all its references.
         """
-        dependent_type = node.dependent.dependent_type
+        dependent_type = node.dependent_type
 
         self._nodes.pop(dependent_type)
         self._type_registry.remove(dependent_type)
@@ -416,13 +402,6 @@ class DependencyGraph:
             self._type_registry.clear()
             self._resolved_nodes.clear()
             self._nodes.clear()
-
-    async def aclose(self) -> None:
-        """
-        Close any resources held by resolved instances.
-        Closes in reverse initialization order.
-        """
-        self.reset(clear_nodes=True)
 
     def _resolve_concrete_type(self, abstract_type: type) -> type:
         """
@@ -469,7 +448,7 @@ class DependencyGraph:
             self.static_resolve(dep_type)
             return self.resolve(dep_type)
 
-        return LazyDependent(
+        return LazyDependent[T](
             dependent_type=node.dependent_type,
             factory=node.factory,
             signature=node.signature,
@@ -492,7 +471,8 @@ class DependencyGraph:
         Automatically registers any unregistered dependencies.
         """
 
-        dep_type = node.dependent.dependent_type
+        dep_type = node.dependent_type
+
         dependent_type: type = get_origin(dep_type) or dep_type
 
         # Skip if registered
@@ -525,10 +505,17 @@ class DependencyGraph:
             if is_class(dependent_factory):
                 dependent = cast(type, dependent_factory)
             else:
-                sig = get_typed_signature(dependent_factory)
+                # TODO: add support for Annotated[factory, node]
+                # if isinstance(get_origin(dependent_factory), Annotated):
+                #     breakpoint()
+                sig = get_typed_signature(dependent_factory, check_return=True)
                 dependent = resolve_factory_return(sig.return_annotation)
+                # statically resolve a unnoded factory function
                 if (dependent) not in self.nodes:
-                    self.node(dependent_factory)
+                    node = DependentNode[T].from_factory(
+                        factory=dependent_factory, config=NodeConfig()
+                    )
+                    self.register_node(node)
 
             current_path.append(dependent)
 
@@ -538,14 +525,13 @@ class DependencyGraph:
             node = self._resolve_concrete_node(dependent, resolve_node_config)
             current_config = node.config
 
-            # TODO: we might let node return what params should be resolved
+            # TODO: we might let node filter what params should be resolved
             # param with default, or set to be ignored should not be checked here at all
-            ignore_params = current_config.ignore
             is_partial = current_config.partial
 
-            for param in node.signature.actualized_params():
+            for param in node.actualized_params():
                 param_type = param.param_type
-                if param.name in ignore_params or param_type in ignore_params:
+                if param_type is DependencyGraph:
                     continue
                 if param_type in current_path:
                     i = current_path.index(param_type)
@@ -668,16 +654,15 @@ class DependencyGraph:
         for param_name, dpram in node.signature:
             if param_name in resolved_params:
                 continue
-
             param_type = dpram.param_type
-
             if param_name in ignore_params or param_type in ignore_params:
                 continue
-
+            if param_type is DependencyGraph:
+                resolved_params[param_name] = self
+                continue
             if is_provided(dpram.default):
                 resolved_params[param_name] = dpram.default
                 continue
-
             if current_config.lazy:
                 dep_node = self.static_resolve(param_type, current_config)
                 resolved_params[param_name] = self._create_lazy_dependent(dep_node)
@@ -685,8 +670,29 @@ class DependencyGraph:
 
             resolved_params[param_name] = self.resolve(param_type, scope)
 
-        resolved = node.crate_dependent(resolved_params)
+        resolved = node.inject_params(resolved_params)
+        """
+        TODO: 
+        if we need a Context object in a non context manner
+        class Service:
+            async def __aenter__(self): ...
+            async def __aexit__(self, *args): ...
+        
+        def get_service() -> Service:
+            return Service()
 
+        dg.resolve(get_service)
+        
+        we need to find a way to suppress this
+        might be we just do not throw an error?
+
+        or
+        NodeConfig:
+            non_resource: bool
+            ---
+            whether to treat resource as a regular object 
+            without managing its lifecycle
+        """
         if is_context_manager(resolved):
             if not scope:
                 raise ResourceOutsideScopeError(node.dependent_type)
@@ -694,7 +700,7 @@ class DependencyGraph:
             if current_config.reuse:
                 scope.cache_result(dependent, instance)
         elif is_async_context_manager(resolved):
-            raise AsyncResourceInSyncError(node.factory)
+            raise AsyncResourceInSyncError(resolved)
         else:
             if current_config.reuse:
                 self._resolution_registry.register(dependent, resolved)
@@ -745,7 +751,7 @@ class DependencyGraph:
 
             resolved_params[param_name] = await self.aresolve(param_type, scope)
 
-        resolved = node.crate_dependent(resolved_params)
+        resolved = node.inject_params(resolved_params)
 
         if is_async_context_manager(resolved):
             if not scope:
@@ -820,11 +826,8 @@ class DependencyGraph:
     ) -> Union[IEmptyFactory[T], IEmptyAsyncFactory[T]]:
         """
         TODO:
-        1. add more generic vars to func
+        1. add more generic vars to func, enhance typing support
         checkout https://github.com/dbrattli/Expression/blob/main/expression/core/pipe.py
-        TypeVarTuple
-        Unpack[TypeVarTuple]
-        2. allow ignore params, to support hook param like fastapi.Query
         """
 
         def func_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
@@ -898,39 +901,23 @@ class DependencyGraph:
         ```
         """
 
+        # This method generate a DependentNode from the dependent / dependent factory
+        # then register it to the graph
+        # leave dependent untouched.
+
         if not factory_or_class:
             configed = cast(TDecor, partial(self.node, **config))
             return configed
 
-        node_config = NodeConfig(**config)
-
         if is_unresolved_type(factory_or_class):
             raise TopLevelBulitinTypeError(factory_or_class)
 
-        sig = get_typed_signature(factory_or_class)
-        return_type: Union[type[T], ForwardRef] = sig.return_annotation
-
-        if is_unresolved_type(return_type):
-            raise BuiltinTypeFactoryError(factory_or_class, return_type)
-
-        if isinstance(return_type, ForwardRef):
-            return_type = resolve_forwardref(factory_or_class, return_type)
-
-        resolved_type = resolve_annotation(return_type)
-
-        if resolved_type in self._nodes:
-            if return_type is not INSPECT_EMPTY:
-                old_node = self._nodes[resolved_type]
+        factory_return = get_typed_signature(factory_or_class).return_annotation
+        if factory_return is not INSPECT_EMPTY:
+            if old_node := self._nodes.get(resolve_annotation(factory_return)):
                 self.remove_node(old_node)
 
-        if inspect.isgeneratorfunction(factory_or_class):
-            func_gen = contextmanager(factory_or_class)
-            node = DependentNode[T].from_node(func_gen, config=node_config)
-        elif inspect.isasyncgenfunction(factory_or_class):
-            func_gen = asynccontextmanager(factory_or_class)
-            node = DependentNode[T].from_node(func_gen, config=node_config)
-        else:
-            node = DependentNode[T].from_node(factory_or_class, config=node_config)
+        node = DependentNode[T].from_node(factory_or_class, config=NodeConfig(**config))
 
         self.register_node(node)
         return factory_or_class

@@ -28,7 +28,7 @@ from ._itypes import AsyncClosable, Closable
 from .errors import (
     ForwardReferenceNotFoundError,
     GenericDependencyNotSupportedError,
-    MissingReturnTypeError,
+    UnsolvableReturnTypeError,
 )
 from .utils.typing_utils import T, eval_type, get_full_typed_signature, is_builtin_type
 
@@ -50,9 +50,11 @@ def get_typed_signature(
     Get a typed signature from a factory.
     """
     sig = get_full_typed_signature(call)
-    sig_return = sig.return_annotation
-    if check_return and sig_return is inspect.Signature.empty:
-        raise MissingReturnTypeError(call)
+    sig_return: Union[type[T], ForwardRef] = sig.return_annotation
+    if isinstance(sig_return, ForwardRef):
+        raise ForwardReferenceNotFoundError(sig_return)
+    if check_return and is_unresolved_type(sig_return):
+        raise UnsolvableReturnTypeError(call, sig_return)
     return sig
 
 
@@ -69,6 +71,17 @@ def resolve_factory_return(sig_return: type[T]) -> type[T]:
     return sig_return
 
 
+def resolve_factory(factory: Callable[..., T]) -> type[T]:
+    """
+    Handle Annotated
+    Generator function
+    etc.
+    """
+    sig = get_typed_signature(factory, check_return=True)
+    dependent: type[T] = resolve_factory_return(sig.return_annotation)
+    return dependent
+
+
 def is_unresolved_type(t: Any) -> bool:
     """
     Types that are not resolved at type resolving.
@@ -80,7 +93,7 @@ def is_unresolved_type(t: Any) -> bool:
     Examples:
     - builtin types
     """
-    return is_builtin_type(t)
+    return is_builtin_type(t) or t is inspect.Signature.empty
 
 
 def is_context_manager(t: T) -> TypeGuard[ContextManager[T]]:
@@ -125,12 +138,12 @@ def is_class_with_empty_init(cls: type) -> bool:
 
 
 def resolve_forwardref(
-    dependent: Union[type, Callable[..., Any]], ref: ForwardRef
-) -> Any:
-    if is_function(dependent):
-        globalvs = dependent.__globals__
-    else:
-        globalvs = dependent.__init__.__globals__
+    dependent: Union[type[T], Callable[..., T]], ref: ForwardRef
+) -> type[T]:
+    # if is_function(dependent):
+    #     globalvs = dependent.__globals__
+    # else:
+    globalvs = dependent.__init__.__globals__
 
     try:
         return eval_type(ref, globalvs, globalvs)

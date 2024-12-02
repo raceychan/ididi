@@ -199,7 +199,7 @@ This would previously raise `NodeCreationError`, with root cause being `MissingA
 
 API changes:
 `ididi.solve` renamed to `ididi.resolve` for better consistency with naming style.
-`ididi.entry` no longer accepts `INodeConfig` as kwargs. 
+`ididi.entry` no longer accepts `INodeConfig` as kwargs.
 
 Feat:
 
@@ -219,7 +219,6 @@ Improvements:
 
 - user can directly call `Visualizer.save` without first calling `Visualizer.make_graph`.
 
-
 ## version 1.0.1
 
 Improvements
@@ -231,7 +230,6 @@ Improvements
 Features
 
 - named scope, user can now call `dg.use_scope(name)` to get a specific parent scope in current context, this is particularly useful in scenario where you have tree-structured scopes, like app-route-request.
-
 
 ## version 1.0.3
 
@@ -327,3 +325,36 @@ with dg.scope() as scope:
 
 improvement
 improve typing support for scope.resolve, now it recognize resource better.
+
+## version 1.1.0
+
+Feat:
+
+1. 
+add a special mark so that users don't need to specifically mark `dg.node`
+
+```py
+async def create_user(user_repo: inject(repo_factory)):
+    ...
+
+# so that user does not have to explicitly declear repo_factory as a node
+
+dg = DependencyGraph()
+
+@dg.node
+def repo_factory():
+    ...
+```
+
+2. support config to entry
+
+3. support DependencyGraph as dependency
+
+```py
+def get_user_service(dg: DependencyGraph) -> UserService:
+    return dg.resolve(UserService)
+
+dg.resolve(get_user_service)
+
+# this would pass the same graph into function
+```

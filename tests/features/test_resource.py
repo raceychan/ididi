@@ -29,15 +29,9 @@ class ArbitraryResource:
 
 
 @pytest.mark.asyncio
-async def test_close_graph_with_resources():
-    await dag.aclose()
-
-
-@pytest.mark.asyncio
 async def test_resource():
-    async with dag:
-        with pytest.raises(ResourceOutsideScopeError):
-            await dag.aresolve(ArbitraryResource)
+    with pytest.raises(ResourceOutsideScopeError):
+        await dag.aresolve(ArbitraryResource)
 
 
 @pytest.mark.asyncio

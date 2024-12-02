@@ -36,7 +36,7 @@ class NodeResolveError(IDIDIError):
 
 
 class AsyncResourceInSyncError(NodeResolveError):
-    def __init__(self, factory: Callable[..., Any]):
+    def __init__(self, factory: Any):
         self.factory = factory
         super().__init__(
             f"Requiring async resource {factory} in a sync scope is not supported"
@@ -73,22 +73,6 @@ class UnsolvableNodeError(NodeResolveError):
         )
 
 
-class UnsolvableDependencyError(UnsolvableNodeError):
-    """
-    Raised when a dependency parameter can't be built.
-    """
-
-    def __init__(
-        self,
-        *,
-        dep_name: str,
-        factory: Union[Callable[..., Any], type],
-        required_type: type,
-    ):
-        self.message = f"Unable to resolve dependency for parameter: {dep_name} in {factory}, value of {required_type} must be provided"
-        super().__init__(self.message)
-
-
 class ProtocolFacotryNotProvidedError(UnsolvableNodeError):
     """
     Raised when a protocol is used as a dependency without a factory.
@@ -117,6 +101,22 @@ class UnsolvableParameterError(UnsolvableNodeError):
     """
 
 
+class UnsolvableDependencyError(UnsolvableParameterError):
+    """
+    Raised when a dependency parameter can't be built.
+    """
+
+    def __init__(
+        self,
+        *,
+        dep_name: str,
+        factory: Union[Callable[..., Any], type],
+        required_type: type,
+    ):
+        self.message = f"Unable to resolve dependency for parameter: {dep_name} in {factory}, value of {required_type} must be provided"
+        super().__init__(self.message)
+
+
 class ForwardReferenceNotFoundError(UnsolvableParameterError):
     """
     Raised when a forward reference can't be found in the global namespace.
@@ -139,15 +139,15 @@ class MissingAnnotationError(UnsolvableParameterError):
         super().__init__(msg)
 
 
-class MissingReturnTypeError(UnsolvableParameterError):
+class UnsolvableReturnTypeError(UnsolvableParameterError):
     """
     Raised when a factory has no return type.
     Thus can't be determined what it is trying to override
     """
 
-    def __init__(self, factory: Callable[..., Any]):
+    def __init__(self, factory: Callable[..., Any], target: type):
         self.factory = factory
-        msg = f"Factory {factory} must have a return type"
+        msg = f"Factory {factory} must have a return type, instead of {target}"
         super().__init__(msg)
 
 
@@ -159,13 +159,6 @@ class GenericDependencyNotSupportedError(NodeError):
     def __init__(self, generic_type: Union[type, TypeVar]):
         super().__init__(
             f"Using generic a type as a dependency is not yet supported: {generic_type}"
-        )
-
-
-class BuiltinTypeFactoryError(NodeError):
-    def __init__(self, factory: Callable[..., Any], return_type: Any):
-        super().__init__(
-            f"factory {factory} is returning a unresolvable type {return_type}, were you trying to use `entry`?"
         )
 
 

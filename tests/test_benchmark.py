@@ -1,11 +1,13 @@
-import time
 import typing as ty
+from time import perf_counter
 
 import pytest
 
 from ididi import DependencyGraph
 
 from .test_data import CLASSES
+
+ROUNDS = 10
 
 
 @pytest.fixture
@@ -21,34 +23,40 @@ def dg() -> DependencyGraph:
 
 @pytest.mark.benchmark
 def test_register(dg: DependencyGraph, dependents: ty.Sequence[type]):
-    pre = time.perf_counter()
+    pre = perf_counter()
     for c in dependents:
         dg.node(c)
-    aft = time.perf_counter()
+    aft = perf_counter()
     cost = round(aft - pre, 6)
     print(f"\n{cost} seoncds to register {len(dependents)} classes")
 
 
 @pytest.mark.benchmark
 def test_static_resolve(dg: DependencyGraph, dependents: ty.Sequence[type]):
-
-    pre = time.perf_counter()
+    pre = perf_counter()
     dg.static_resolve_all()
-    aft = time.perf_counter()
+    aft = perf_counter()
     cost = round(aft - pre, 6)
     print(f"\n{cost} seoncds to statically resolve {len(dg.nodes)} classes")
 
 
 @pytest.mark.benchmark
 def test_resolve_instances(dg: DependencyGraph, dependents: list[type]):
+    total = 0
 
-    pre = time.perf_counter()
-    for c in dependents:
-        _ = dg.resolve(c)
-    aft = time.perf_counter()
-    cost = round(aft - pre, 6)
+    for _ in range(ROUNDS):
+        dg.reset()
 
-    print(f"\n{cost} seoncds to resolve {len(dependents)} instances")
+        pre = perf_counter()
+        for c in dependents:
+            _ = dg.resolve(c)
+        aft = perf_counter()
+        cost = round(aft - pre, 6)
+        total += cost
+
+    avg = round(total / ROUNDS, 6)
+
+    print(f"\n{avg} seoncds to resolve {len(dependents)} instances")
 
 
 """
@@ -58,3 +66,9 @@ def test_resolve_instances(dg: DependencyGraph, dependents: list[type]):
 """
 
 
+"""
+1.0.10
+0.019022 seoncds to register 122 classes
+0.00338 seoncds to statically resolve 122 classes
+0.001264 seoncds to resolve 122 instances
+"""

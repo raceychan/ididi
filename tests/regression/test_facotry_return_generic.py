@@ -3,7 +3,7 @@ from typing import Generic, TypeVar
 import pytest
 
 from ididi import DependencyGraph
-from ididi.errors import ForwardReferenceNotFoundError, MissingReturnTypeError
+from ididi.errors import ForwardReferenceNotFoundError, UnsolvableReturnTypeError
 
 dg = DependencyGraph()
 # Define a generic type variable
@@ -46,7 +46,7 @@ def test_factory_generic_return():
 
 
 def test_emptry_return_factory():
-    with pytest.raises(MissingReturnTypeError):
+    with pytest.raises(UnsolvableReturnTypeError):
 
         @dg.node
         def animal_factory(animal_type: str): ...
@@ -55,3 +55,15 @@ def test_emptry_return_factory():
 
         @dg.node
         def animal_factory(animtal_type: str = "test") -> "Normal": ...
+
+
+class UserService: ...
+
+
+@dg.node
+def user_service_factory() -> "UserService": ...
+
+
+def test_forward_factory():
+    dg.node(user_service_factory)
+    dg.static_resolve(user_service_factory)

@@ -503,17 +503,16 @@ def test_node_factory(dg: DependencyGraph):
 async def test_graph_without_static_resolve(dg: DependencyGraph):
     # This test specifically needs a new dag instance
     dg = DependencyGraph(static_resolve=False)
-    async with dg:
 
-        @dg.node(reuse=False)
-        class UserService:
-            def __init__(
-                self, repo: UserRepository, auth: AuthService, name: str = "user"
-            ):
-                self.repo = repo
-                self.auth = auth
+    @dg.node(reuse=False)
+    class UserService:
+        def __init__(
+            self, repo: UserRepository, auth: AuthService, name: str = "user"
+        ):
+            self.repo = repo
+            self.auth = auth
 
-        dg.resolve(UserService)
+    dg.resolve(UserService)
 
     with pytest.raises(PositionalOverrideError):
         dg.resolve(UserRepository, 1)

@@ -20,11 +20,13 @@ __version__ = VERSION
 
 from ._itypes import GraphConfig as GraphConfig
 from ._itypes import INode as INode
+from ._itypes import INodeConfig as INodeConfig
 from ._itypes import NodeConfig as NodeConfig
 from .api import entry as entry
 from .api import resolve as resolve
 from .graph import DependencyGraph as DependencyGraph
 from .node import DependentNode as DependentNode
+from .node import inject as inject
 
 try:
     import graphviz

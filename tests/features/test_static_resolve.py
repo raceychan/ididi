@@ -55,13 +55,13 @@ def dg() -> DependencyGraph:
 
 
 def test_static_resolve(dg: DependencyGraph):
-    node = dg.static_resolve(EmailService)
+    _ = dg.static_resolve(EmailService)
     assert len(dg.nodes) == 7
     assert len(dg.resolved_nodes) == 7
 
 
 def test_static_resolve_equal_resolve(dg: DependencyGraph):
-    node = dg.static_resolve(EmailService)
+    _ = dg.static_resolve(EmailService)
     assert len(dg.nodes) == 7
     assert len(dg.resolved_nodes) == 7
 
@@ -88,7 +88,7 @@ class ForwardConfig:
 
 
 def test_forward_dependency(dg: DependencyGraph):
-    node = dg.static_resolve(ForwardService)
+    _ = dg.static_resolve(ForwardService)
     assert len(dg.nodes) == 3
     assert len(dg.resolved_nodes) == 3
 
@@ -103,8 +103,7 @@ async def test_async_enter(dg: DependencyGraph):
     class AsyncService:
         pass
 
-    async with dg:
-        dg.resolve(AsyncService)
+    dg.resolve(AsyncService)
 
 
 def test_forward_ref_in_local_scope():
@@ -148,7 +147,6 @@ async def test_static_resolve_a_factory(dg: DependencyGraph):
         def close(self) -> None:
             return
 
-    # @dg.node
     def db_factory() -> DataBase:
         return DataBase("test")
 
@@ -162,5 +160,4 @@ async def test_static_resolve_a_factory(dg: DependencyGraph):
 
     len(dg.type_registry)
 
-    async with dg:
-        dg.resolve(DataBase)
+    dg.resolve(DataBase)
