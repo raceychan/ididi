@@ -67,7 +67,6 @@ from ididi import inject, entry, DependencyGraph
 async def get_db(dg: DependencyGraph, client: Client) -> ty.AsyncGenerator[DataBase, None]:
     repository = dg.resolve(Repository)
     db = DataBase(repository, client)
-    assert client.is_opened
     try:
         await db.connect()
         yield db

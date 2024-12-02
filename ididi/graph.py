@@ -707,6 +707,7 @@ class DependencyGraph:
 
         for param_name, param_type in node.unsolved_params(tuple(resolved_params)):
             if param_type is DependencyGraph:
+                # TODO: if not self.config.reuse create new
                 resolved_params[param_name] = self
             else:
                 resolved_params[param_name] = await self.aresolve(param_type, scope)
