@@ -4,7 +4,7 @@ run:
 
 .PHONY: test
 test:
-	pixi run -e test pytest -vsx tests/
+	pixi run -e test pytest -m "not benchmark" -vsx tests/
 
 .PHONY: debug
 debug:
@@ -24,7 +24,7 @@ debug-cov:
 
 .PHONY: cov
 cov:
-	pixi run -e test pytest tests/ --cov=ididi --cov-report term-missing 
+	pixi run -e test pytest -m "not benchmark" tests/ --cov=ididi --cov-report term-missing 
 
 .PHONY: report
 report:

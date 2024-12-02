@@ -46,7 +46,8 @@ class AuthorizationService:
 
 class UserService:
     def __init__(self, db: Database, auth: AuthenticationService):
-        pass
+        self.db = db
+        self.auth = auth
 
 
 class ProfileService:

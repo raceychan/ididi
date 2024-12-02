@@ -355,6 +355,30 @@ def get_user_service(dg: DependencyGraph) -> UserService:
     return dg.resolve(UserService)
 
 dg.resolve(get_user_service)
-
 # this would pass the same graph into function
+```
+
+4. TODO?: 
+if we need a Context object in a non context manner, e.g.
+
+```py
+class Service:
+    async def __aenter__(self): ...
+    async def __aexit__(self, *args): ...
+        
+def get_service() -> Service:
+    return Service()
+
+dg.resolve(get_service)
+        
+# we need to find a way to suppress this
+# might be we just do not throw an error?
+# 
+# or
+
+NodeConfig:
+    non_resource: bool
+    ---
+    whether to treat resource as a regular object 
+    without managing its lifecycle
 ```

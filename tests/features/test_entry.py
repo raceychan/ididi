@@ -1,6 +1,6 @@
-import pytest
+from dataclasses import dataclass
 
-from ididi import entry, resolve
+from ididi import DependencyGraph, entry, resolve
 
 
 class Config:
@@ -65,7 +65,6 @@ async def third_entry(
     return f"{name} is {age} years old"
 
 
-@pytest.mark.asyncio
 async def test_graph_entry():
     func = entry(third_entry)
     func_main = entry(main)
@@ -80,7 +79,6 @@ def test_solve():
     assert isinstance(email, EmailService)
 
 
-@pytest.mark.asyncio
 async def test_entry_with_overrides():
     @entry
     async def func4(notif: NotificationService, email: str, format: str):
@@ -89,4 +87,30 @@ async def test_entry_with_overrides():
     assert await func4(email="asdf", format="asdf")
 
 
+@dataclass
+class CreateUser:
+    user_name: str
+    user_email: str
 
+
+async def test_entry_with_ignore():
+
+    @entry(ignore=(CreateUser,))
+    async def func4(service: NotificationService, cmd: CreateUser) -> str:
+        return cmd.user_name
+
+    cmd = CreateUser(user_name="1", user_email="2")
+    r = await func4(cmd=cmd)
+    assert r == "1"
+
+
+async def test_dg_entry_with_ignore():
+    dg = DependencyGraph()
+
+    @dg.entry(ignore=(CreateUser,))
+    async def func4(service: NotificationService, cmd: CreateUser) -> str:
+        return cmd.user_name
+
+    cmd = CreateUser(user_name="1", user_email="2")
+    r = await func4(cmd=cmd)
+    assert r == "1"

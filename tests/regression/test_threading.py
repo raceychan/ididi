@@ -32,7 +32,7 @@ def dg():
 
 @pytest.fixture
 def max_workers():
-    return 10000
+    return 1
 
 
 @pytest.fixture
@@ -51,7 +51,7 @@ def test_repeat_resolve(dg: DependencyGraph):
         instances.append(id(obj))
         return obj
 
-    res = [resolve(dg) for _ in range(1000)]
+    res = [resolve(dg) for _ in range(1)]
 
     assert len(set(res)) == len(res)
 

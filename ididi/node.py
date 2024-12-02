@@ -186,6 +186,7 @@ class DependentSignature(Generic[T]):
     """
 
     def __iter__(self) -> Iterator[tuple[str, DependencyParam[Any]]]:
+        # TODO?: yield param.name, param.type, param.default
         return iter(self.dprams.items())
 
     def __len__(self) -> int:
@@ -209,7 +210,6 @@ class DependentSignature(Generic[T]):
         """Bind resolved arguments to the signature."""
         sig = self.generate_signature()
         bound_args = sig.bind_partial(**resolved_args)
-        # bound_args.apply_defaults()
         return bound_args
 
 
@@ -288,7 +288,7 @@ class DependentNode(Generic[T]):
     whether this node is reusable, default is True
     """
 
-    __slots__ = ("_dependent", "factory", "_default", "signature", "config")
+    __slots__ = ("_dependent", "factory", "signature", "config")
 
     def __init__(
         self,
@@ -297,13 +297,11 @@ class DependentNode(Generic[T]):
         factory: INodeAnyFactory[T],
         signature: DependentSignature[T],
         config: NodeConfig,
-        default: Maybe[T] = MISSING,
     ):
         self._dependent = dependent
         self.factory = factory
         self.signature = signature
         self.config = config
-        self._default = default
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self._dependent})"
@@ -335,11 +333,28 @@ class DependentNode(Generic[T]):
                 self.signature.dprams[param_name] = param
             yield param
 
+    def unsolved_params(
+        self, ignore: tuple[str, ...]
+    ) -> Generator[tuple[str, type], None, None]:
+        ignores = self.config.ignore + ignore
+        for param_name, dpram in self.signature:
+            param_type: type[T] = dpram.param_type
+            default = dpram.default
+
+            if param_name in ignores or param_type in ignores:
+                continue
+
+            if is_provided(default) and get_origin(default) is not Annotated:
+                continue
+
+            yield (param_name, param_type)
+
     def inject_params(
         self, params: dict[str, Any]
     ) -> Union[T, Awaitable[T], Generator[T, None, None], AsyncGenerator[T, None]]:
         "Inject params to dependent factory accordidng to its signature, return the dependent object"
-        r = self.factory(**self.signature.bind_arguments(params).arguments)
+        arguments = self.signature.bind_arguments(params).arguments
+        r = self.factory(**arguments)
         return r
 
     def check_for_resolvability(self) -> None:
@@ -432,7 +447,10 @@ class DependentNode(Generic[T]):
         config: Maybe[NodeConfig] = MISSING,
     ) -> "DependentNode[T]":
         """
-        Build a node from a class, a factory function of the class, or an async factory function of the class
+        Build a node Nonrecursively
+        from
+            - class,
+            - async / factory function of the class
         """
         if not is_provided(config):
             config = NodeConfig()
@@ -452,15 +470,6 @@ class DependentNode(Generic[T]):
 def inject(
     factory: INodeFactory[P, T], default: Any = None, **iconfig: Unpack[INodeConfig]
 ) -> T:
-    config = NodeConfig(**iconfig)
-    sig = get_typed_signature(factory)
-    dependent = resolve_factory_return(sig.return_annotation)
-
-    node = DependentNode[T].from_factory(factory=factory, config=config)
+    node = DependentNode[T].from_node(factory, config=NodeConfig(**iconfig))
     annt = Annotated[T, node]
     return cast(T, annt)
-
-
-# def from_inject(annt: Annotated[Any, DependentNode]):
-# func = annt.__args__[0]  # -> service func
-# node = annt.__metadata__[0]  #  -> "faq"
