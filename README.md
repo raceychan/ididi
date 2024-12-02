@@ -62,11 +62,11 @@ NOTE:
 2. async resource in a sync dependent is not supported, but sync resource in a async dependent is supported.  
 
 ```python
-import ididi
+from ididi import inject, entry, DependencyGraph
 
-
-async def get_db(client: Client) -> ty.AsyncGenerator[DataBase, None]:
-    db = DataBase(client)
+async def get_db(dg: DependencyGraph, client: Client) -> ty.AsyncGenerator[DataBase, None]:
+    repository = dg.resolve(Repository)
+    db = DataBase(repository, client)
     assert client.is_opened
     try:
         await db.connect()
@@ -74,8 +74,8 @@ async def get_db(client: Client) -> ty.AsyncGenerator[DataBase, None]:
     finally:
         await db.close()
 
-@ididi.entry
-async def main(db: DataBase, sql: str) -> ty.Any:
+@entry
+async def main(db: DataBase = inject(get_db), sql: str) -> ty.Any:
     res = await db.execute(sql)
     return res
 
@@ -84,8 +84,6 @@ assert await main(sql="select money from bank")
 
 > [!NOTE]
 > **`DependencyGraph.node` accepts a wide arrange of types, such as dependent class, sync/async facotry, sync/async resource factory, with typing support.**
-
-
 
 ### Using Scope to manage resources
 
