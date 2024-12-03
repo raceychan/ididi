@@ -32,6 +32,7 @@ from ._itypes import (
     NodeConfig,
 )
 from ._type_resolve import (
+    IDIDI_INJECT_RESOLVE_MARK,
     get_typed_signature,
     is_class,
     is_class_or_method,
@@ -288,19 +289,17 @@ class DependentNode(Generic[T]):
     whether this node is reusable, default is True
     """
 
-    __slots__ = ("_dependent", "factory", "signature", "default", "config")
+    __slots__ = ("_dependent", "factory", "signature", "config")
 
     def __init__(
         self,
         *,
         dependent: Dependent[T],
-        default: Maybe[T] = MISSING,
         factory: INodeAnyFactory[T],
         signature: DependentSignature[T],
         config: NodeConfig,
     ):
         self._dependent = dependent
-        self.default = default
         self.factory = factory
         self.signature = signature
         self.config = config
@@ -471,7 +470,6 @@ class DependentNode(Generic[T]):
 
 def inject(
     factory: INodeFactory[P, T],
-    default: Maybe[T] = MISSING,
     **iconfig: Unpack[INodeConfig],
 ) -> T:
     """
@@ -480,12 +478,11 @@ def inject(
 
     These two are equivalent
     ```
-    def func(service: UserService = inject(factory, defalt=5)): ...
-    def func(service: Annotated[UserService, inject(factory)] = 5): ...
+    def func(service: UserService = inject(factory)): ...
+    def func(service: Annotated[UserService, inject(factory)]): ...
     ```
     """
-    # TODO: support default
     # TODO: support nested Annotated factory
     node = DependentNode[T].from_node(factory, config=NodeConfig(**iconfig))
-    annt = Annotated[T, node]
+    annt = Annotated[T, node, IDIDI_INJECT_RESOLVE_MARK]
     return cast(T, annt)

@@ -8,6 +8,7 @@ import inspect
 import sys
 import types
 from typing import (
+    Annotated,
     Any,
     AsyncContextManager,
     Awaitable,
@@ -34,6 +35,8 @@ from .utils.typing_utils import T, eval_type, get_full_typed_signature, is_built
 
 SyncResource = Union[ContextManager[Any], Closable]
 AsyncResource = Union[AsyncContextManager[Any], AsyncClosable]
+
+IDIDI_INJECT_RESOLVE_MARK = "__ididi_node_mark__"
 
 
 P = ParamSpec("P")
@@ -153,6 +156,8 @@ def resolve_forwardref(
 
 def resolve_annotation(annotation: Any) -> type:
     origin = get_origin(annotation) or annotation
+    if origin is Annotated:  # perserve __metadata__
+        return annotation
 
     if isinstance(annotation, TypeVar):
         raise GenericDependencyNotSupportedError(annotation)
@@ -169,6 +174,45 @@ def resolve_annotation(annotation: Any) -> type:
         # we don't care which type is correct, it would be provided by the factory
         return union_types[0]
     return origin
+
+
+def flatten_annotated(typ: Any):
+    seen: set[Any] = set()
+
+    def _flatten(typ: Any):
+        if get_origin(typ) is Annotated:
+            base_type, *metadata = get_args(typ)
+            flattened_metadata: list[Any] = []
+
+            # Recursively flatten any nested Annotated types in the metadata
+            for item in metadata:
+                if get_origin(item) is Annotated:
+                    flattened_metadata.extend(_flatten(item))
+                else:
+                    flattened_metadata.append(item)
+
+            # Add the base type only if it hasn't been added yet
+            if base_type not in seen:
+                seen.add(base_type)
+                return [base_type] + flattened_metadata
+            else:
+                return flattened_metadata
+        else:
+            return [typ]
+
+    return _flatten(typ)
+
+
+def resolve_inject(annotation: Any):
+    if annotation is not Annotated and get_origin(annotation) is not Annotated:
+        return
+
+    meta: list[Any] = flatten_annotated(annotation)
+
+    *_, node, mark = meta
+    if mark != IDIDI_INJECT_RESOLVE_MARK:
+        return
+    return node
 
 
 def get_bases(dependent: type) -> tuple[type, ...]:

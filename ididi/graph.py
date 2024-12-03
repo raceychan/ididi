@@ -4,7 +4,6 @@ from contextvars import ContextVar, Token
 from functools import partial
 from types import MappingProxyType, TracebackType
 from typing import (
-    Annotated,
     Any,
     AsyncContextManager,
     AsyncGenerator,
@@ -49,6 +48,7 @@ from ._type_resolve import (
     is_unresolved_type,
     resolve_annotation,
     resolve_factory,
+    resolve_inject,
 )
 from .errors import (
     AsyncResourceInSyncError,
@@ -565,10 +565,14 @@ class DependencyGraph:
                         if parent_config.reuse:
                             raise ReusabilityConflictError(current_path, param_type)
                     continue
+                if inject_node := (
+                    resolve_inject(param_type) or resolve_inject(param.default)
+                ):
+                    dep_node = cast(DependentNode[Any], inject_node)
+                    self.register_node(dep_node)
+                    self._resolved_nodes[param_type] = dep_node
+                    continue
                 if is_provided(param.default):
-                    if get_origin(param.default) is Annotated:
-                        dep_node: DependentNode[T] = param.default.__metadata__[0]
-                        self.static_resolve(dep_node.factory, dep_node.config)
                     continue
                 if param.unresolvable:
                     if is_partial:

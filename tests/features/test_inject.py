@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from ididi import DependencyGraph, entry, inject
 from tests.test_data import UserService
 
@@ -17,3 +19,17 @@ async def create_user(service: UserService = inject(get_user_service)):
 async def test_inject_entry():
     f = entry(create_user)
     assert await f() == "ok"
+
+
+# async def deep_nested(
+#     service: Annotated[UserService, Annotated[UserService, inject(get_user_service)]]
+# ):
+#     assert isinstance(service, UserService)
+#     assert service.db == 1
+#     assert service.auth == 2
+#     return "ok"
+
+
+# async def test_nested_annt_entry():
+#     f = entry(deep_nested)
+#     assert await f() == "ok"
