@@ -84,7 +84,9 @@ async def test_entry_with_overrides():
     async def func4(notif: NotificationService, email: str, format: str):
         return email, format
 
-    assert await func4(email="asdf", format="asdf")
+    a, b = await func4(email="asdf", format="asdf")
+    assert a == "asdf"
+    assert b == "asdf"
 
 
 @dataclass
