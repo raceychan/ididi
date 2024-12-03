@@ -180,7 +180,6 @@ def flatten_annotated(typ: Annotated[Any, Any]):
     _, *metadata = get_args(typ)
     flattened_metadata: list[Any] = []
 
-    # Recursively flatten any nested Annotated types in the metadata
     for item in metadata:
         if get_origin(item) is Annotated:
             flattened_metadata.extend(flatten_annotated(item))
@@ -191,7 +190,7 @@ def flatten_annotated(typ: Annotated[Any, Any]):
 
 
 def resolve_inject(annotation: Any):
-    if annotation is not Annotated and get_origin(annotation) is not Annotated:
+    if get_origin(annotation) is not Annotated:
         return
 
     meta: list[Any] = flatten_annotated(annotation)
