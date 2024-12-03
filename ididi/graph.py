@@ -75,13 +75,16 @@ class AbstractScope(Generic[Stack]):
     _graph: "DependencyGraph"
     _name: Hashable
     _pre: Maybe[Union["SyncScope", "AsyncScope"]]
-    resolutions: ResolutionRegistry
+    _resolutions: ResolutionRegistry
 
     def __repr__(self):
         return f"{self.__class__.__name__}(id={self._name})"
 
     def cache_result(self, dependent: IEmptyFactory[T], result: T) -> None:
-        self.resolutions.register(dependent, result)
+        self._resolutions.register(dependent, result)
+
+    def get_cached(self, dependent: IEmptyFactory[T]) -> Maybe[T]:
+        return self._resolutions.get(dependent)
 
     def enter_context(self, context: ContextManager[T]) -> T:
         return self._stack.enter_context(context)
@@ -98,6 +101,17 @@ class AbstractScope(Generic[Stack]):
         else:
             raise OutOfScopeError(name)
 
+    def register_dependent(
+        self, dependent: T, dependent_type: Union[type[T], None] = None
+    ) -> None:
+        """
+        Register a dependent to be injected
+        This is particular useful for top level dependents
+        """
+
+        dependent_type = dependent_type or type(dependent)
+        self._resolutions.register(dependent_type, dependent)
+
 
 class SyncScope(AbstractScope[ExitStack]):
     __slots__ = ("_graph", "_stack", "_name", "_pre", "resolutions")
@@ -113,7 +127,7 @@ class SyncScope(AbstractScope[ExitStack]):
         self._name = name
         self._pre = pre
         self._stack = ExitStack()
-        self.resolutions = ResolutionRegistry()
+        self._resolutions = ResolutionRegistry()
 
     def __enter__(self) -> "SyncScope":
         return self
@@ -169,7 +183,7 @@ class AsyncScope(AbstractScope[AsyncExitStack]):
         self._name = name
         self._pre = pre
         self._stack = AsyncExitStack()
-        self.resolutions = ResolutionRegistry()
+        self._resolutions = ResolutionRegistry()
 
     async def __aenter__(self) -> "AsyncScope":
         return self
@@ -268,9 +282,9 @@ class DependencyGraph:
     A DAG (Directed Acyclic Graph) where each dependent is a node.
 
     [config]
-    static_resolve: bool
+    self_inject: bool
     ---
-    whether to statically resolve all nodes when entering the graph.
+    whether to inject the graph object into dependent
     """
 
     __slots__ = (
@@ -283,8 +297,8 @@ class DependencyGraph:
         "_visitor",
     )
 
-    def __init__(self, *, static_resolve: bool = True):
-        self._config = GraphConfig(static_resolve=static_resolve)
+    def __init__(self, *, self_inject: bool = True):
+        self._config = GraphConfig(self_inject=self_inject)
         self._nodes: GraphNodes[Any] = {}
         self._resolved_nodes: GraphNodes[Any] = {}
         self._resolution_registry = ResolutionRegistry()
@@ -293,6 +307,8 @@ class DependencyGraph:
             "connection_context"
         )
         self._visitor = Visitor(self._nodes)
+        if self._config.self_inject:
+            self.register_dependent(self)
 
     def __repr__(self) -> str:
         return (
@@ -304,10 +320,21 @@ class DependencyGraph:
     def __contains__(self, item: type) -> bool:
         return item in self._nodes
 
-    def static_resolve_all(self) -> None:
-        if not self._config.static_resolve:
-            return
+    def register_dependent(
+        self, dependent: T, dependent_type: Union[type[T], None] = None
+    ) -> None:
+        """
+        Register a dependent to be injected
+        if dependent_type is not provided, only dependent will be registered.
+        """
 
+        if dependent_type and dependent_type not in self.nodes:
+            self.node(dependent_type)
+
+        dependent_type = dependent_type or type(dependent)
+        self._resolution_registry.register(dependent_type, dependent)
+
+    def static_resolve_all(self) -> None:
         nodes = self._nodes.copy()
 
         for node_type in nodes:
@@ -522,16 +549,10 @@ class DependencyGraph:
                 return self._resolved_nodes[dependent]
 
             node = self._resolve_concrete_node(dependent, resolve_node_config)
-            current_config = node.config
-
-            # TODO: we might let node filter what params should be resolved
-            # param with default, or set to be ignored should not be checked here at all
-            is_partial = current_config.partial
+            is_partial = node.config.partial
 
             for param in node.actualized_params():
                 param_type = param.param_type
-                if param_type is DependencyGraph:
-                    continue
                 if param_type in current_path:
                     i = current_path.index(param_type)
                     cycle = current_path[i:] + [param_type]
@@ -640,21 +661,22 @@ class DependencyGraph:
         if scope:
             if not isinstance(cast(Any, scope), AbstractScope):
                 raise PositionalOverrideError(args)
-            if is_provided(solution := scope.resolutions.get(dependent)):
+            if is_provided(solution := scope.get_cached(dependent)):
                 return solution
 
         if is_provided(solution := self._resolution_registry.get(dependent)):
             return solution
 
         node: DependentNode[T] = self.static_resolve(dependent)
+
+        # TODO: if is_provided(node.default) return node.default
+
         current_config = node.config
 
         resolved_params: dict[str, Any] = overrides
 
         for param_name, param_type in node.unsolved_params(tuple(resolved_params)):
-            if param_type is DependencyGraph:
-                resolved_params[param_name] = self
-            elif current_config.lazy:
+            if current_config.lazy:
                 dep_node = self.static_resolve(param_type, current_config)
                 resolved_params[param_name] = self._create_lazy_dependent(dep_node)
             else:
@@ -694,23 +716,19 @@ class DependencyGraph:
         if scope:
             if not isinstance(cast(Any, scope), AbstractScope):
                 raise PositionalOverrideError(args)
-            if is_provided(solution := scope.resolutions.get(dependent)):
+            if is_provided(solution := scope.get_cached(dependent)):
                 return solution
 
         if is_provided(solution := self._resolution_registry.get(dependent)):
             return solution
 
         node: DependentNode[T] = self.static_resolve(dependent)
-        current_config = node.config
+        is_reuse = node.config.reuse
 
         resolved_params: dict[str, Any] = overrides
 
         for param_name, param_type in node.unsolved_params(tuple(resolved_params)):
-            if param_type is DependencyGraph:
-                # TODO: if not self.config.reuse create new
-                resolved_params[param_name] = self
-            else:
-                resolved_params[param_name] = await self.aresolve(param_type, scope)
+            resolved_params[param_name] = await self.aresolve(param_type, scope)
 
         resolved = node.inject_params(resolved_params)
 
@@ -718,13 +736,13 @@ class DependencyGraph:
             if not scope:
                 raise ResourceOutsideScopeError(node.dependent_type)
             instance = await scope.enter_async_context(resolved)
-            if current_config.reuse:
+            if is_reuse:
                 scope.cache_result(dependent, instance)
         elif is_context_manager(resolved):
             if not scope:
                 raise ResourceOutsideScopeError(node.dependent_type)
             instance = scope.enter_context(resolved)
-            if current_config.reuse:
+            if is_reuse:
                 scope.cache_result(dependent, instance)
         else:
             if inspect.isawaitable(resolved):
@@ -732,7 +750,7 @@ class DependencyGraph:
             else:
                 instance = resolved
 
-            if current_config.reuse:
+            if is_reuse:
                 self._resolution_registry.register(dependent, instance)
         return cast(T, instance)
 

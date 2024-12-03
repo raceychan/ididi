@@ -502,13 +502,11 @@ def test_node_factory(dg: DependencyGraph):
 @pytest.mark.asyncio
 async def test_graph_without_static_resolve(dg: DependencyGraph):
     # This test specifically needs a new dag instance
-    dg = DependencyGraph(static_resolve=False)
+    dg = DependencyGraph()
 
     @dg.node(reuse=False)
     class UserService:
-        def __init__(
-            self, repo: UserRepository, auth: AuthService, name: str = "user"
-        ):
+        def __init__(self, repo: UserRepository, auth: AuthService, name: str = "user"):
             self.repo = repo
             self.auth = auth
 

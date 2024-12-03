@@ -1,5 +1,14 @@
 import inspect
-from typing import Any, Callable, ForwardRef, Mapping, TypeVar, Union
+from typing import (
+    Any,
+    AsyncGenerator,
+    Callable,
+    ForwardRef,
+    Generator,
+    Mapping,
+    TypeVar,
+    Union,
+)
 from typing import _eval_type as ty_eval_type  # type: ignore
 from typing import cast
 
@@ -8,6 +17,9 @@ from typing_extensions import ParamSpec, TypeGuard
 T = TypeVar("T")
 R = TypeVar("R")
 P = ParamSpec("P")
+
+Resource = Generator[T, None, None]
+AsyncResource = AsyncGenerator[T, None]
 
 PrimitiveBuiltins = type[Union[int, float, complex, str, bool, bytes, bytearray]]
 ContainerBuiltins = type[

@@ -163,7 +163,7 @@ async def test_static_resolve_a_factory(dg: DependencyGraph):
 
 
 def test_sr_false():
-    dg = DependencyGraph(static_resolve=False)
+    dg = DependencyGraph()
 
     class DataBase:
         def __init__(self, engine: str):

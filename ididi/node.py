@@ -288,17 +288,19 @@ class DependentNode(Generic[T]):
     whether this node is reusable, default is True
     """
 
-    __slots__ = ("_dependent", "factory", "signature", "config")
+    __slots__ = ("_dependent", "factory", "signature", "default", "config")
 
     def __init__(
         self,
         *,
         dependent: Dependent[T],
+        default: Maybe[T] = MISSING,
         factory: INodeAnyFactory[T],
         signature: DependentSignature[T],
         config: NodeConfig,
     ):
         self._dependent = dependent
+        self.default = default
         self.factory = factory
         self.signature = signature
         self.config = config
@@ -468,8 +470,22 @@ class DependentNode(Generic[T]):
 
 
 def inject(
-    factory: INodeFactory[P, T], default: Any = None, **iconfig: Unpack[INodeConfig]
+    factory: INodeFactory[P, T],
+    default: Maybe[T] = MISSING,
+    **iconfig: Unpack[INodeConfig],
 ) -> T:
+    """
+    A util function that helps ididi know what factory method to use
+    without explicitly register it, only works inside function signatures.
+
+    These two are equivalent
+    ```
+    def func(service: UserService = inject(factory, defalt=5)): ...
+    def func(service: Annotated[UserService, inject(factory)] = 5): ...
+    ```
+    """
+    # TODO: support default
+    # TODO: support nested Annotated factory
     node = DependentNode[T].from_node(factory, config=NodeConfig(**iconfig))
     annt = Annotated[T, node]
     return cast(T, annt)

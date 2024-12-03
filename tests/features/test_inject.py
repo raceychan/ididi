@@ -3,6 +3,7 @@ from tests.test_data import UserService
 
 
 def get_user_service(dg: DependencyGraph) -> UserService:
+    assert isinstance(dg, DependencyGraph)
     return UserService(1, 2)
 
 

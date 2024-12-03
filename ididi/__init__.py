@@ -27,6 +27,8 @@ from .api import resolve as resolve
 from .graph import DependencyGraph as DependencyGraph
 from .node import DependentNode as DependentNode
 from .node import inject as inject
+from .utils.typing_utils import AsyncResource as AsyncResource
+from .utils.typing_utils import Resource as Resource
 
 try:
     import graphviz

@@ -358,7 +358,10 @@ dg.resolve(get_user_service)
 # this would pass the same graph into function
 ```
 
-4. TODO?: 
+## version 1.1.1
+
+TODO?
+
 if we need a Context object in a non context manner, e.g.
 
 ```py
@@ -381,4 +384,23 @@ NodeConfig:
     ---
     whether to treat resource as a regular object 
     without managing its lifecycle
+```
+
+- remove `static_resolve` config from DependencyGraph
+- add a new `self_inejct` config to DependencyGraph
+- add `register_dependent` config to DependencyGraph, SyncScope, AsyncScope
+
+```py
+class APP:
+    def __init__(self, graph: DependencyGraph):
+        self._graph = graph
+        self._graph.register_dependent(self)
+
+dg = DependencygGraph()
+app = APP(graph)
+
+
+@app.register
+async def login(app: APP):
+    assert app is app
 ```
