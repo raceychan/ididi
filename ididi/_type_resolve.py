@@ -176,31 +176,18 @@ def resolve_annotation(annotation: Any) -> type:
     return origin
 
 
-def flatten_annotated(typ: Any):
-    seen: set[Any] = set()
+def flatten_annotated(typ: Annotated[Any, Any]):
+    _, *metadata = get_args(typ)
+    flattened_metadata: list[Any] = []
 
-    def _flatten(typ: Any):
-        if get_origin(typ) is Annotated:
-            base_type, *metadata = get_args(typ)
-            flattened_metadata: list[Any] = []
-
-            # Recursively flatten any nested Annotated types in the metadata
-            for item in metadata:
-                if get_origin(item) is Annotated:
-                    flattened_metadata.extend(_flatten(item))
-                else:
-                    flattened_metadata.append(item)
-
-            # Add the base type only if it hasn't been added yet
-            if base_type not in seen:
-                seen.add(base_type)
-                return [base_type] + flattened_metadata
-            else:
-                return flattened_metadata
+    # Recursively flatten any nested Annotated types in the metadata
+    for item in metadata:
+        if get_origin(item) is Annotated:
+            flattened_metadata.extend(flatten_annotated(item))
         else:
-            return [typ]
+            flattened_metadata.append(item)
 
-    return _flatten(typ)
+    return flattened_metadata
 
 
 def resolve_inject(annotation: Any):
@@ -209,10 +196,9 @@ def resolve_inject(annotation: Any):
 
     meta: list[Any] = flatten_annotated(annotation)
 
-    *_, node, mark = meta
-    if mark != IDIDI_INJECT_RESOLVE_MARK:
-        return
-    return node
+    for i, v in enumerate(meta):
+        if v == IDIDI_INJECT_RESOLVE_MARK:
+            return meta[i - 1]
 
 
 def get_bases(dependent: type) -> tuple[type, ...]:

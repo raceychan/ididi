@@ -23,8 +23,9 @@ async def test_inject_entry():
 
 async def deep_nested(
     service: Annotated[
-        UserService,
-        Annotated[UserService, Annotated[UserService, inject(get_user_service)]],
+        float,
+        "something",
+        Annotated[str, "random", Annotated[UserService, inject(get_user_service)]],
     ]
 ):
     assert isinstance(service, UserService)
