@@ -58,7 +58,7 @@ minor:
 VERSION ?= x.x.x
 BRANCH = version/$(VERSION)
 
-release: check-branch  update-version git-commit git-merge git-tag git-push hatch-build 
+release: check-branch check-version  update-version git-commit git-merge git-tag git-push hatch-build 
 
 check-branch:
 	@if [ "$$(git rev-parse --abbrev-ref HEAD)" != "$(BRANCH)" ]; then \
