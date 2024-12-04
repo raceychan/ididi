@@ -360,6 +360,29 @@ dg.resolve(get_user_service)
 
 ## version 1.1.1
 
+- remove `static_resolve` config from DependencyGraph
+- remove `factory`  method frmo DependencyGraph
+- add a new `self_inejct` config to DependencyGraph
+- add `register_dependent` config to DependencyGraph, SyncScope, AsyncScope
+- inject now supports both as annotated annotation and as default value, as well as nested annotated annotation
+
+```py
+class APP:
+    def __init__(self, graph: DependencyGraph):
+        self._graph = graph
+        self._graph.register_dependent(self)
+
+dg = DependencygGraph()
+app = APP(graph)
+
+
+@app.register
+async def login(app: APP):
+    assert app is app
+```
+
+## version 1.1.2
+
 TODO?
 
 if we need a Context object in a non context manner, e.g.
@@ -384,23 +407,4 @@ NodeConfig:
     ---
     whether to treat resource as a regular object 
     without managing its lifecycle
-```
-
-- remove `static_resolve` config from DependencyGraph
-- add a new `self_inejct` config to DependencyGraph
-- add `register_dependent` config to DependencyGraph, SyncScope, AsyncScope
-
-```py
-class APP:
-    def __init__(self, graph: DependencyGraph):
-        self._graph = graph
-        self._graph.register_dependent(self)
-
-dg = DependencygGraph()
-app = APP(graph)
-
-
-@app.register
-async def login(app: APP):
-    assert app is app
 ```

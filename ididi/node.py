@@ -187,7 +187,6 @@ class DependentSignature(Generic[T]):
     """
 
     def __iter__(self) -> Iterator[tuple[str, DependencyParam[Any]]]:
-        # TODO?: yield param.name, param.type, param.default
         return iter(self.dprams.items())
 
     def __len__(self) -> int:
@@ -290,6 +289,8 @@ class DependentNode(Generic[T]):
     """
 
     __slots__ = ("_dependent", "factory", "signature", "config")
+
+    # factory_type: Literal["default", "resource", "async_resource"]
 
     def __init__(
         self,
@@ -482,7 +483,6 @@ def inject(
     def func(service: Annotated[UserService, inject(factory)]): ...
     ```
     """
-    # TODO: support nested Annotated factory
     node = DependentNode[T].from_node(factory, config=NodeConfig(**iconfig))
     annt = Annotated[T, node, IDIDI_INJECT_RESOLVE_MARK]
     return cast(T, annt)

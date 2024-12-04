@@ -177,8 +177,8 @@ def resolve_annotation(annotation: Any) -> type:
 
 
 def flatten_annotated(typ: Annotated[Any, Any]):
-    _, *metadata = get_args(typ)
     flattened_metadata: list[Any] = []
+    _, *metadata = get_args(typ)
 
     for item in metadata:
         if get_origin(item) is Annotated:

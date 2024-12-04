@@ -493,12 +493,6 @@ def test_type_mapping_cleanup(dg: DependencyGraph):
     assert Interface not in dg.type_registry or not dg.type_registry[Interface]
 
 
-def test_node_factory(dg: DependencyGraph):
-    factory = dg.factory(UserService, use_async=False)
-    assert callable(factory)
-    assert isinstance(factory(), UserService)
-
-
 @pytest.mark.asyncio
 async def test_graph_without_static_resolve(dg: DependencyGraph):
     # This test specifically needs a new dag instance
@@ -525,17 +519,6 @@ async def test_graph_without_static_resolve(dg: DependencyGraph):
         await dg.aresolve(UserRepository, 1, 2)
 
     await dg.aresolve(UserRepository, db="asdf")
-
-
-def test_graph_factory_partial(dg: DependencyGraph):
-    factory = dg.factory(UserService, use_async=False)
-    assert isinstance(factory(), UserService)
-
-
-@pytest.mark.asyncio
-async def test_async_graph_factory(dg: DependencyGraph):
-    factory = dg.factory(UserService, use_async=True)
-    assert isinstance(await factory(), UserService)
 
 
 def test_graph_replace_node(dg: DependencyGraph):

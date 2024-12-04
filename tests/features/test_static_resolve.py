@@ -152,11 +152,6 @@ async def test_static_resolve_a_factory(dg: DependencyGraph):
     db = dg.resolve(db_factory)
     assert db.engine == "test"
 
-    f = dg.factory(db_factory, use_async=False)
-    db2 = f()
-    assert db2.engine == "test"
-    assert db is db2
-
     len(dg.type_registry)
 
     dg.resolve(DataBase)
