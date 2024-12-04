@@ -4,8 +4,7 @@ from ididi import DependencyGraph, entry, inject
 from tests.test_data import UserService
 
 
-def get_user_service(dg: DependencyGraph) -> UserService:
-    assert isinstance(dg, DependencyGraph)
+def get_user_service() -> UserService:
     return UserService(1, 2)
 
 
@@ -23,7 +22,7 @@ async def test_inject_entry():
 
 async def deep_nested(
     service: Annotated[
-        float,
+        UserService,
         "something",
         Annotated[str, "random", Annotated[UserService, inject(get_user_service)]],
     ]
@@ -37,3 +36,15 @@ async def deep_nested(
 async def test_nested_annt_entry():
     f = entry(deep_nested)
     assert await f() == "aloha"
+
+
+class AuthService: ...
+
+
+def get_auth(user: Annotated[UserService, "random"]) -> AuthService:
+    return AuthService()
+
+
+def test_random_annotated():
+    dg = DependencyGraph()
+    dg.resolve(get_auth)

@@ -200,6 +200,19 @@ def resolve_inject(annotation: Any):
             return meta[i - 1]
 
 
+def resolve_annotated(
+    name: str, ptype: Annotated[Any, Any]
+) -> Union[tuple[str, type], None]:
+    if get_origin(ptype) is not Annotated:
+        return None
+
+    if inject_node := (resolve_inject(ptype)):
+        return (name, inject_node.dependent_type)
+    else:
+        base_type = get_args(ptype)[0]
+        return (name, base_type)
+
+
 def get_bases(dependent: type) -> tuple[type, ...]:
     if issubclass(dependent, Protocol):
         # -3 excludes Protocol, Gener, object

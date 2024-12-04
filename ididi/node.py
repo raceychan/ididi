@@ -38,6 +38,7 @@ from ._type_resolve import (
     is_class_or_method,
     is_class_with_empty_init,
     is_unresolved_type,
+    resolve_annotated,
     resolve_annotation,
     resolve_factory_return,
     resolve_forwardref,
@@ -346,7 +347,13 @@ class DependentNode(Generic[T]):
             if param_name in ignores or param_type in ignores:
                 continue
 
-            if is_provided(default) and get_origin(default) is not Annotated:
+            if is_provided(default):
+                if param_tuple := (resolve_annotated(param_name, default)):
+                    yield param_tuple
+                continue
+
+            if param_tuple := (resolve_annotated(param_name, param_type)):
+                yield param_tuple
                 continue
 
             yield (param_name, param_type)
@@ -484,5 +491,5 @@ def inject(
     ```
     """
     node = DependentNode[T].from_node(factory, config=NodeConfig(**iconfig))
-    annt = Annotated[T, node, IDIDI_INJECT_RESOLVE_MARK]
+    annt = Annotated[node.dependent_type, node, IDIDI_INJECT_RESOLVE_MARK]
     return cast(T, annt)

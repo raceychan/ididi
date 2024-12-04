@@ -46,6 +46,7 @@ from ._type_resolve import (
     is_context_manager,
     is_function,
     is_unresolved_type,
+    resolve_annotated,
     resolve_annotation,
     resolve_factory,
     resolve_inject,
@@ -514,78 +515,6 @@ class DependencyGraph:
         # Register type mappings
         self._type_registry.register(dependent_type)
 
-    def static_resolve_dfs(
-        self,
-        dependent_factory: INode[P, T],
-        current_path: list[type],
-        config: Maybe[NodeConfig] = MISSING,
-    ) -> DependentNode[T]:
-        if is_class(dependent_factory):
-            dependent = cast(type, dependent_factory)
-        else:
-            dependent = resolve_factory(dependent_factory)
-            # statically resolve a unnoded factory function
-            if (dependent) not in self.nodes:
-                factory = cast(INodeFactory[P, T], dependent_factory)
-                node = DependentNode[T].from_factory(
-                    factory=factory, config=NodeConfig()
-                )
-                self.register_node(node)
-
-        current_path.append(dependent)
-
-        if dependent in self._resolved_nodes:
-            return self._resolved_nodes[dependent]
-
-        node = self._resolve_concrete_node(dependent, config)
-        is_partial = node.config.partial
-
-        for param in node.actualized_params():
-            param_type = param.param_type
-            if param_type in current_path:
-                i = current_path.index(param_type)
-                cycle = current_path[i:] + [param_type]
-                raise CircularDependencyDetectedError(cycle)
-            if sub_node := self._nodes.get(param_type):
-                if sub_node.config.reuse:
-                    continue
-                for n in current_path:
-                    parent_config = self._nodes[n].config
-                    if parent_config.reuse:
-                        raise ReusabilityConflictError(current_path, param_type)
-                continue
-            if inject_node := (
-                resolve_inject(param_type) or resolve_inject(param.default)
-            ):
-                dep_node = cast(DependentNode[Any], inject_node)
-                self.register_node(dep_node)
-                self._resolved_nodes[param_type] = dep_node
-                continue
-            if is_provided(param.default):
-                continue
-            if param.unresolvable:
-                if is_partial:
-                    continue
-                raise UnsolvableDependencyError(
-                    dep_name=param.name,
-                    required_type=param.param_type,
-                    factory=node.factory,
-                )
-
-            try:
-                dep_node = self.static_resolve_dfs(param_type, current_path)
-            except UnsolvableNodeError as une:
-                une.add_context(node.dependent_type, param.name, param.param_annotation)
-                raise
-
-            self.register_node(dep_node)
-            self._resolved_nodes[param_type] = dep_node
-
-        node.check_for_resolvability()
-        self._resolved_nodes[dependent] = node
-        current_path.pop()
-        return node
-
     def static_resolve(
         self,
         dependent: INode[P, T],
@@ -602,7 +531,81 @@ class DependencyGraph:
 
         current_path: list[type] = []
 
-        return self.static_resolve_dfs(dependent, current_path, resolve_node_config)
+        def dfs(dependent_factory: INode[P, T]) -> DependentNode[T]:
+            if is_class(dependent_factory):
+                dependent = cast(type, dependent_factory)
+            else:
+                dependent = resolve_factory(dependent_factory)
+                # statically resolve a unnoded factory function
+                if (dependent) not in self.nodes:
+                    factory = cast(INodeFactory[P, T], dependent_factory)
+                    node = DependentNode[T].from_factory(
+                        factory=factory, config=NodeConfig()
+                    )
+                    self.register_node(node)
+
+            current_path.append(dependent)
+
+            if dependent in self._resolved_nodes:
+                return self._resolved_nodes[dependent]
+
+            node = self._resolve_concrete_node(dependent, resolve_node_config)
+            is_partial = node.config.partial
+
+            for param in node.actualized_params():
+                param_type = param.param_type
+                if param_type in current_path:
+                    i = current_path.index(param_type)
+                    cycle = current_path[i:] + [param_type]
+                    raise CircularDependencyDetectedError(cycle)
+                if sub_node := self._nodes.get(param_type):
+                    if sub_node.config.reuse:
+                        continue
+                    for n in current_path:
+                        parent_config = self._nodes[n].config
+                        if parent_config.reuse:
+                            raise ReusabilityConflictError(current_path, param_type)
+                    continue
+
+                if inject_node := (
+                    resolve_inject(param_type) or resolve_inject(param.default)
+                ):
+                    dep_node = cast(DependentNode[Any], inject_node)
+                    self.register_node(dep_node)
+                    self._resolved_nodes[param_type] = dep_node
+                    continue
+
+                if is_provided(param.default):
+                    continue
+                if param.unresolvable:
+                    if is_partial:
+                        continue
+                    raise UnsolvableDependencyError(
+                        dep_name=param.name,
+                        required_type=param.param_type,
+                        factory=node.factory,
+                    )
+
+                if param_tuple := resolve_annotated(param.name, param_type):
+                    _, param_type = param_tuple
+
+                try:
+                    dep_node = dfs(param_type)
+                except UnsolvableNodeError as une:
+                    une.add_context(
+                        node.dependent_type, param.name, param.param_annotation
+                    )
+                    raise
+
+                self.register_node(dep_node)
+                self._resolved_nodes[param_type] = dep_node
+
+            node.check_for_resolvability()
+            self._resolved_nodes[dependent] = node
+            current_path.pop()
+            return node
+
+        return dfs(dependent)
 
     @overload
     def use_scope(
