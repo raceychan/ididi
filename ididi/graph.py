@@ -853,12 +853,10 @@ class DependencyGraph:
                     for param_name, param_type in unresolved:
                         if param_name in kwargs:
                             continue
-
                         resolved = await scope.resolve(param_type)
                         kwargs[param_name] = resolved
 
-                    res = sig.bind(*args, **kwargs).arguments
-                    r = await async_func(**res)
+                    r = await async_func(*args, **kwargs)
                     return r
 
             return _awrapper
@@ -871,12 +869,10 @@ class DependencyGraph:
                     for param_name, param_type in unresolved:
                         if param_name in kwargs:
                             continue
-
                         resolved = scope.resolve(param_type)
                         kwargs[param_name] = resolved
 
-                    res = sig.bind(*args, **kwargs).arguments
-                    r = sync_func(**res)
+                    r = sync_func(*args, **kwargs)
                     return r
 
             return _wrapper
