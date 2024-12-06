@@ -110,7 +110,9 @@ async def test_dg_entry_with_ignore():
     dg = DependencyGraph()
 
     @dg.entry(ignore=(CreateUser,))
-    async def func4(service: NotificationService, cmd: CreateUser) -> str:
+    async def func4(
+        service: NotificationService, cmd: CreateUser, *, name: str = "test"
+    ) -> str:
         return cmd.user_name
 
     cmd = CreateUser(user_name="1", user_email="2")

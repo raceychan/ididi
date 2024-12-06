@@ -3,7 +3,6 @@ import inspect
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from functools import lru_cache
-from inspect import Parameter
 from typing import (
     Annotated,
     Any,
@@ -14,7 +13,6 @@ from typing import (
     Generator,
     Generic,
     Iterator,
-    Sequence,
     Union,
     cast,
     get_origin,
@@ -25,6 +23,8 @@ from typing_extensions import Unpack
 from ._itypes import (
     EMPTY_SIGNATURE,
     INSPECT_EMPTY,
+    IFactory, 
+    IAsyncFactory,
     INode,
     INodeAnyFactory,
     INodeConfig,
@@ -33,6 +33,7 @@ from ._itypes import (
 )
 from ._type_resolve import (
     IDIDI_INJECT_RESOLVE_MARK,
+    FactoryType,
     get_typed_signature,
     is_class,
     is_class_or_method,
@@ -198,8 +199,8 @@ class DependentSignature(Generic[T]):
 
     def generate_signature(self) -> inspect.Signature:
         """
-        generate signature based on current params, as we might need to actualize
-        forwardref params when bind params
+        dynamically generate signature based on current params,
+        as we might need to actualize forwardref params when bind params
         """
         return inspect.Signature(
             parameters=[p.param for p in self.dprams.values()],
@@ -213,41 +214,45 @@ class DependentSignature(Generic[T]):
         bound_args = sig.bind_partial(**resolved_args)
         return bound_args
 
+    @classmethod
+    def from_signature(
+        cls,
+        dependent: type[T],
+        factory: INodeFactory[P, T],
+        signature: inspect.Signature,
+    ):
+        params = tuple(signature.parameters.values())
+
+        if is_class_or_method(factory):
+            params = params[1:]  # skip 'self'
+
+        dep_params: dict[str, DependencyParam[Any]] = {}
+
+        for param in params:
+            param_annotation = param.annotation
+            if param_annotation is INSPECT_EMPTY:
+                e = MissingAnnotationError(param.name, dependent)
+                e.add_context(dependent, param.name, type(MISSING))
+                raise e
+
+            if param.default == INSPECT_EMPTY:
+                default = MISSING
+            else:
+                default = param.default
+
+            dep_param = DependencyParam(
+                name=param.name,
+                param=param,
+                param_annotation=param_annotation,
+                param_type=resolve_annotation(param_annotation),
+                default=default,
+            )
+            dep_params[param.name] = dep_param
+
+        return cls(dprams=dep_params, dependent=dependent)
+
 
 # ======================= Node =====================================
-
-
-def _create_sig(
-    *, dependent: type[T], params: Sequence[Parameter], config: NodeConfig
-) -> DependentSignature[T]:
-    """
-    Create a signature for a dependent type.
-    """
-
-    dep_params: dict[str, DependencyParam[Any]] = {}
-
-    for param in params:
-        param_annotation = param.annotation
-        if param_annotation is INSPECT_EMPTY:
-            e = MissingAnnotationError(param.name, dependent)
-            e.add_context(dependent, param.name, type(MISSING))
-            raise e
-
-        if param.default == INSPECT_EMPTY:
-            default = MISSING
-        else:
-            default = param.default
-
-        dep_param = DependencyParam(
-            name=param.name,
-            param=param,
-            param_annotation=param_annotation,
-            param_type=resolve_annotation(param_annotation),
-            default=default,
-        )
-        dep_params[param.name] = dep_param
-
-    return DependentSignature(dprams=dep_params, dependent=dependent)
 
 
 class DependentNode(Generic[T]):
@@ -289,20 +294,20 @@ class DependentNode(Generic[T]):
     whether this node is reusable, default is True
     """
 
-    __slots__ = ("_dependent", "factory", "signature", "config")
-
-    # factory_type: Literal["default", "resource", "async_resource"]
+    __slots__ = ("_dependent", "factory", "factory_type", "signature", "config")
 
     def __init__(
         self,
         *,
         dependent: Dependent[T],
         factory: INodeAnyFactory[T],
+        factory_type: FactoryType,
         signature: DependentSignature[T],
         config: NodeConfig,
     ):
         self._dependent = dependent
         self.factory = factory
+        self.factory_type: FactoryType = factory_type
         self.signature = signature
         self.config = config
 
@@ -337,7 +342,7 @@ class DependentNode(Generic[T]):
             yield param
 
     def unsolved_params(
-        self, ignore: tuple[str, ...]
+        self, ignore: tuple[Union[str, type], ...]
     ) -> Generator[tuple[str, type], None, None]:
         ignores = self.config.ignore + ignore
         for param_name, dpram in self.signature:
@@ -383,21 +388,17 @@ class DependentNode(Generic[T]):
         *,
         dependent: type[T],
         factory: INodeFactory[P, T],
+        factory_type: FactoryType,
         signature: inspect.Signature,
         config: NodeConfig,
     ) -> "DependentNode[T]":
-        params = tuple(signature.parameters.values())
-
-        if is_class_or_method(factory):
-            params = params[1:]  # skip 'self'
-
-        dpram_sig = _create_sig(dependent=dependent, params=params, config=config)
-
         dep = Dependent(dependent_type=dependent)
+        sig = DependentSignature[T].from_signature(dependent, factory, signature)
         node = DependentNode(
             dependent=dep,
             factory=factory,
-            signature=dpram_sig,
+            factory_type=factory_type,
+            signature=sig,
             config=config,
         )
         return node
@@ -409,18 +410,21 @@ class DependentNode(Generic[T]):
         factory: INodeFactory[P, T],
         config: NodeConfig,
     ) -> "DependentNode[T]":
+        factory_type = "resource"
         if inspect.isgeneratorfunction(factory):
             f = contextmanager(factory)
         elif inspect.isasyncgenfunction(factory):
             f = asynccontextmanager(factory)
         else:
             f = factory
+            factory_type = "function"
 
         signature = get_typed_signature(f, check_return=True)
         dependent: type[T] = resolve_factory_return(signature.return_annotation)
         node = cls.create(
             dependent=dependent,
             factory=cast(INodeFactory[P, T], f),
+            factory_type=factory_type,
             signature=signature,
             config=config,
         )
@@ -438,14 +442,35 @@ class DependentNode(Generic[T]):
             return cls.create(
                 dependent=dependent,
                 factory=dependent,
+                factory_type="default",
                 signature=EMPTY_SIGNATURE,
                 config=config,
             )
 
         signature = get_factory_sig_from_cls(dependent)
         return cls.create(
-            dependent=dependent, factory=dependent, signature=signature, config=config
+            dependent=dependent,
+            factory=dependent,
+            factory_type="default",
+            signature=signature,
+            config=config,
         )
+
+    @classmethod
+    def from_entry(cls, *, func: Union[IFactory[P, T], IAsyncFactory[P, T]], config: NodeConfig):
+        entry_type = type(f"entry_node_{func.__name__}", (object,), {})
+        dep = cast(type[T], entry_type)
+        sig = get_typed_signature(func)
+
+        # directly create node without DependecyGraph.node, use func as factory
+        node = DependentNode[T].create(
+            dependent=dep,
+            factory=func,
+            factory_type="function",
+            signature=sig,
+            config=config,
+        )
+        return node
 
     @classmethod
     @lru_cache(maxsize=1000)
@@ -493,3 +518,10 @@ def inject(
     node = DependentNode[T].from_node(factory, config=NodeConfig(**iconfig))
     annt = Annotated[node.dependent_type, node, IDIDI_INJECT_RESOLVE_MARK]
     return cast(T, annt)
+
+
+# class Ignore(Generic[T]):
+#     """
+#     def func(command: Ignore[CreateUser]): ...
+#     """
+#     ...

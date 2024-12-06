@@ -8,7 +8,6 @@ from typing import (
     Generator,
     Protocol,
     TypedDict,
-    TypeVar,
     Union,
     overload,
     runtime_checkable,
@@ -42,17 +41,15 @@ INodeFactory = Union[
 ]
 INode = Union[INodeFactory[P, R], type[R]]
 
-P1 = TypeVar("P1")
-P2 = TypeVar("P2")
-P3 = TypeVar("P3")
-P4 = TypeVar("P4")
-P5 = TypeVar("P5")
-P6 = TypeVar("P6")
-P7 = TypeVar("P7")
-P8 = TypeVar("P8")
-P9 = TypeVar("P9")
-
-
+# P1 = TypeVar("P1")
+# P2 = TypeVar("P2")
+# P3 = TypeVar("P3")
+# P4 = TypeVar("P4")
+# P5 = TypeVar("P5")
+# P6 = TypeVar("P6")
+# P7 = TypeVar("P7")
+# P8 = TypeVar("P8")
+# P9 = TypeVar("P9")
 
 
 # Factory with many type params
@@ -112,7 +109,6 @@ class NodeConfig:
     __slots__ = ("reuse", "lazy", "partial", "ignore")
 
     ignore: tuple[Union[str, type], ...]
-    # should be a set? but tuple is more performant with small num of ignores
 
     def __init__(
         self,

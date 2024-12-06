@@ -32,6 +32,7 @@ class BaseRegistry:
     """Base registry class with common functionali"""
 
     _mappings: dict[type, Any]
+    __slots__ = ("_mappings",)
 
     def __len__(self) -> int:
         return len(self._mappings)
@@ -76,7 +77,7 @@ class TypeRegistry(BaseRegistry):
 
 
 class ResolutionRegistry(BaseRegistry):
-    __slots__ = "_mappings"
+    __slots__ = ("_mappings",)
 
     def __init__(self):
         self._mappings: ResolvedInstances[Any] = {}
@@ -111,6 +112,8 @@ class ResolutionRegistry(BaseRegistry):
 
 
 class Visitor:
+    __slots__ = ("_nodes",)
+
     def __init__(self, nodes: GraphNodes[Any]):
         self._nodes = nodes
 

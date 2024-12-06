@@ -1,7 +1,7 @@
 import inspect
 from contextlib import AsyncExitStack, ExitStack
 from contextvars import ContextVar, Token
-from functools import partial
+from functools import partial, wraps
 from types import MappingProxyType, TracebackType
 from typing import (
     Any,
@@ -40,6 +40,7 @@ from ._itypes import (
     TEntryDecor,
 )
 from ._type_resolve import (
+    ResolveOrder,
     get_typed_signature,
     is_async_context_manager,
     is_class,
@@ -72,20 +73,22 @@ Stack = TypeVar("Stack", ExitStack, AsyncExitStack)
 
 
 class AbstractScope(Generic[Stack]):
+    __slots__ = ("_graph", "_stack", "_name", "_pre", "_resolution_registry")
+
     _stack: Stack
     _graph: "DependencyGraph"
     _name: Hashable
     _pre: Maybe[Union["SyncScope", "AsyncScope"]]
-    _resolutions: ResolutionRegistry
+    _resolution_registry: ResolutionRegistry
 
     def __repr__(self):
         return f"{self.__class__.__name__}(id={self._name})"
 
     def cache_result(self, dependent: IEmptyFactory[T], result: T) -> None:
-        self._resolutions.register(dependent, result)
+        self._resolution_registry.register(dependent, result)
 
     def get_cached(self, dependent: IEmptyFactory[T]) -> Maybe[T]:
-        return self._resolutions.get(dependent)
+        return self._resolution_registry.get(dependent)
 
     def enter_context(self, context: ContextManager[T]) -> T:
         return self._stack.enter_context(context)
@@ -111,11 +114,11 @@ class AbstractScope(Generic[Stack]):
         """
 
         dependent_type = dependent_type or type(dependent)
-        self._resolutions.register(dependent_type, dependent)
+        self._resolution_registry.register(dependent_type, dependent)
 
 
 class SyncScope(AbstractScope[ExitStack]):
-    __slots__ = ("_graph", "_stack", "_name", "_pre", "resolutions")
+    __slots__ = ("_graph", "_stack", "_name", "_pre", "_resolution_registry")
 
     def __init__(
         self,
@@ -128,7 +131,7 @@ class SyncScope(AbstractScope[ExitStack]):
         self._name = name
         self._pre = pre
         self._stack = ExitStack()
-        self._resolutions = ResolutionRegistry()
+        self._resolution_registry = ResolutionRegistry()
 
     def __enter__(self) -> "SyncScope":
         return self
@@ -171,7 +174,7 @@ class SyncScope(AbstractScope[ExitStack]):
 
 
 class AsyncScope(AbstractScope[AsyncExitStack]):
-    __slots__ = ("_graph", "_stack", "_name", "_pre", "resolutions")
+    __slots__ = ("_graph", "_stack", "_name", "_pre", "_resolution_registry")
 
     def __init__(
         self,
@@ -184,7 +187,7 @@ class AsyncScope(AbstractScope[AsyncExitStack]):
         self._name = name
         self._pre = pre
         self._stack = AsyncExitStack()
-        self._resolutions = ResolutionRegistry()
+        self._resolution_registry = ResolutionRegistry()
 
     async def __aenter__(self) -> "AsyncScope":
         return self
@@ -231,7 +234,7 @@ class AsyncScope(AbstractScope[AsyncExitStack]):
 class ScopeProxy:
     _scope: Maybe[Union[SyncScope, AsyncScope]]
 
-    __slots__ = ("_graph", "_scope", "_token", "_name", "_pre")
+    __slots__ = ("_graph", "_scope", "_token", "_name")
 
     def __init__(self, graph: "DependencyGraph", name: Maybe[Hashable] = MISSING):
         self._graph = graph
@@ -302,8 +305,9 @@ class DependencyGraph:
         self._config = GraphConfig(self_inject=self_inject)
         self._nodes: GraphNodes[Any] = {}
         self._resolved_nodes: GraphNodes[Any] = {}
-        self._resolution_registry = ResolutionRegistry()
         self._type_registry = TypeRegistry()
+
+        self._resolution_registry = ResolutionRegistry()
         self._scope_context = ContextVar[Union[SyncScope, AsyncScope]](
             "connection_context"
         )
@@ -336,11 +340,8 @@ class DependencyGraph:
         self._resolution_registry.register(dependent_type, dependent)
 
     def static_resolve_all(self) -> None:
-        nodes = self._nodes.copy()
-
-        for node_type in nodes:
-            if node_type in self._resolved_nodes:
-                continue
+        unsolved_nodes: set[type] = self._nodes.keys() - self._resolved_nodes.keys()
+        for node_type in unsolved_nodes:
             self.static_resolve(node_type)
 
     @property
@@ -384,17 +385,29 @@ class DependencyGraph:
         else:
             others = other
 
+        """
+        NOTE: more to consider, e.g:
+        dependent factory should not be override by dependent defaultult constructor
+        """
+
         for other in others:
-            self._nodes.update(other.nodes)
-            self._resolved_nodes.update(other._resolved_nodes)
-            self._resolution_registry.update(other._resolution_registry)
-            self._type_registry.update(other._type_registry)
             try:
                 other._scope_context.get()
             except LookupError:
                 pass
             else:
                 raise MergeWithScopeStartedError()
+
+            # TODO: resolve order
+            """
+            for node in other.nodes:
+                ...
+            """
+
+            self._nodes.update(other.nodes)
+            self._resolved_nodes.update(other._resolved_nodes)
+            self._resolution_registry.update(other._resolution_registry)
+            self._type_registry.update(other._type_registry)
 
         self._visitor = Visitor(self._nodes)
 
@@ -635,6 +648,20 @@ class DependencyGraph:
             return scope.get_scope(name)
         return scope
 
+    def get_resolve_cache(
+        self, dependent: IFactory[P, T], scope: Maybe[AbstractScope[Any]]
+    ) -> Maybe[T]:
+        if scope:
+            if not isinstance(cast(Any, scope), AbstractScope):
+                raise PositionalOverrideError(scope)
+            if is_provided(solution := scope.get_cached(dependent)):
+                return solution
+
+        if is_provided(solution := self._resolution_registry.get(dependent)):
+            return solution
+
+        return MISSING
+
     @overload
     def resolve(
         self,
@@ -668,42 +695,43 @@ class DependencyGraph:
         if args:
             raise PositionalOverrideError(args)
 
-        if scope:
-            if not isinstance(cast(Any, scope), AbstractScope):
-                raise PositionalOverrideError(args)
-            if is_provided(solution := scope.get_cached(dependent)):
-                return solution
-
-        if is_provided(solution := self._resolution_registry.get(dependent)):
-            return solution
+        if is_provided(resolution := self.get_resolve_cache(dependent, scope)):
+            return resolution
 
         node: DependentNode[T] = self.static_resolve(dependent)
-
-        current_config = node.config
+        node_config = node.config
 
         resolved_params: dict[str, Any] = overrides
 
         for param_name, param_type in node.unsolved_params(tuple(resolved_params)):
-            if current_config.lazy:
-                dep_node = self.static_resolve(param_type, current_config)
+            if node_config.lazy:
+                dep_node = self.static_resolve(param_type, node_config)
                 resolved_params[param_name] = self._create_lazy_dependent(dep_node)
             else:
                 resolved_params[param_name] = self.resolve(param_type, scope)
 
         resolved = node.inject_params(resolved_params)
 
+        is_reuse = node_config.reuse
+        if node.factory_type == "function":
+            instance = resolved
+            if is_reuse:
+                self._resolution_registry.register(dependent, instance)
+            return cast(T, instance)
+
+        # TODO?: avoid these is_context_manager call
         if is_context_manager(resolved):
             if not scope:
                 raise ResourceOutsideScopeError(node.dependent_type)
             instance = scope.enter_context(resolved)
-            if current_config.reuse:
+            if is_reuse:
                 scope.cache_result(dependent, instance)
         elif is_async_context_manager(resolved):
             raise AsyncResourceInSyncError(resolved)
         else:
-            if current_config.reuse:
-                self._resolution_registry.register(dependent, resolved)
             instance = resolved
+            if is_reuse:
+                self._resolution_registry.register(dependent, instance)
         return cast(T, instance)
 
     async def aresolve(
@@ -721,17 +749,10 @@ class DependencyGraph:
         if args:
             raise PositionalOverrideError(args)
 
-        if scope:
-            if not isinstance(cast(Any, scope), AbstractScope):
-                raise PositionalOverrideError(args)
-            if is_provided(solution := scope.get_cached(dependent)):
-                return solution
-
-        if is_provided(solution := self._resolution_registry.get(dependent)):
-            return solution
+        if is_provided(resolution := self.get_resolve_cache(dependent, scope)):
+            return resolution
 
         node: DependentNode[T] = self.static_resolve(dependent)
-        is_reuse = node.config.reuse
 
         resolved_params: dict[str, Any] = overrides
 
@@ -740,22 +761,17 @@ class DependencyGraph:
 
         resolved = node.inject_params(resolved_params)
 
-        # """
-        # if user provide a factory that returns a AsyncContextManager obj
-        # we should not enter scope
+        is_reuse = node.config.reuse
+        if node.factory_type == "function":
+            if inspect.isawaitable(resolved):
+                # should only happens with entry
+                instance = await resolved
+            else:
+                instance = resolved
 
-        # def service_factory() -> Service:
-        #     return Service()
-
-        # if node.factory_type == "async_function":
-        #     return await resolved
-        # elif node.factory == "resource"
-        #     ...
-        # elif node.factory == "async_resource":
-        #     ...
-        # else:
-        #     return resolved
-        # """
+            if is_reuse:
+                self._resolution_registry.register(dependent, instance)
+            return cast(T, instance)
 
         if is_async_context_manager(resolved):
             if not scope:
@@ -770,13 +786,10 @@ class DependencyGraph:
             if is_reuse:
                 scope.cache_result(dependent, instance)
         else:
-            if inspect.isawaitable(resolved):
-                instance = await resolved
-            else:
-                instance = resolved
-
+            instance = resolved
             if is_reuse:
                 self._resolution_registry.register(dependent, instance)
+
         return cast(T, instance)
 
     @overload
@@ -793,43 +806,63 @@ class DependencyGraph:
         **iconfig: Unpack[INodeConfig],
     ) -> Union[Callable[..., Union[T, Awaitable[T]]], TEntryDecor]:
         """
-        TODO:
-        1. add more generic vars to func, enhance typing support
-        checkout https://github.com/dbrattli/Expression/blob/main/expression/core/pipe.py
+        NOTE: Positional only dependency is not supported, e.g.
+        @entry
+        async def func(email_sender: EmailSender, /):
+            ...
+        This would raise Error
         """
+        # TODO:
+        # 1. add more generic vars to func, enhance typing support
+        # checkout https://github.com/dbrattli/Expression/blob/main/expression/core/pipe.py
+
         if not func:
             configured = cast(TEntryDecor, partial(self.entry, **iconfig))
             return configured
 
-        def func_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-            with self.scope() as scope:
-                r = self.resolve(dep, scope, *args, **kwargs)
-                return r
+        default_config = INodeConfig(reuse=False, partial=True)
+        config = NodeConfig(**(default_config | iconfig))
 
-        async def async_func_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-            async with self.scope() as scope:
-                r = await self.aresolve(dep, scope, *args, **kwargs)
-                return cast(T, r)
-
-        entry_type = type(f"entry_node_{func.__name__}", (object,), {})
-        dep = cast(type[T], entry_type)
         sig = get_typed_signature(func)
 
         # directly create node without DependecyGraph.node, use func as factory
-        default_config = INodeConfig(reuse=False, partial=True) | iconfig
-        config = NodeConfig(**default_config)
-        node = DependentNode[T].create(
-            dependent=dep, factory=func, signature=sig, config=config
-        )
-
+        node = DependentNode[T].from_entry(func=func, config=config)
+        dep_type = node.dependent_type
         self.register_node(node)
+        self.static_resolve(dep_type, config)
+
+        @wraps(func)
+        def _wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+            with self.scope() as scope:
+                resolved_params: dict[str, Any] = {}
+                ignore = config.ignore + tuple(kwargs)
+                for param_name, param_type in node.unsolved_params(ignore):
+                    resolved = scope.resolve(param_type)
+                    resolved_params[param_name] = resolved
+
+                kwargs.update(resolved_params)
+                res = sig.bind(*args, **kwargs).arguments
+                r = self.resolve(dep_type, scope, **res)
+                return r
+
+        @wraps(func)
+        async def _awrapper(*arg_overrides: P.args, **kw_overrides: P.kwargs) -> T:
+            async with self.scope() as scope:
+                resolved_params: dict[str, Any] = {}
+                ignore = config.ignore + tuple(kw_overrides)
+                for param_name, param_type in node.unsolved_params(ignore):
+                    resolved = await scope.resolve(param_type)
+                    resolved_params[param_name] = resolved
+
+                kw_overrides.update(resolved_params)
+                res = sig.bind(*arg_overrides, **kw_overrides).arguments
+                r = await self.aresolve(dep_type, scope, **res)
+                return cast(T, r)
 
         if inspect.iscoroutinefunction(func):
-            f = async_func_wrapper
+            return _awrapper
         else:
-            f = func_wrapper
-
-        return f
+            return _wrapper
 
     @overload
     def node(self, factory_or_class: type[T]) -> type[T]: ...

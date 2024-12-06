@@ -15,6 +15,7 @@ from typing import (
     Callable,
     ContextManager,
     ForwardRef,
+    Literal,
     Protocol,
     TypeVar,
     Union,
@@ -37,6 +38,18 @@ SyncResource = Union[ContextManager[Any], Closable]
 AsyncResource = Union[AsyncContextManager[Any], AsyncClosable]
 
 IDIDI_INJECT_RESOLVE_MARK = "__ididi_node_mark__"
+
+FactoryType = Literal["default", "function", "resource"]
+# carry this information in node so that resolve does not have to do
+# iscontextmanager check
+
+ResolveOrder: dict[FactoryType, int] = {
+    "default": 1,
+    "function": 2,
+    "resource": 3,
+}
+# when merge graphs we need to make sure a node with default constructor
+# does not override a node with resource
 
 
 P = ParamSpec("P")

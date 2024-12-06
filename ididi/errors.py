@@ -53,7 +53,7 @@ class PositionalOverrideError(NodeResolveError):
     Raised when a positional override is used.
     """
 
-    def __init__(self, args: tuple[Any, ...]):
+    def __init__(self, args: Any):
         super().__init__(
             f"Positional overrides {args} are not supported, use keyword arguments instead"
         )
@@ -113,7 +113,7 @@ class UnsolvableDependencyError(UnsolvableParameterError):
         factory: Union[Callable[..., Any], type],
         required_type: type,
     ):
-        self.message = f"Unable to resolve dependency for parameter: {dep_name} in {factory}, value of {required_type} must be provided"
+        self.message = f"Unable to resolve dependency for parameter in {factory}, value of `{dep_name}: {required_type}` must be provided"
         super().__init__(self.message)
 
 

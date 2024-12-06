@@ -408,3 +408,7 @@ NodeConfig:
     whether to treat resource as a regular object 
     without managing its lifecycle
 ```
+
+- factory_type
+- factory override order
+- adding support for `dg.entry`, now support positional argument.
