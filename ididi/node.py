@@ -23,8 +23,6 @@ from typing_extensions import Unpack
 from ._itypes import (
     EMPTY_SIGNATURE,
     INSPECT_EMPTY,
-    IFactory, 
-    IAsyncFactory,
     INode,
     INodeAnyFactory,
     INodeConfig,
@@ -455,22 +453,6 @@ class DependentNode(Generic[T]):
             signature=signature,
             config=config,
         )
-
-    @classmethod
-    def from_entry(cls, *, func: Union[IFactory[P, T], IAsyncFactory[P, T]], config: NodeConfig):
-        entry_type = type(f"entry_node_{func.__name__}", (object,), {})
-        dep = cast(type[T], entry_type)
-        sig = get_typed_signature(func)
-
-        # directly create node without DependecyGraph.node, use func as factory
-        node = DependentNode[T].create(
-            dependent=dep,
-            factory=func,
-            factory_type="function",
-            signature=sig,
-            config=config,
-        )
-        return node
 
     @classmethod
     @lru_cache(maxsize=1000)

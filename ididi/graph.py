@@ -39,8 +39,7 @@ from ._itypes import (
     TDecor,
     TEntryDecor,
 )
-from ._type_resolve import (
-    ResolveOrder,
+from ._type_resolve import (  # ResolveOrder,
     get_typed_signature,
     is_async_context_manager,
     is_class,
@@ -763,11 +762,7 @@ class DependencyGraph:
 
         is_reuse = node.config.reuse
         if node.factory_type == "function":
-            if inspect.isawaitable(resolved):
-                # should only happens with entry
-                instance = await resolved
-            else:
-                instance = resolved
+            instance = resolved
 
             if is_reuse:
                 self._resolution_registry.register(dependent, instance)
@@ -815,6 +810,7 @@ class DependencyGraph:
         # TODO:
         # 1. add more generic vars to func, enhance typing support
         # checkout https://github.com/dbrattli/Expression/blob/main/expression/core/pipe.py
+        # 2. add `Dependency.resolve_entry`
 
         if not func:
             configured = cast(TEntryDecor, partial(self.entry, **iconfig))
@@ -826,42 +822,57 @@ class DependencyGraph:
         sig = get_typed_signature(func)
 
         # directly create node without DependecyGraph.node, use func as factory
-        node = DependentNode[T].from_entry(func=func, config=config)
-        dep_type = node.dependent_type
+        entry_type = type(f"entry_node_{func.__name__}", (object,), {})
+        dependent = cast(type[T], entry_type)
+
+        # directly create node without DependecyGraph.node, use func as factory
+        node = DependentNode[T].create(
+            dependent=dependent,
+            factory=func,
+            factory_type="function",
+            signature=sig,
+            config=config,
+        )
         self.register_node(node)
-        self.static_resolve(dep_type, config)
-
-        @wraps(func)
-        def _wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-            with self.scope() as scope:
-                resolved_params: dict[str, Any] = {}
-                ignore = config.ignore + tuple(kwargs)
-                for param_name, param_type in node.unsolved_params(ignore):
-                    resolved = scope.resolve(param_type)
-                    resolved_params[param_name] = resolved
-
-                kwargs.update(resolved_params)
-                res = sig.bind(*args, **kwargs).arguments
-                r = self.resolve(dep_type, scope, **res)
-                return r
-
-        @wraps(func)
-        async def _awrapper(*arg_overrides: P.args, **kw_overrides: P.kwargs) -> T:
-            async with self.scope() as scope:
-                resolved_params: dict[str, Any] = {}
-                ignore = config.ignore + tuple(kw_overrides)
-                for param_name, param_type in node.unsolved_params(ignore):
-                    resolved = await scope.resolve(param_type)
-                    resolved_params[param_name] = resolved
-
-                kw_overrides.update(resolved_params)
-                res = sig.bind(*arg_overrides, **kw_overrides).arguments
-                r = await self.aresolve(dep_type, scope, **res)
-                return cast(T, r)
+        self.static_resolve(dependent, config)
 
         if inspect.iscoroutinefunction(func):
+            async_func: Callable[..., Awaitable[T]] = cast(
+                Callable[..., Awaitable[T]], func
+            )
+
+            @wraps(async_func)
+            async def _awrapper(*arg_overrides: P.args, **kw_overrides: P.kwargs) -> T:
+                async with self.scope() as scope:
+                    resolved_params: dict[str, Any] = {}
+                    ignore = config.ignore + tuple(kw_overrides)
+                    for param_name, param_type in node.unsolved_params(ignore):
+                        resolved = await scope.resolve(param_type)
+                        resolved_params[param_name] = resolved
+
+                    kw_overrides.update(resolved_params)
+                    res = sig.bind(*arg_overrides, **kw_overrides).arguments
+                    r = await async_func(**res)
+                    return r
+
             return _awrapper
         else:
+            sync_func: Callable[..., T] = cast(Callable[..., T], func)
+
+            @wraps(sync_func)
+            def _wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+                with self.scope() as scope:
+                    resolved_params: dict[str, Any] = {}
+                    ignore = config.ignore + tuple(kwargs)
+                    for param_name, param_type in node.unsolved_params(ignore):
+                        resolved = scope.resolve(param_type)
+                        resolved_params[param_name] = resolved
+
+                    kwargs.update(resolved_params)
+                    res = sig.bind(*args, **kwargs).arguments
+                    r = sync_func(**res)
+                    return r
+
             return _wrapper
 
     @overload
