@@ -5,9 +5,9 @@ import pytest
 
 from ididi import DependencyGraph
 
-from .test_data import CLASSES
+from .test_data import CLASSES, UserService, user_service_factory
 
-ROUNDS = 10
+ROUNDS = 1000
 
 
 @pytest.fixture
@@ -62,6 +62,38 @@ def test_resolve_instances(dg: DependencyGraph, dependents: list[type]):
     avg = round(total / ROUNDS, 6)
 
     print(f"\n{avg} seoncds to resolve {len(dependents)} instances")
+
+
+@pytest.mark.benchmark
+def test_entry(dg: DependencyGraph, dependents: list[type]):
+    rounds = ROUNDS * 100
+    dg.reset()
+
+    def create_user(user_name: str, user_email: str, service: UserService):
+        return "ok"
+
+    total = 0
+
+    for _ in range(rounds):
+        pre = perf_counter()
+        assert create_user("test", "email", user_service_factory()) == "ok"
+        aft = perf_counter()
+        cost = round(aft - pre, 12)
+        total += cost
+
+    print(f"\n{total} seoncds to call {create_user} {rounds} times")
+
+    create_user = dg.entry(create_user)
+
+    total = 0
+    for _ in range(rounds):
+        pre = perf_counter()
+        assert create_user("test", "email") == "ok"
+        aft = perf_counter()
+        cost = round(aft - pre, 6)
+        total += cost
+
+    print(f"\n{total} seoncds to call {create_user} as entry {rounds} times")
 
 
 """

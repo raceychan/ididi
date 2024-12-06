@@ -50,6 +50,16 @@ class UserService:
         self.auth = auth
 
 
+def user_service_factory():
+    config = Config()
+    db = Database(config=DatabaseConfig(config=config))
+    cache = Cache(config=CacheConfig(config))
+    logger = Logger(config=config)
+    return UserService(
+        db=db, auth=AuthenticationService(db=db, cache=cache, logger=logger)
+    )
+
+
 class ProfileService:
     def __init__(self, user_service: UserService, cache: Cache):
         pass

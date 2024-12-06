@@ -396,19 +396,10 @@ def get_service() -> Service:
     return Service()
 
 dg.resolve(get_service)
-        
-# we need to find a way to suppress this
-# might be we just do not throw an error?
-# 
-# or
-
-NodeConfig:
-    non_resource: bool
-    ---
-    whether to treat resource as a regular object 
-    without managing its lifecycle
 ```
 
 - factory_type
 - factory override order
 - adding support for `dg.entry`, now support positional argument.
+
+- `dg.entry`
