@@ -847,11 +847,15 @@ class DependencyGraph:
             if is_unresolved_type(param_type):
                 continue
 
+
             if inject_node := (
                 resolve_inject(param_type) or resolve_inject(param.default)
             ):
                 self.register_node(inject_node)
                 self._resolved_nodes[param_type] = inject_node
+
+            if param_tuple := resolve_annotated(param.name, param_type):
+                _, param_type = param_tuple
 
             self.static_resolve(param_type, config)
             unresolved.append((name, param_type))
