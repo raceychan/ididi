@@ -825,7 +825,6 @@ class DependencyGraph:
         sig = get_typed_signature(func)
 
         unresolved: list[tuple[str, type]] = []
-
         for name, param in sig.parameters.items():
             param_type = resolve_annotation(param.annotation)
             if name in config.ignore or param_type in config.ignore:
@@ -851,15 +850,13 @@ class DependencyGraph:
             @wraps(async_func)
             async def _awrapper(*args: P.args, **kwargs: P.kwargs) -> T:
                 async with self.scope() as scope:
-                    resolved_params: dict[str, Any] = {}
                     for param_name, param_type in unresolved:
                         if param_name in kwargs:
                             continue
 
                         resolved = await scope.resolve(param_type)
-                        resolved_params[param_name] = resolved
+                        kwargs[param_name] = resolved
 
-                    kwargs.update(resolved_params)
                     res = sig.bind(*args, **kwargs).arguments
                     r = await async_func(**res)
                     return r
@@ -871,15 +868,13 @@ class DependencyGraph:
             @wraps(sync_func)
             def _wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
                 with self.scope() as scope:
-                    resolved_params: dict[str, Any] = {}
                     for param_name, param_type in unresolved:
                         if param_name in kwargs:
                             continue
 
                         resolved = scope.resolve(param_type)
-                        resolved_params[param_name] = resolved
+                        kwargs[param_name] = resolved
 
-                    kwargs.update(resolved_params)
                     res = sig.bind(*args, **kwargs).arguments
                     r = sync_func(**res)
                     return r
