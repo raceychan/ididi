@@ -617,16 +617,28 @@ class DependencyGraph:
 
     @overload
     def use_scope(
-        self, name: Maybe[Hashable] = MISSING, *, as_async: Literal[False] = False
+        self,
+        name: Maybe[Hashable] = MISSING,
+        *,
+        create_on_miss: bool = False,
+        as_async: Literal[False] = False,
     ) -> SyncScope: ...
 
     @overload
     def use_scope(
-        self, name: Maybe[Hashable] = MISSING, *, as_async: Literal[True]
+        self,
+        name: Maybe[Hashable] = MISSING,
+        *,
+        create_on_miss: bool = False,
+        as_async: Literal[True],
     ) -> AsyncScope: ...
 
     def use_scope(
-        self, name: Maybe[Hashable] = MISSING, *, as_async: bool = False
+        self,
+        name: Maybe[Hashable] = MISSING,
+        *,
+        create_on_miss: bool = False,
+        as_async: bool = False,
     ) -> Union[SyncScope, AsyncScope]:
         """
         Get most recently created scope
@@ -637,6 +649,8 @@ class DependencyGraph:
         try:
             scope = self._scope_context.get()
         except LookupError as le:
+            if create_on_miss:
+                return cast(Union[SyncScope, AsyncScope], self.scope(name))
             raise OutOfScopeError() from le
 
         if is_provided(name):
@@ -849,7 +863,8 @@ class DependencyGraph:
 
             @wraps(async_func)
             async def _awrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-                async with self.scope() as scope:
+                context_scope = self.use_scope(create_on_miss=True, as_async=True)
+                async with context_scope as scope:
                     for param_name, param_type in unresolved:
                         if param_name in kwargs:
                             continue
@@ -865,7 +880,8 @@ class DependencyGraph:
 
             @wraps(sync_func)
             def _wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-                with self.scope() as scope:
+                context_scope = self.use_scope(create_on_miss=True, as_async=False)
+                with context_scope as scope:
                     for param_name, param_type in unresolved:
                         if param_name in kwargs:
                             continue
