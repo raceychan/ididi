@@ -400,6 +400,10 @@ dg.resolve(get_service)
 
 - factory_type
 - factory override order
-- adding support for `dg.entry`, now support positional argument.
 
-- `dg.entry`
+improvements on `entry`
+
+- `entry` now supports positional argument.
+- `entry` now would use current scope
+- 100% performance boost on `entry`
+- separate `INodeConfig` and `IEntryConfig`

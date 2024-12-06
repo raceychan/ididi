@@ -603,7 +603,7 @@ def test_partial_node(dg: DependencyGraph):
 
     dg.reset(clear_nodes=True)
 
-    dg.node(partial=True)(Sub)
+    dg.node(ignore=int)(Sub)
     dg.static_resolve(Sub)
     # assert dg.resolve(Sub, age=15).age == 15
     dg.resolve(Sub, age=15)

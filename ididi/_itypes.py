@@ -13,6 +13,7 @@ from typing import (
     runtime_checkable,
 )
 
+from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import P, R, T
 
 EMPTY_SIGNATURE = inspect.Signature()
@@ -80,7 +81,12 @@ class TEntryDecor(Protocol):
     def __call__(self, func: Callable[P, T]) -> Callable[..., T]: ...
 
 
-class INodeConfig(TypedDict, total=False):
+class IEntryConfig(TypedDict, total=False):
+    lazy: bool
+    ignore: Union[Union[str, type], tuple[Union[str, type], ...]]
+
+
+class INodeConfig(IEntryConfig, total=False):
     """
     reuse: bool
     ---
@@ -100,13 +106,13 @@ class INodeConfig(TypedDict, total=False):
     """
 
     reuse: bool
-    lazy: bool
-    partial: bool
-    ignore: tuple[Union[str, type], ...]
+
+
+
 
 
 class NodeConfig:
-    __slots__ = ("reuse", "lazy", "partial", "ignore")
+    __slots__ = ("reuse", "lazy", "ignore")
 
     ignore: tuple[Union[str, type], ...]
 
@@ -115,16 +121,31 @@ class NodeConfig:
         *,
         reuse: bool = True,
         lazy: bool = False,
-        partial: bool = False,
-        ignore: Union[tuple[Union[str, type], ...], None] = None,
+        ignore: Maybe[Union[Union[str, type], tuple[Union[str, type], ...]]] = MISSING,
     ):
-        self.reuse = reuse
         self.lazy = lazy
-        self.partial = partial
-        self.ignore = ignore or ()
+
+        if not is_provided(ignore):
+            ignore = tuple()
+        elif not isinstance(ignore, tuple):
+            ignore = (ignore,)
+
+        self.ignore = ignore
+        self.reuse = reuse
 
     def __repr__(self):
-        return f"{self.__class__.__name__}({self.reuse=}, {self.lazy=}, {self.partial=}, {self.ignore=})"
+        return f"{self.__class__.__name__}({self.reuse=}, {self.lazy=}, {self.ignore=})"
+
+class EntryConfig(NodeConfig):
+    __slots__ = ("lazy", "ignore", "reuse")
+
+    def __init__(
+        self,
+        *,
+        lazy: bool = False,
+        ignore: Maybe[Union[Union[str, type], tuple[Union[str, type], ...]]] = MISSING,
+    ):
+        super().__init__(reuse=False, lazy=lazy, ignore=ignore)
 
 
 class GraphConfig:

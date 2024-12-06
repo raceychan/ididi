@@ -22,6 +22,8 @@ from ._itypes import GraphConfig as GraphConfig
 from ._itypes import INode as INode
 from ._itypes import INodeConfig as INodeConfig
 from ._itypes import NodeConfig as NodeConfig
+from ._itypes import IEntryConfig as IEntryConfig
+from ._itypes import EntryConfig as EntryConfig
 from .api import entry as entry
 from .api import resolve as resolve
 from .graph import DependencyGraph as DependencyGraph

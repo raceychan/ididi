@@ -27,10 +27,12 @@ from typing_extensions import Self, Unpack
 from ._ds import GraphNodes, GraphNodesView, ResolutionRegistry, TypeRegistry, Visitor
 from ._itypes import (
     INSPECT_EMPTY,
+    EntryConfig,
     GraphConfig,
     IAnyFactory,
     IAsyncFactory,
     IEmptyFactory,
+    IEntryConfig,
     IFactory,
     INode,
     INodeConfig,
@@ -582,12 +584,9 @@ class DependencyGraph:
                     self.register_node(inject_node)
                     self._resolved_nodes[param_type] = inject_node
                     continue
-
                 if is_provided(param.default):
                     continue
                 if param.unresolvable:
-                    if node.config.partial:
-                        continue
                     raise UnsolvableDependencyError(
                         dep_name=param.name,
                         required_type=param.param_type,
@@ -798,17 +797,17 @@ class DependencyGraph:
         return cast(T, instance)
 
     @overload
-    def entry(self, **iconfig: Unpack[INodeConfig]) -> TEntryDecor: ...
+    def entry(self, **iconfig: Unpack[IEntryConfig]) -> TEntryDecor: ...
 
     @overload
     def entry(
-        self, func: IFactory[P, T], **iconfig: Unpack[INodeConfig]
+        self, func: IFactory[P, T], **iconfig: Unpack[IEntryConfig]
     ) -> Callable[..., T]: ...
 
     def entry(
         self,
         func: Union[IFactory[P, T], IAsyncFactory[P, T], None] = None,
-        **iconfig: Unpack[INodeConfig],
+        **iconfig: Unpack[IEntryConfig],
     ) -> Union[Callable[..., Union[T, Awaitable[T]]], TEntryDecor]:
         """
         NOTE: Positional only dependency is not supported, e.g.
@@ -833,8 +832,7 @@ class DependencyGraph:
             configured = cast(TEntryDecor, partial(self.entry, **iconfig))
             return configured
 
-        default_config = INodeConfig(reuse=False, partial=True)
-        config = NodeConfig(**(default_config | iconfig))
+        config = EntryConfig(**iconfig)
 
         sig = get_typed_signature(func)
 
@@ -847,15 +845,12 @@ class DependencyGraph:
             if is_unresolved_type(param_type):
                 continue
 
-
             if inject_node := (
                 resolve_inject(param_type) or resolve_inject(param.default)
             ):
                 self.register_node(inject_node)
                 self._resolved_nodes[param_type] = inject_node
-
-            if param_tuple := resolve_annotated(param.name, param_type):
-                _, param_type = param_tuple
+                param_type = inject_node.dependent_type
 
             self.static_resolve(param_type, config)
             unresolved.append((name, param_type))
