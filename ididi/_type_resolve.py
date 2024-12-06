@@ -202,29 +202,6 @@ def flatten_annotated(typ: Annotated[Any, Any]):
     return flattened_metadata
 
 
-def resolve_inject(annotation: Any):
-    if get_origin(annotation) is not Annotated:
-        return
-
-    meta: list[Any] = flatten_annotated(annotation)
-
-    for i, v in enumerate(meta):
-        if v == IDIDI_INJECT_RESOLVE_MARK:
-            return meta[i - 1]
-
-
-def resolve_annotated(
-    name: str, ptype: Annotated[Any, Any]
-) -> Union[tuple[str, type], None]:
-    if get_origin(ptype) is not Annotated:
-        return None
-
-    if inject_node := (resolve_inject(ptype)):
-        return (name, inject_node.dependent_type)
-    else:
-        base_type = get_args(ptype)[0]
-        return (name, base_type)
-
 
 def get_bases(dependent: type) -> tuple[type, ...]:
     if issubclass(dependent, Protocol):

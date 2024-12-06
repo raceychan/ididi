@@ -48,3 +48,13 @@ def get_auth(user: Annotated[UserService, "random"]) -> AuthService:
 def test_random_annotated():
     dg = DependencyGraph()
     dg.resolve(get_auth)
+
+
+class SessionService:
+    def __init__(self, auth: AuthService = inject(get_auth)):
+        self.auth = auth
+
+
+def test_class_inject():
+    dg = DependencyGraph()
+    dg.resolve(SessionService)

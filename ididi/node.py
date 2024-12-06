@@ -32,12 +32,13 @@ from ._itypes import (
 from ._type_resolve import (
     IDIDI_INJECT_RESOLVE_MARK,
     FactoryType,
+    flatten_annotated,
+    get_args,
     get_typed_signature,
     is_class,
     is_class_or_method,
     is_class_with_empty_init,
     is_unresolved_type,
-    resolve_annotated,
     resolve_annotation,
     resolve_factory_return,
     resolve_forwardref,
@@ -50,6 +51,50 @@ from .errors import (
 )
 from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import P, T, get_factory_sig_from_cls
+
+
+def inject(
+    factory: INodeFactory[P, T],
+    **iconfig: Unpack[INodeConfig],
+) -> T:
+    """
+    A util function that helps ididi know what factory method to use
+    without explicitly register it, only works inside function signatures.
+
+    These two are equivalent
+    ```
+    def func(service: UserService = inject(factory)): ...
+    def func(service: Annotated[UserService, inject(factory)]): ...
+    ```
+    """
+    node = DependentNode[T].from_node(factory, config=NodeConfig(**iconfig))
+    annt = Annotated[node.dependent_type, node, IDIDI_INJECT_RESOLVE_MARK]
+    return cast(T, annt)
+
+
+def resolve_inject(annotation: Any) -> Union["DependentNode[Any]", None]:
+    if get_origin(annotation) is not Annotated:
+        return
+
+    meta: list[Any] = flatten_annotated(annotation)
+
+    for i, v in enumerate(meta):
+        if v == IDIDI_INJECT_RESOLVE_MARK:
+            node: DependentNode[Any] = meta[i - 1]
+            return node
+
+
+def resolve_annotated(
+    name: str, ptype: Annotated[Any, Any]
+) -> Union[tuple[str, type], None]:
+    if get_origin(ptype) is not Annotated:
+        return None
+
+    if inject_node := (resolve_inject(ptype)):
+        return (name, inject_node.dependent_type)
+    else:
+        base_type = get_args(ptype)[0]
+        return (name, base_type)
 
 
 class Dependent(Generic[T]):
@@ -481,25 +526,6 @@ class DependentNode(Generic[T]):
                 )
             factory = cast(INodeFactory[P, T], factory_or_class)
             return cls.from_factory(factory=factory, config=config)
-
-
-def inject(
-    factory: INodeFactory[P, T],
-    **iconfig: Unpack[INodeConfig],
-) -> T:
-    """
-    A util function that helps ididi know what factory method to use
-    without explicitly register it, only works inside function signatures.
-
-    These two are equivalent
-    ```
-    def func(service: UserService = inject(factory)): ...
-    def func(service: Annotated[UserService, inject(factory)]): ...
-    ```
-    """
-    node = DependentNode[T].from_node(factory, config=NodeConfig(**iconfig))
-    annt = Annotated[node.dependent_type, node, IDIDI_INJECT_RESOLVE_MARK]
-    return cast(T, annt)
 
 
 # class Ignore(Generic[T]):

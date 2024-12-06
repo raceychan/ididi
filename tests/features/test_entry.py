@@ -53,7 +53,7 @@ def main(email: EmailService, es: EventStore) -> str:
     return "ok"
 
 
-def second_entry(email: EmailService) -> str:
+def second_entry(email: EmailService, config: Config) -> str:
     assert isinstance(email, EmailService)
     return "hello"
 
@@ -70,7 +70,7 @@ async def test_graph_entry():
     func_main = entry(main)
     func_sec = entry(second_entry)
     assert func_main() == "ok"
-    assert func_sec() == "hello"
+    assert func_sec(config=Config()) == "hello"
     assert await func() == "hello is 18 years old"
 
 
@@ -106,15 +106,15 @@ async def test_entry_with_ignore():
     assert r == "1"
 
 
-async def test_dg_entry_with_ignore():
+async def test_dg_entry_with_override():
     dg = DependencyGraph()
 
     @dg.entry(ignore=(CreateUser,))
     async def func4(
-        service: NotificationService, cmd: CreateUser, *, name: str = "test"
+        service: NotificationService, cmd: CreateUser, *, config: Config
     ) -> str:
         return cmd.user_name
 
     cmd = CreateUser(user_name="1", user_email="2")
-    r = await func4(cmd=cmd)
+    r = await func4(cmd=cmd, config=Config())
     assert r == "1"

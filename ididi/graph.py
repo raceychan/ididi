@@ -46,10 +46,8 @@ from ._type_resolve import (  # ResolveOrder,
     is_context_manager,
     is_function,
     is_unresolved_type,
-    resolve_annotated,
     resolve_annotation,
     resolve_factory,
-    resolve_inject,
 )
 from .errors import (
     AsyncResourceInSyncError,
@@ -64,7 +62,7 @@ from .errors import (
     UnsolvableDependencyError,
     UnsolvableNodeError,
 )
-from .node import DependentNode, LazyDependent
+from .node import DependentNode, LazyDependent, resolve_annotated, resolve_inject
 from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import P, T
 
@@ -562,7 +560,6 @@ class DependencyGraph:
                 return self._resolved_nodes[dependent]
 
             node = self._resolve_concrete_node(dependent, resolve_node_config)
-            is_partial = node.config.partial
 
             for param in node.actualized_params():
                 param_type = param.param_type
@@ -582,15 +579,14 @@ class DependencyGraph:
                 if inject_node := (
                     resolve_inject(param_type) or resolve_inject(param.default)
                 ):
-                    dep_node = cast(DependentNode[Any], inject_node)
-                    self.register_node(dep_node)
-                    self._resolved_nodes[param_type] = dep_node
+                    self.register_node(inject_node)
+                    self._resolved_nodes[param_type] = inject_node
                     continue
 
                 if is_provided(param.default):
                     continue
                 if param.unresolvable:
-                    if is_partial:
+                    if node.config.partial:
                         continue
                     raise UnsolvableDependencyError(
                         dep_name=param.name,
@@ -805,12 +801,19 @@ class DependencyGraph:
         @entry
         async def func(email_sender: EmailSender, /):
             ...
-        This would raise Error
+
+        dependency overrides must be passed as kwarg arguments
+
+        it is recommended to put data first then dependencies in func signature
+        such as:
+        @entry
+        async def create_user(user_name: str, user_email: str, repo: Repository):
+            ...
+        await create_user("user", "email")
         """
         # TODO:
         # 1. add more generic vars to func, enhance typing support
         # checkout https://github.com/dbrattli/Expression/blob/main/expression/core/pipe.py
-        # 2. add `Dependency.resolve_entry`
 
         if not func:
             configured = cast(TEntryDecor, partial(self.entry, **iconfig))
@@ -821,20 +824,24 @@ class DependencyGraph:
 
         sig = get_typed_signature(func)
 
-        # directly create node without DependecyGraph.node, use func as factory
-        entry_type = type(f"entry_node_{func.__name__}", (object,), {})
-        dependent = cast(type[T], entry_type)
+        unresolved: list[tuple[str, type]] = []
 
-        # directly create node without DependecyGraph.node, use func as factory
-        node = DependentNode[T].create(
-            dependent=dependent,
-            factory=func,
-            factory_type="function",
-            signature=sig,
-            config=config,
-        )
-        self.register_node(node)
-        self.static_resolve(dependent, config)
+        for name, param in sig.parameters.items():
+            param_type = resolve_annotation(param.annotation)
+            if name in config.ignore or param_type in config.ignore:
+                continue
+
+            if is_unresolved_type(param_type):
+                continue
+
+            if inject_node := (
+                resolve_inject(param_type) or resolve_inject(param.default)
+            ):
+                self.register_node(inject_node)
+                self._resolved_nodes[param_type] = inject_node
+
+            self.static_resolve(param_type, config)
+            unresolved.append((name, param_type))
 
         if inspect.iscoroutinefunction(func):
             async_func: Callable[..., Awaitable[T]] = cast(
@@ -842,16 +849,18 @@ class DependencyGraph:
             )
 
             @wraps(async_func)
-            async def _awrapper(*arg_overrides: P.args, **kw_overrides: P.kwargs) -> T:
+            async def _awrapper(*args: P.args, **kwargs: P.kwargs) -> T:
                 async with self.scope() as scope:
                     resolved_params: dict[str, Any] = {}
-                    ignore = config.ignore + tuple(kw_overrides)
-                    for param_name, param_type in node.unsolved_params(ignore):
+                    for param_name, param_type in unresolved:
+                        if param_name in kwargs:
+                            continue
+
                         resolved = await scope.resolve(param_type)
                         resolved_params[param_name] = resolved
 
-                    kw_overrides.update(resolved_params)
-                    res = sig.bind(*arg_overrides, **kw_overrides).arguments
+                    kwargs.update(resolved_params)
+                    res = sig.bind(*args, **kwargs).arguments
                     r = await async_func(**res)
                     return r
 
@@ -863,8 +872,10 @@ class DependencyGraph:
             def _wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
                 with self.scope() as scope:
                     resolved_params: dict[str, Any] = {}
-                    ignore = config.ignore + tuple(kwargs)
-                    for param_name, param_type in node.unsolved_params(ignore):
+                    for param_name, param_type in unresolved:
+                        if param_name in kwargs:
+                            continue
+
                         resolved = scope.resolve(param_type)
                         resolved_params[param_name] = resolved
 
