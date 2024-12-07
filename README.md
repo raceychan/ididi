@@ -65,8 +65,7 @@ NOTE:
 ```python
 from ididi import inject, entry, DependencyGraph
 
-async def get_db(dg: DependencyGraph, client: Client) -> ty.AsyncGenerator[DataBase, None]:
-    repository = dg.resolve(Repository)
+async def get_db(dg: DependencyGraph, client: Client, repository: Repository) -> ty.AsyncGenerator[DataBase, None]:
     db = DataBase(repository, client)
     try:
         await db.connect()
