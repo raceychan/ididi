@@ -33,3 +33,17 @@ async def test_resolve_with_factory():
     acm = await dg.aresolve(ACM)
 
     assert not acm._closed
+
+    def sync_factory() -> ACM:
+        return ACM()
+
+    dg.reset(clear_nodes=True)
+    dg.node(sync_factory)
+
+    acm = dg.resolve(ACM)
+    assert not acm._closed
+
+
+        
+
+
