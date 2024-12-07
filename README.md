@@ -38,9 +38,10 @@ pip install ididi[graphviz]
 
 ```python
 import ididi
+from app.user.infra import UserRepository, repo_factory
 
 class UserService:
-    def __init__(self, repo: UserRepository):
+    def __init__(self, repo: UserRepository = inject(repo_factory)):
         self.repo = repo
 
 user_service = ididi.resolve(UserService) 
