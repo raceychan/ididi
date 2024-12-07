@@ -41,7 +41,7 @@ from ._itypes import (
     TDecor,
     TEntryDecor,
 )
-from ._type_resolve import (  # ResolveOrder,
+from ._type_resolve import (
     get_typed_signature,
     is_async_context_manager,
     is_class,
@@ -64,7 +64,13 @@ from .errors import (
     UnsolvableDependencyError,
     UnsolvableNodeError,
 )
-from .node import DependentNode, LazyDependent, resolve_annotated, resolve_inject
+from .node import (
+    DependentNode,
+    LazyDependent,
+    resolve_annotated,
+    resolve_inject,
+    should_override,
+)
 from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import P, T
 
@@ -398,15 +404,20 @@ class DependencyGraph:
                 raise MergeWithScopeStartedError()
 
             # TODO: resolve order
-            """
-            for node in other.nodes:
-                ...
-            """
+            for dep_type, other_node in other.nodes.items():
+                if dep_type not in self._nodes:
+                    self._nodes[dep_type] = other_node
+                    if other_resolved := other.resolved_nodes.get(dep_type):
+                        self._resolved_nodes[dep_type] = other_resolved
+                else:
+                    if should_override(self._nodes[dep_type], other_node) is other_node:
+                        self._nodes[dep_type] = other_node
+                    if other_resolved := other.resolved_nodes.get(dep_type):
+                        self._resolved_nodes[dep_type] = other_resolved
 
-            self._nodes.update(other.nodes)
-            self._resolved_nodes.update(other._resolved_nodes)
-            self._resolution_registry.update(other._resolution_registry)
             self._type_registry.update(other._type_registry)
+            # may be we should raise error when other has resolution
+            self._resolution_registry.update(other._resolution_registry)
 
         self._visitor = Visitor(self._nodes)
 
@@ -577,7 +588,6 @@ class DependencyGraph:
                         if parent_config.reuse:
                             raise ReusabilityConflictError(current_path, param_type)
                     continue
-
                 if inject_node := (
                     resolve_inject(param_type) or resolve_inject(param.default)
                 ):
@@ -772,6 +782,8 @@ class DependencyGraph:
         is_reuse = node.config.reuse
         if node.factory_type == "function":
             instance = resolved
+            if inspect.isawaitable(instance):
+                instance = await instance
 
             if is_reuse:
                 self._resolution_registry.register(dependent, instance)

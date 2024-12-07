@@ -32,6 +32,7 @@ from ._itypes import (
 from ._type_resolve import (
     IDIDI_INJECT_RESOLVE_MARK,
     FactoryType,
+    ResolveOrder,
     flatten_annotated,
     get_args,
     get_typed_signature,
@@ -95,6 +96,18 @@ def resolve_annotated(
     else:
         base_type = get_args(ptype)[0]
         return (name, base_type)
+
+
+def should_override(
+    node1: "DependentNode[T]", node2: "DependentNode[T]"
+) -> "DependentNode[T]":
+    """
+    Check if an existing node should be overriden by a new node
+    """
+
+    if ResolveOrder[node1.factory_type] <= ResolveOrder[node2.factory_type]:
+        return node2
+    return node1
 
 
 class Dependent(Generic[T]):

@@ -110,7 +110,6 @@ class INodeConfig(IEntryConfig, total=False):
 
 
 
-
 class NodeConfig:
     __slots__ = ("reuse", "lazy", "ignore")
 
