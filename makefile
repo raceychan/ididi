@@ -119,7 +119,7 @@ hatch-build:
 	@echo "Building version $(VERSION)..."
 	@pixi run -e publish hatch build
 
-publish-release:
+pypi-release:
 	pixi run -e publish publish
 
 delete-branch:

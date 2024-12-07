@@ -74,11 +74,11 @@ async def get_db(dg: DependencyGraph, client: Client) -> ty.AsyncGenerator[DataB
         await db.close()
 
 @entry
-async def main(db: DataBase = inject(get_db), sql: str) -> ty.Any:
+async def main(sql: str, db: DataBase = inject(get_db)) -> ty.Any:
     res = await db.execute(sql)
     return res
 
-assert await main(sql="select money from bank")
+assert await main("select money from bank")
 ```
 
 > [!NOTE]
@@ -243,7 +243,8 @@ class GraphedScope(ty.TypedDict):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI | None = None) -> ty.AsyncIterator[GraphedScope]:
-    async with DependencyGraph() as dg:
+    dg = DependencyGraph()
+    async with dg.scope("app") as dg:
         yield {"dg": dg}
 
 
