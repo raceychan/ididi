@@ -41,7 +41,7 @@ import ididi
 from app.user.infra import UserRepository, repo_factory
 
 class UserService:
-    def __init__(self, repo: UserRepository = inject(repo_factory)):
+    def __init__(self, repo: UserRepository = ididi.use(repo_factory)):
         self.repo = repo
 
 user_service = ididi.resolve(UserService) 
@@ -63,7 +63,7 @@ NOTE:
 2. async resource in a sync dependent is not supported, but sync resource in a async dependent is supported.  
 
 ```python
-from ididi import inject, entry, DependencyGraph
+from ididi import use, entry, DependencyGraph
 
 async def get_db(dg: DependencyGraph, client: Client, repository: Repository) -> ty.AsyncGenerator[DataBase, None]:
     db = DataBase(repository, client)
@@ -74,7 +74,7 @@ async def get_db(dg: DependencyGraph, client: Client, repository: Repository) ->
         await db.close()
 
 @entry
-async def main(sql: str, db: DataBase = inject(get_db)) -> ty.Any:
+async def main(sql: str, db: DataBase = use(get_db)) -> ty.Any:
     res = await db.execute(sql)
     return res
 
@@ -106,7 +106,7 @@ This is particularly useful when you try to separate resources by route, endpoin
 ```python
 @dg.node
 def get_resource() -> ty.Generator[Resource, None, None]:
-    res =  Resource()
+    res = Resource()
     yield res
     res.close()
 
@@ -166,14 +166,14 @@ request_scope = dg.use_scope(request_id)
 ```
 
 > [!NOTE]
-Two scopes or more with the same name would follow most recent rule.
+Two or more scopes with the same name would follow most recent rule.
 
 #### Nested Nmaed Scope
 
 ```python
 async with dg.scope(app_name) as app_scope:
-    async with dg.scope(router) as router_scope:
-        async with dg.scope(endpoint) as endpoint_scope:
+    async with dg.scope(router_name) as router_scope:
+        async with dg.scope(endpoint_name) as endpoint_scope:
             async with dg.scope(user_id) as user_scope:
                 async with dg.scope(request_id) as request_scope:
                     ...
@@ -197,7 +197,7 @@ dg = DependencyGraph()
 
 def auth_service_factory() -> AuthService:
     async with dg.scope() as scope
-        yield dg.resolve(AuthService)
+        yield scope.resolve(AuthService)
 
 Service = ty.Annotated[AuthService, Depends((auth_service_factory))]
 

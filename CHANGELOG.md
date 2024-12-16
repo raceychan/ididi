@@ -330,8 +330,7 @@ improve typing support for scope.resolve, now it recognize resource better.
 
 Feat:
 
-1. 
-add a special mark so that users don't need to specifically mark `dg.node`
+- add a special mark so that users don't need to specifically mark `dg.node`
 
 ```py
 async def create_user(user_repo: inject(repo_factory)):
@@ -346,9 +345,9 @@ def repo_factory():
     ...
 ```
 
-2. support config to entry
+- support config to entry
 
-3. support DependencyGraph as dependency
+- support DependencyGraph as dependency
 
 ```py
 def get_user_service(dg: DependencyGraph) -> UserService:
@@ -383,8 +382,6 @@ async def login(app: APP):
 
 ## version 1.1.2
 
-TODO?
-
 if we need a Context object in a non context manner, e.g.
 
 ```py
@@ -407,3 +404,27 @@ improvements on `entry`
 - `entry` now would use current scope
 - 100% performance boost on `entry`
 - separate `INodeConfig` and `IEntryConfig`
+
+## version 1.1.3
+
+- rename `inject` to `use`, to avoid the implication of `inject` as if it was to say only param annotated with `inject` will be injected.
+whereas what it really means is which factory to use
+
+- further optimize `entry`, now when the decorated function does not depends on resource,
+it will not create a scope.
+
+In 1.1.2
+
+```bash
+0.089221 seoncds to call call regular function create_user 100000 times
+0.412887 seoncds to call entry version of create_user 100000 times
+```
+
+now at 1.1.3
+
+```bash
+0.099846 seoncds to call regular function create_user 100000 times
+0.104534 seoncds to call entry version of create_user 100000 times
+```
+
+This make functions that does not depends on resource 4-5 times faster than 1.1.2

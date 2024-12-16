@@ -54,18 +54,18 @@ from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import P, T, get_factory_sig_from_cls
 
 
-def inject(
+def use(
     factory: INodeFactory[P, T],
     **iconfig: Unpack[INodeConfig],
 ) -> T:
     """
-    A util function that helps ididi know what factory method to use
-    without explicitly register it, only works inside function signatures.
+    An annotation to let ididi knows what factory method to use
+    without explicitly register it.
 
     These two are equivalent
     ```
-    def func(service: UserService = inject(factory)): ...
-    def func(service: Annotated[UserService, inject(factory)]): ...
+    def func(service: UserService = use(factory)): ...
+    def func(service: Annotated[UserService, use(factory)]): ...
     ```
     """
     node = DependentNode[T].from_node(factory, config=NodeConfig(**iconfig))
@@ -368,7 +368,11 @@ class DependentNode(Generic[T]):
         self.config = config
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self._dependent})"
+        str_repr = f"{self.__class__.__name__}(type: {self._dependent}"
+        if self.factory_type != "default":
+            str_repr += f", factory: {self.factory}"
+        str_repr += ")"
+        return str_repr
 
     @property
     def dependent(self) -> Dependent[T]:

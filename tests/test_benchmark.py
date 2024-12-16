@@ -76,12 +76,15 @@ def test_entry(dg: DependencyGraph, dependents: list[type]):
 
     for _ in range(rounds):
         pre = perf_counter()
-        assert create_user("test", "email", user_service_factory()) == "ok"
+        user_service = user_service_factory()
+        assert create_user("test", "email", service=user_service) == "ok"
         aft = perf_counter()
         cost = round(aft - pre, 12)
         total += cost
 
-    print(f"\n{total} seoncds to call {create_user} {rounds} times")
+    print(
+        f"\n{round(total, 6)} seoncds to call regular function {create_user.__name__} {rounds} times"
+    )
 
     create_user = dg.entry(create_user)
 
@@ -93,7 +96,9 @@ def test_entry(dg: DependencyGraph, dependents: list[type]):
         cost = round(aft - pre, 6)
         total += cost
 
-    print(f"\n{total} seoncds to call {create_user} as entry {rounds} times")
+    print(
+        f"\n{round(total, 6)} seoncds to call entry version of {create_user.__name__} {rounds} times"
+    )
 
 
 """
@@ -116,4 +121,23 @@ def test_entry(dg: DependencyGraph, dependents: list[type]):
 0.020025 seoncds to register 122 classes
 0.003467 seoncds to statically resolve 122 classes
 0.001032 seoncds to resolve 122 instances
+"""
+
+"""
+1.1.2
+0.010674 seoncds to register 100 classes
+0.011788 seoncds to statically resolve 100 classes
+0.000933 seoncds to resolve 100 instances
+0.089221 seoncds to call <function test_entry.<locals>.create_user at 0x7f377a3a8820> 10000
+0.412887 seoncds to call <function test_entry.<locals>.create_user at 0x7f377a3a8940>
+"""
+
+"""
+1.1.3
+
+0.018514 seoncds to register 100 classes
+0.003045 seoncds to statically resolve 100 classes
+0.000878 seoncds to resolve 100 instances
+0.099846 seoncds to call regular function create_user 100000 times
+0.104534 seoncds to call entry version of create_user 100000 times
 """

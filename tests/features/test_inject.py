@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from ididi import DependencyGraph, entry, inject
+from ididi import DependencyGraph, entry, use
 from tests.test_data import UserService
 
 
@@ -8,7 +8,7 @@ def get_user_service() -> UserService:
     return UserService(1, 2)
 
 
-async def create_user(service: UserService = inject(get_user_service)):
+async def create_user(service: UserService = use(get_user_service)):
     assert isinstance(service, UserService)
     assert service.db == 1
     assert service.auth == 2
@@ -24,7 +24,7 @@ async def deep_nested(
     service: Annotated[
         UserService,
         "something",
-        Annotated[str, "random", Annotated[UserService, inject(get_user_service)]],
+        Annotated[str, "random", Annotated[UserService, use(get_user_service)]],
     ]
 ):
     assert isinstance(service, UserService)
@@ -51,7 +51,7 @@ def test_random_annotated():
 
 
 class SessionService:
-    def __init__(self, auth: AuthService = inject(get_auth)):
+    def __init__(self, auth: AuthService = use(get_auth)):
         self.auth = auth
 
 

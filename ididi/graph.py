@@ -822,22 +822,29 @@ class DependencyGraph:
         **iconfig: Unpack[IEntryConfig],
     ) -> Union[Callable[..., Union[T, Awaitable[T]]], TEntryDecor]:
         """
-        NOTE: Positional only dependency is not supported, e.g.
-        @entry
-        async def func(email_sender: EmailSender, /):
-            ...
+        statically resolve dependencies of the decorated function \
+            then replace it with a new function, \
+            where the new func will solve dependency after being called.
 
-        dependency overrides must be passed as kwarg arguments
+        ### dependency overrides must be passed as kwarg arguments
 
         it is recommended to put data first then dependencies in func signature
         such as:
+
         @entry
         async def create_user(user_name: str, user_email: str, repo: Repository):
             ...
+
         await create_user("user", "email")
+
+        ### Positional only dependency is not supported, e.g.
+        
+        @entry
+        async def func(email_sender: EmailSender, /):
+            ...
         """
         # TODO:
-        # 1. add more generic vars to func, enhance typing support
+        # 1. better typing supoprt by adding more generic vars to func
         # checkout https://github.com/dbrattli/Expression/blob/main/expression/core/pipe.py
 
         if not func:
@@ -845,7 +852,6 @@ class DependencyGraph:
             return configured
 
         config = EntryConfig(**iconfig)
-
         sig = get_typed_signature(func)
 
         unresolved: list[tuple[str, type]] = []
@@ -853,10 +859,8 @@ class DependencyGraph:
             param_type = resolve_annotation(param.annotation)
             if name in config.ignore or param_type in config.ignore:
                 continue
-
             if is_unresolved_type(param_type):
                 continue
-
             if inject_node := (
                 resolve_inject(param_type) or resolve_inject(param.default)
             ):
@@ -867,13 +871,20 @@ class DependencyGraph:
             self.static_resolve(param_type, config)
             unresolved.append((name, param_type))
 
+        depends_on_resource: bool = False
+        for _, param_type in unresolved:
+            if self.nodes[param_type].factory_type == "resource":
+                depends_on_resource = True
+            elif issubclass(param_type, (ContextManager, AsyncContextManager)):
+                depends_on_resource = True
+
         if inspect.iscoroutinefunction(func):
             async_func: Callable[..., Awaitable[T]] = cast(
                 Callable[..., Awaitable[T]], func
             )
 
             @wraps(async_func)
-            async def _awrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+            async def _async_scoped_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
                 context_scope = self.use_scope(create_on_miss=True, as_async=True)
                 async with context_scope as scope:
                     for param_name, param_type in unresolved:
@@ -885,12 +896,23 @@ class DependencyGraph:
                     r = await async_func(*args, **kwargs)
                     return r
 
-            return _awrapper
+            @wraps(async_func)
+            async def _async_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+                for param_name, param_type in unresolved:
+                    if param_name in kwargs:
+                        continue
+                    resolved = await self.aresolve(param_type)
+                    kwargs[param_name] = resolved
+
+                r = await async_func(*args, **kwargs)
+                return r
+
+            return _async_scoped_wrapper if depends_on_resource else _async_wrapper
         else:
             sync_func: Callable[..., T] = cast(Callable[..., T], func)
 
             @wraps(sync_func)
-            def _wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+            def _sync_scoped_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
                 context_scope = self.use_scope(create_on_miss=True, as_async=False)
                 with context_scope as scope:
                     for param_name, param_type in unresolved:
@@ -902,7 +924,18 @@ class DependencyGraph:
                     r = sync_func(*args, **kwargs)
                     return r
 
-            return _wrapper
+            @wraps(sync_func)
+            def _sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+                for param_name, param_type in unresolved:
+                    if param_name in kwargs:
+                        continue
+                    resolved = self.resolve(param_type)
+                    kwargs[param_name] = resolved
+
+                r = sync_func(*args, **kwargs)
+                return r
+
+            return _sync_scoped_wrapper if depends_on_resource else _sync_wrapper
 
     @overload
     def node(self, factory_or_class: type[T]) -> type[T]: ...
