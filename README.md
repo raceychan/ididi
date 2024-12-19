@@ -37,14 +37,19 @@ pip install ididi[graphviz]
 ### Quick Start
 
 ```python
-import ididi
-from app.user.infra import UserRepository, repo_factory
+from ididi import DependencyGraph, use, entry, AsyncResource
 
-class UserService:
-    def __init__(self, repo: UserRepository = ididi.use(repo_factory)):
-        self.repo = repo
+async def conn_factory(engine: AsyncEngine) -> AsyncGenerator[Repository, None]:
+    async with engine.begin() as conn:
+        yield conn
 
-user_service = ididi.resolve(UserService) 
+class UnitOfWork:
+    def __init__(self, conn: AsyncConnection=use(conn_factory)):
+        self._conn = conn
+
+@entry
+async def main(command: CreateUser, uow: UnitOfWork):
+    await uow.execute(build_query(command))
 ```
 
 **No Container, No Provider, No Wiring, just *Python***

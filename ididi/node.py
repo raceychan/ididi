@@ -99,15 +99,15 @@ def resolve_annotated(
 
 
 def should_override(
-    node1: "DependentNode[T]", node2: "DependentNode[T]"
+    first_node: "DependentNode[T]", second_node: "DependentNode[T]"
 ) -> "DependentNode[T]":
     """
-    Check if an existing node should be overriden by a new node
+    Check if first node should be overriden by a second node
     """
 
-    if ResolveOrder[node1.factory_type] <= ResolveOrder[node2.factory_type]:
-        return node2
-    return node1
+    if ResolveOrder[first_node.factory_type] <= ResolveOrder[second_node.factory_type]:
+        return second_node
+    return first_node
 
 
 class Dependent(Generic[T]):

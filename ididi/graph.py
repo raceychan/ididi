@@ -290,11 +290,37 @@ class DependencyGraph:
     ### Description:
     A DAG (Directed Acyclic Graph) where each dependent is a node.
 
+    ```toml
     [config]
     self_inject: bool
-    ---
+    ```
     whether to inject the graph object into dependent
+
+    Example
+    ---
+    ```python
+    from ididi import DependencyGraph, use, entry, AsyncResource
+
+    async def conn_factory(engine: AsyncEngine) -> AsyncGenerator[Repository, None]:
+        async with engine.begin() as conn:
+            yield conn
+
+    class UnitOfWork:
+        def __init__(self, conn: AsyncConnection=use(conn_factory)):
+            self._conn = conn
+
+    @entry
+    async def main(command: CreateUser, uow: UnitOfWork):
+        await uow.execute(build_query(command))
+    ```
     """
+
+    _nodes: GraphNodes[Any]
+    "Map a type to a dependent node"
+    _resolved_nodes: GraphNodes[Any]
+    "Nodes that have been recursively resolved and is validated to be resolvable"
+    _type_registry: TypeRegistry
+    "Map a type to its implementations"
 
     __slots__ = (
         "_config",
@@ -303,20 +329,17 @@ class DependencyGraph:
         "_resolution_registry",
         "_type_registry",
         "_scope_context",
-        "_visitor",
     )
 
     def __init__(self, *, self_inject: bool = True):
         self._config = GraphConfig(self_inject=self_inject)
-        self._nodes: GraphNodes[Any] = {}
+        self._nodes = {}
         self._resolved_nodes: GraphNodes[Any] = {}
         self._type_registry = TypeRegistry()
-
         self._resolution_registry = ResolutionRegistry()
         self._scope_context = ContextVar[Union[SyncScope, AsyncScope]](
             "connection_context"
         )
-        self._visitor = Visitor(self._nodes)
         if self._config.self_inject:
             self.register_dependent(self)
 
@@ -340,8 +363,7 @@ class DependencyGraph:
         self, dependent: T, dependent_type: Union[type[T], None] = None
     ) -> None:
         """
-        Register a dependent to be injected
-        if dependent_type is not provided, only dependent will be registered.
+        Register a dependent instance to be injected, provide a dependent type if it's not the same as the instance type.
         """
         dependent_type = dependent_type or type(dependent)
         self._resolution_registry.register(dependent_type, dependent)
@@ -380,22 +402,27 @@ class DependencyGraph:
 
     @property
     def visitor(self) -> Visitor:
-        return self._visitor
+        return Visitor(self._nodes)
 
     def merge(self, other: Union["DependencyGraph", Sequence["DependencyGraph"]]):
         """
         Merge the other graphs into this graph, update the current graph.
+
+        ## Logic
+
+        1. If a node not in current graph, it will be added,
+        2. otherwise, compare the `resolve order` of these two nodes, keep the one with higher order.
+
+        ### resolve order
+
+        1. node with resource management factory > node with a plain factory.
+        2. node with a plain factory > node with default constructor.
         """
 
         if isinstance(other, DependencyGraph):
             others = (other,)
         else:
             others = other
-
-        """
-        NOTE: more to consider, e.g:
-        dependent factory should not be override by dependent defaultult constructor
-        """
 
         for other in others:
             try:
@@ -405,7 +432,6 @@ class DependencyGraph:
             else:
                 raise MergeWithScopeStartedError()
 
-            # TODO: resolve order
             for dep_type, other_node in other.nodes.items():
                 if dep_type not in self._nodes:
                     self._nodes[dep_type] = other_node
@@ -414,14 +440,16 @@ class DependencyGraph:
                 else:
                     if should_override(self._nodes[dep_type], other_node) is other_node:
                         self._nodes[dep_type] = other_node
-                    if other_resolved := other.resolved_nodes.get(dep_type):
-                        self._resolved_nodes[dep_type] = other_resolved
+                        if other_resolved := other.resolved_nodes.get(dep_type):
+                            self._resolved_nodes[dep_type] = other_resolved
+                    else:
+                        if dep_type not in self._resolved_nodes and (
+                            other_resolved := other.resolved_nodes.get(dep_type)
+                        ):
+                            self._resolved_nodes[dep_type] = other_resolved
 
             self._type_registry.update(other._type_registry)
-            # may be we should raise error when other has resolution
             self._resolution_registry.update(other._resolution_registry)
-
-        self._visitor = Visitor(self._nodes)
 
     def set_context_scope(
         self, scope: Union[SyncScope, AsyncScope]

@@ -407,6 +407,8 @@ improvements on `entry`
 
 ## version 1.1.3
 
+## :chart_with_upwards_trend: Improvements:
+
 - rename `inject` to `use`, to avoid the implication of `inject` as if it was to say only param annotated with `inject` will be injected.
 whereas what it really means is which factory to use
 
@@ -429,5 +431,7 @@ now at 1.1.3
 
 This make functions that does not depends on resource 4-5 times faster than 1.1.2
 
-- fix a bug where when a dependent with is registered with `DependencyGraph.register_dependnet`, it will still be statically resolved.
+## :hammer: Fix:
+
+- :sparkles: fix a bug where when a dependent with is registered with `DependencyGraph.register_dependnet`, it will still be statically resolved.
 
