@@ -56,9 +56,6 @@ async def main(command: CreateUser, uow: UnitOfWork):
 
 ## Features
 
-> [!TIP]
-> Ididi has a compact codebase with core part being < 600 LOC, feature requests, pull requests and issues are all welcome and appreciated.
-
 ### Automatic dependencies injection
 
 You can use generator/async generator to create a resource that needs to be closed.
