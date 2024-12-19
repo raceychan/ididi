@@ -428,3 +428,6 @@ now at 1.1.3
 ```
 
 This make functions that does not depends on resource 4-5 times faster than 1.1.2
+
+- fix a bug where when a dependent with is registered with `DependencyGraph.register_dependnet`, it will still be statically resolved.
+

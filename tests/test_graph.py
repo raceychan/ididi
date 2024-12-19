@@ -550,6 +550,7 @@ def test_resolve_node_without_annotation():
         return Config(a=1)
 
     service = dag.resolve(Service)
+    print(dag.nodes[Config])
     assert service.config.a == 1
 
 

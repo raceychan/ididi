@@ -118,3 +118,55 @@ async def test_dg_entry_with_override():
     cmd = CreateUser(user_name="1", user_email="2")
     r = await func4(cmd=cmd, config=Config())
     assert r == "1"
+
+
+class Session:
+    def __init__(self, config: Config):
+        self.config = config
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        pass
+
+    def __enter__(self): ...
+
+    def __exit__(self, exc_type, exc, tb): ...
+
+
+async def test_dg_entry_with_acm():
+    dg = DependencyGraph()
+
+    @dg.entry(ignore=(CreateUser,))
+    async def func4(
+        service: NotificationService,
+        cmd: CreateUser,
+        *,
+        session: Session,
+        config: Config,
+    ) -> str:
+        return cmd.user_name
+
+    cmd = CreateUser(user_name="1", user_email="2")
+    r = await func4(cmd=cmd, config=Config())
+    assert r == "1"
+
+
+def test_sync_entry_with_override():
+
+    dg = DependencyGraph()
+
+    @dg.entry(ignore=(CreateUser,))
+    def func4(
+        service: NotificationService,
+        cmd: CreateUser,
+        *,
+        config: Config,
+        session: Session,
+    ) -> str:
+        return cmd.user_name
+
+    cmd = CreateUser(user_name="0", user_email="2")
+    r = func4(cmd=cmd, config=Config())
+    assert r == "0"

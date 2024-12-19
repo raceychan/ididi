@@ -330,6 +330,12 @@ class DependencyGraph:
     def __contains__(self, item: type) -> bool:
         return item in self._nodes
 
+    def is_registered_dependent(self, dependent_type: type) -> bool:
+        return (
+            dependent_type not in self._resolved_nodes
+            and dependent_type in self._resolution_registry
+        )
+
     def register_dependent(
         self, dependent: T, dependent_type: Union[type[T], None] = None
     ) -> None:
@@ -337,10 +343,6 @@ class DependencyGraph:
         Register a dependent to be injected
         if dependent_type is not provided, only dependent will be registered.
         """
-
-        if dependent_type and dependent_type not in self.nodes:
-            self.node(dependent_type)
-
         dependent_type = dependent_type or type(dependent)
         self._resolution_registry.register(dependent_type, dependent)
 
@@ -573,6 +575,8 @@ class DependencyGraph:
                 return self._resolved_nodes[dependent]
 
             node = self._resolve_concrete_node(dependent, resolve_node_config)
+            if self.is_registered_dependent(dependent):
+                return node
 
             for param in node.actualized_params():
                 param_type = param.param_type

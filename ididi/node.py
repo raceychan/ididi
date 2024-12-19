@@ -370,7 +370,7 @@ class DependentNode(Generic[T]):
     def __repr__(self) -> str:
         str_repr = f"{self.__class__.__name__}(type: {self._dependent}"
         if self.factory_type != "default":
-            str_repr += f", factory: {self.factory}"
+            str_repr += f", factory: {self.factory.__qualname__}"
         str_repr += ")"
         return str_repr
 
