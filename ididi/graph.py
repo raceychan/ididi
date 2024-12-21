@@ -410,7 +410,7 @@ class DependencyGraph:
             current_resolved = self._resolved_nodes.get(dep_type)
             other_resolved = other.resolved_nodes.get(dep_type)
 
-            if not current_node or (should_override(current_node, other_node)):
+            if not current_node or (should_override(other_node, current_node)):
                 self._nodes[dep_type] = other_node
                 if other_resolved:
                     self._resolved_nodes[dep_type] = other_resolved
