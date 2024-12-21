@@ -404,6 +404,22 @@ class DependencyGraph:
     def visitor(self) -> Visitor:
         return Visitor(self._nodes)
 
+    def _merge_nodes(self, other: "DependencyGraph"):
+        for dep_type, other_node in other.nodes.items():
+            current_node = self._nodes.get(dep_type)
+            current_resolved = self._resolved_nodes.get(dep_type)
+            other_resolved = other.resolved_nodes.get(dep_type)
+
+            if not current_node or (should_override(current_node, other_node)):
+                self._nodes[dep_type] = other_node
+                if other_resolved:
+                    self._resolved_nodes[dep_type] = other_resolved
+                continue
+
+            # the conflict case, we only update if current node is not resolved
+            if not current_resolved and other_resolved:
+                self._resolved_nodes[dep_type] = other_resolved
+
     def merge(self, other: Union["DependencyGraph", Sequence["DependencyGraph"]]):
         """
         Merge the other graphs into this graph, update the current graph.
@@ -432,21 +448,7 @@ class DependencyGraph:
             else:
                 raise MergeWithScopeStartedError()
 
-            for dep_type, other_node in other.nodes.items():
-                if dep_type not in self._nodes:
-                    self._nodes[dep_type] = other_node
-                    if other_resolved := other.resolved_nodes.get(dep_type):
-                        self._resolved_nodes[dep_type] = other_resolved
-                else:
-                    if should_override(self._nodes[dep_type], other_node) is other_node:
-                        self._nodes[dep_type] = other_node
-                        if other_resolved := other.resolved_nodes.get(dep_type):
-                            self._resolved_nodes[dep_type] = other_resolved
-                    else:
-                        if dep_type not in self._resolved_nodes and (
-                            other_resolved := other.resolved_nodes.get(dep_type)
-                        ):
-                            self._resolved_nodes[dep_type] = other_resolved
+            self._merge_nodes(other)
 
             self._type_registry.update(other._type_registry)
             self._resolution_registry.update(other._resolution_registry)
@@ -873,8 +875,6 @@ class DependencyGraph:
     def entry(
         self,
         func: Union[IFactory[P, T], IAsyncFactory[P, T], None] = None,
-        *,
-        scope: Maybe[Union[SyncScope, AsyncScope]] = MISSING,
         **iconfig: Unpack[IEntryConfig],
     ) -> Union[Callable[..., Union[T, Awaitable[T]]], TEntryDecor]:
         """

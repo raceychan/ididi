@@ -439,3 +439,7 @@ Fix:
 Improvements:
 
 - Add `DependencyGraph.should_be_scoped` api to check if a dependent type contains any resource dependency, and thus should be scoped. this is particularly useful when user needs to (dynamically) decide whether they should create the resource in a scope.
+
+Fix:
+
+- previously entry only check if any of its direct dependency is rousource or not, this will cause bug when any of its indirect dependencies is a resource, raise OutOfScope Exception

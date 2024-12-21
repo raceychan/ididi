@@ -633,7 +633,7 @@ def test_graph_merge_with_error():
             dg.merge(dg2)
 
 
-def test_graph_static_resolved():
+def test_graph_static_resolved_should_override():
 
     from .test_data import ComplianceChecker, DatabaseConfig
 
@@ -642,6 +642,7 @@ def test_graph_static_resolved():
 
     dg.static_resolve(ComplianceChecker)
     c = dg.resolve(ComplianceChecker)
+
     dg2.static_resolve(DatabaseConfig)
     d = dg2.resolve(DatabaseConfig)
     repr(dg.nodes[ComplianceChecker].config)
@@ -652,3 +653,22 @@ def test_graph_static_resolved():
     c1, d1 = dg.resolve(ComplianceChecker), dg.resolve(DatabaseConfig)
     assert c1 is c
     assert d1 is d
+
+
+def test_graph_static_resolved_should_not_override():
+
+    from .test_data import ComplianceChecker, DatabaseConfig
+
+    dg = DependencyGraph()
+    dg2 = DependencyGraph()
+
+    def checker_factory() -> ComplianceChecker: ...
+
+    dg.node(checker_factory)
+
+    dg2.static_resolve(ComplianceChecker)
+    dg2.static_resolve(DatabaseConfig)
+
+    dg.merge(dg2)
+    assert dg.nodes[ComplianceChecker].factory_type == "function"
+    assert ComplianceChecker in dg and DatabaseConfig in dg
