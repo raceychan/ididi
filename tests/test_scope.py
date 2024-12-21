@@ -213,6 +213,9 @@ async def test_resource_shared_within_scope():
         def __init__(self, database: AsyncDataBase):
             self.database = database
 
+            
+    assert dg.should_be_scoped(FirstResource)
+
     async with dg.scope() as scope:
         first_resource = await scope.resolve(FirstResource)
         second_resource = await scope.resolve(SecondResource)

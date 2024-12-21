@@ -538,16 +538,6 @@ class DependencyGraph:
             resolver=resolver,
         )
 
-    def scope(self, name: Maybe[Hashable] = MISSING) -> ScopeProxy:
-        """
-        create a scope for resource,
-        resources resolved wihtin the scope would be
-
-        scope_name: give a iditifier to the scope so that you can get it with
-        dg.get_scope(scope_name)
-        """
-        return ScopeProxy(self, name=name)
-
     def register_node(self, node: DependentNode[Any]) -> None:
         """
         Register a dependency node and update dependency relationships.
@@ -613,6 +603,11 @@ class DependencyGraph:
                     cycle = current_path[i:] + [param_type]
                     raise CircularDependencyDetectedError(cycle)
                 if sub_node := self._nodes.get(param_type):
+                    # """NOTE
+                    # currently if a reuse dependent depends on a non-reuse depenendecy
+                    # ididi will raise error, we might instead emits a warning and convert the non-reuse dependency to reuse
+                    # This might favor inline node, such as def __init__(self, conn: Connection = use(conn_factory, reuse=False))
+                    # """
                     if sub_node.config.reuse:
                         continue
                     for n in current_path:
@@ -655,6 +650,33 @@ class DependencyGraph:
             return node
 
         return dfs(dependent)
+
+    def scope(self, name: Maybe[Hashable] = MISSING) -> ScopeProxy:
+        """
+        create a scope for resource,
+        resources resolved wihtin the scope would be
+
+        scope_name: give a iditifier to the scope so that you can get it with
+        dg.get_scope(scope_name)
+        """
+        return ScopeProxy(self, name=name)
+
+    def should_be_scoped(self, dep_type: INode[P, T]) -> bool:
+        "Recursively check if a dependent type contains any resource dependency"
+
+        if not (resolved_node := self._resolved_nodes.get(dep_type)):
+            resolved_node = self.static_resolve(dep_type)
+
+        if resolved_node.is_resource:
+            return True
+
+        contain_resource = any(
+            (
+                self.should_be_scoped(param_type)
+                for _, param_type in resolved_node.unsolved_params(())
+            )
+        )
+        return contain_resource
 
     @overload
     def use_scope(
@@ -851,6 +873,8 @@ class DependencyGraph:
     def entry(
         self,
         func: Union[IFactory[P, T], IAsyncFactory[P, T], None] = None,
+        *,
+        scope: Maybe[Union[SyncScope, AsyncScope]] = MISSING,
         **iconfig: Unpack[IEntryConfig],
     ) -> Union[Callable[..., Union[T, Awaitable[T]]], TEntryDecor]:
         """
@@ -858,22 +882,29 @@ class DependencyGraph:
             then replace it with a new function, \
             where the new func will solve dependency after being called.
 
-        ### dependency overrides must be passed as kwarg arguments
+        ### - Dependency overrides must be passed as kwarg arguments
 
         it is recommended to put data first then dependencies in func signature
         such as:
-
+        
+        ```py
         @entry
         async def create_user(user_name: str, user_email: str, repo: Repository):
-            ...
+            await repository.add_user(user_name, user_email)
 
-        await create_user("user", "email")
+        # client code
+        await create_user(user_name, usere_email)
+        ```
 
-        ### Positional only dependency is not supported, e.g.
+        ### - Positional only dependency is not supported, e.g.
         
+        ```py
         @entry
         async def func(email_sender: EmailSender, /):
             ...
+
+        # this would raise an exception
+        ```
         """
         # TODO:
         # 1. better typing supoprt by adding more generic vars to func
@@ -903,12 +934,9 @@ class DependencyGraph:
             self.static_resolve(param_type, config)
             unresolved.append((name, param_type))
 
-        depends_on_resource: bool = False
-        for _, param_type in unresolved:
-            if self.nodes[param_type].factory_type == "resource":
-                depends_on_resource = True
-            elif issubclass(param_type, (ContextManager, AsyncContextManager)):
-                depends_on_resource = True
+        depends_on_resource: bool = any(
+            (self.should_be_scoped(param_type) for _, param_type in unresolved)
+        )
 
         if inspect.iscoroutinefunction(func):
             async_func: Callable[..., Awaitable[T]] = cast(

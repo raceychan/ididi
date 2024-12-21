@@ -39,6 +39,7 @@ from ._type_resolve import (
     is_class,
     is_class_or_method,
     is_class_with_empty_init,
+    is_context_manager_clss,
     is_unresolved_type,
     resolve_annotation,
     resolve_factory_return,
@@ -382,7 +383,16 @@ class DependentNode(Generic[T]):
     def dependent_type(self) -> type[T]:
         return self._dependent.dependent_type
 
-    def actualized_params(self):
+    @property
+    def is_resource(self) -> bool:
+        if self.factory_type == "resource":
+            return True
+        return self.factory_type == "default" and is_context_manager_clss(
+            self._dependent.dependent_type
+        )
+
+    def actualized_params(self) -> Generator[DependencyParam[T], None, None]:
+        "iter through dependency params of current node, used in static resolve"
         ignore_params = self.config.ignore
         for param_name, param in self.signature.dprams.items():
             param_type = cast(Union[type, ForwardRef], param.param_type)
@@ -543,10 +553,3 @@ class DependentNode(Generic[T]):
                 )
             factory = cast(INodeFactory[P, T], factory_or_class)
             return cls.from_factory(factory=factory, config=config)
-
-
-# class Ignore(Generic[T]):
-#     """
-#     def func(command: Ignore[CreateUser]): ...
-#     """
-#     ...

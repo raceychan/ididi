@@ -120,6 +120,12 @@ def is_async_context_manager(t: T) -> TypeGuard[AsyncContextManager[T]]:
     return isinstance(t, contextlib.AbstractAsyncContextManager)
 
 
+def is_context_manager_clss(
+    t: type[T],
+) -> TypeGuard[Union[type[ContextManager[T]], type[AsyncContextManager[T]]]]:
+    return issubclass(t, (ContextManager, AsyncContextManager))
+
+
 def is_class_or_method(obj: Any) -> bool:
     return isinstance(obj, (type, types.MethodType, classmethod))
 
@@ -200,7 +206,6 @@ def flatten_annotated(typ: Annotated[Any, Any]):
             flattened_metadata.append(item)
 
     return flattened_metadata
-
 
 
 def get_bases(dependent: type) -> tuple[type, ...]:

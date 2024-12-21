@@ -407,7 +407,7 @@ improvements on `entry`
 
 ## version 1.1.3
 
-## :chart_with_upwards_trend: Improvements:
+Improvements:
 
 - rename `inject` to `use`, to avoid the implication of `inject` as if it was to say only param annotated with `inject` will be injected.
 whereas what it really means is which factory to use
@@ -430,8 +430,12 @@ now at 1.1.3
 ```
 
 This make functions that does not depends on resource 4-5 times faster than 1.1.2
-
-## :hammer: Fix:
+Fix:
 
 - :sparkles: fix a bug where when a dependent with is registered with `DependencyGraph.register_dependnet`, it will still be statically resolved.
 
+## version 1.1.4
+
+Improvements:
+
+- Add `DependencyGraph.should_be_scoped` api to check if a dependent type contains any resource dependency, and thus should be scoped. this is particularly useful when user needs to (dynamically) decide whether they should create the resource in a scope.
