@@ -6,7 +6,13 @@ import collections.abc
 import contextlib
 import inspect
 import sys
-import types
+from types import (
+    AsyncGeneratorType,
+    FunctionType,
+    GeneratorType,
+    GenericAlias,
+    MethodType,
+)
 from typing import (
     Annotated,
     Any,
@@ -120,14 +126,18 @@ def is_async_context_manager(t: T) -> TypeGuard[AsyncContextManager[T]]:
     return isinstance(t, contextlib.AbstractAsyncContextManager)
 
 
-def is_context_manager_clss(
+def is_any_context_manager_clss(
     t: type[T],
 ) -> TypeGuard[Union[type[ContextManager[T]], type[AsyncContextManager[T]]]]:
     return issubclass(t, (ContextManager, AsyncContextManager))
 
 
+def is_any_generator(func: Union[Callable[..., T], None]):
+    return inspect.isgeneratorfunction(func) or inspect.isasyncgenfunction(func)
+
+
 def is_class_or_method(obj: Any) -> bool:
-    return isinstance(obj, (type, types.MethodType, classmethod))
+    return isinstance(obj, (type, MethodType, classmethod))
 
 
 def is_class(
@@ -138,12 +148,12 @@ def is_class(
     """
     origin = get_origin(obj) or obj
     is_type = isinstance(origin, type)
-    is_generic_alias = isinstance(obj, types.GenericAlias)
+    is_generic_alias = isinstance(obj, GenericAlias)
     return is_type or is_generic_alias
 
 
 def is_function(obj: Union[type[T], Callable[P, T]]) -> TypeGuard[Callable[P, T]]:
-    return isinstance(obj, types.FunctionType)
+    return isinstance(obj, FunctionType)
 
 
 def is_class_with_empty_init(cls: type) -> bool:

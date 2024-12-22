@@ -36,10 +36,11 @@ from ._type_resolve import (
     flatten_annotated,
     get_args,
     get_typed_signature,
+    is_any_context_manager_clss,
+    is_any_generator,
     is_class,
     is_class_or_method,
     is_class_with_empty_init,
-    is_context_manager_clss,
     is_unresolved_type,
     resolve_annotation,
     resolve_factory_return,
@@ -388,8 +389,11 @@ class DependentNode(Generic[T]):
     def is_resource(self) -> bool:
         if self.factory_type == "resource":
             return True
-        return self.factory_type == "default" and is_context_manager_clss(
-            self._dependent.dependent_type
+
+        # class that implements __(a)enter__ and __(a)exit__
+        return (
+            is_any_context_manager_clss(self._dependent.dependent_type)
+            and self.factory_type == "default"
         )
 
     def actualized_params(self) -> Generator[DependencyParam[T], None, None]:
@@ -481,14 +485,18 @@ class DependentNode(Generic[T]):
         factory: INodeFactory[P, T],
         config: NodeConfig,
     ) -> "DependentNode[T]":
-        factory_type = "resource"
-        if inspect.isgeneratorfunction(factory):
-            f = contextmanager(factory)
-        elif inspect.isasyncgenfunction(factory):
-            f = asynccontextmanager(factory)
+        factory_type = "function"
+        f = factory
+        if inspect.isgeneratorfunction(f):
+            f = contextmanager(f)
+            factory_type = "resource"
+        elif inspect.isasyncgenfunction(f):
+            f = asynccontextmanager(f)
+            factory_type = "resource"
         else:
-            f = factory
-            factory_type = "function"
+            # case where user decorate a generator with contextlib.asynccontextmanager
+            if is_any_generator(_ := getattr(factory, "__wrapped__", None)):
+                factory_type = "resource"
 
         signature = get_typed_signature(f, check_return=True)
         dependent: type[T] = resolve_factory_return(signature.return_annotation)

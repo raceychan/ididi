@@ -1,6 +1,8 @@
+from contextlib import asynccontextmanager
+
 import pytest
 
-from ididi import DependencyGraph
+from ididi import AsyncResource, DependencyGraph
 from ididi.errors import ResourceOutsideScopeError
 
 
@@ -44,6 +46,14 @@ async def test_resolve_with_factory():
     assert not acm._closed
 
 
-        
+async def test_user_defined_acm():
 
+    @asynccontextmanager
+    async def acm_factory() -> AsyncResource[ACM]:
+        acm = ACM()
+        yield acm
 
+    dg = DependencyGraph()
+    dg.static_resolve(acm_factory)
+    assert dg.nodes[ACM].factory is acm_factory
+    assert dg.nodes[ACM].factory_type == "resource"

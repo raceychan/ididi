@@ -89,7 +89,7 @@ twine = ">=5.1.1,<6"
 
 [tool.pixi.feature.publish.tasks]
 # Build into a wheel using hatch
-build = { cmd = "hatch build", inputs = ["didi/*"], outputs = ["dist/*"] }
+build = { cmd = "hatch build", inputs = ["ididi/*"], outputs = ["dist/*"] }
 # Upload to custom GCP registry using twine
 check = { cmd = "twine check" }
 publish = { cmd = "twine upload --skip-existing dist/*", depends-on = [

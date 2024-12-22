@@ -606,11 +606,6 @@ class DependencyGraph:
                     cycle = current_path[i:] + [param_type]
                     raise CircularDependencyDetectedError(cycle)
                 if sub_node := self._nodes.get(param_type):
-                    # """NOTE
-                    # currently if a reuse dependent depends on a non-reuse depenendecy
-                    # ididi will raise error, we might instead emits a warning and convert the non-reuse dependency to reuse
-                    # This might favor inline node, such as def __init__(self, conn: Connection = use(conn_factory, reuse=False))
-                    # """
                     if sub_node.config.reuse:
                         continue
                     for n in current_path:

@@ -449,3 +449,24 @@ Fix:
 Fix:
 
 - previously only resource itself will be managed by scope, now if a dependnet depends on a resource, it will also be managed by scope.
+
+## version 1.1.6
+
+Fix:
+
+- fix a bug where if user menually decorate its async generator / sync factory with contextlib.asynccontextmanager / contextmanager, `DependencyNode.factory_type` would generated as `function` 
+
+.e.g:
+
+```py
+from typing import AsyncGenerator
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def get_client() -> AsyncGenerator[Client, None]:
+    client = Client()
+    try:
+        yield client
+    finally:
+        await client.close()
+```
