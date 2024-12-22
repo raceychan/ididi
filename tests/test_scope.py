@@ -113,7 +113,6 @@ def get_db(client: Client) -> ty.Generator[DataBase, None, None]:
         db.close()
 
 
-@pytest.mark.asyncio
 async def test_async_gen_factory():
     dg = DependencyGraph()
 
@@ -161,7 +160,6 @@ def test_sync_func_requires_async_factory():
         main()
 
 
-@pytest.mark.asyncio
 async def test_scope_repeat_resolve():
     dg = DependencyGraph()
 
@@ -196,7 +194,6 @@ async def test_scope_repeat_resolve():
         assert resource is sec_resource
 
 
-@pytest.mark.asyncio
 async def test_resource_shared_within_scope():
     dg = DependencyGraph()
 
@@ -213,7 +210,6 @@ async def test_resource_shared_within_scope():
         def __init__(self, database: AsyncDataBase):
             self.database = database
 
-            
     assert dg.should_be_scoped(FirstResource)
 
     async with dg.scope() as scope:
@@ -226,7 +222,6 @@ async def test_resource_shared_within_scope():
     assert first_resource.database.is_closed
 
 
-@pytest.mark.asyncio
 async def test_nested_scope():
     dg = DependencyGraph()
 
@@ -266,7 +261,6 @@ async def test_nested_scope():
     assert resource.is_closed
 
 
-@pytest.mark.asyncio
 async def test_context_scope():
     dg = DependencyGraph()
 
@@ -359,7 +353,6 @@ def test_nested_scope_with_context_scope():
                 assert local is dg3
 
 
-@pytest.mark.asyncio
 async def test_async_nested_scope_with_context_scope():
     dg = DependencyGraph()
 
@@ -399,7 +392,6 @@ async def test_async_nested_scope_with_context_scope():
         dg.use_scope()
 
 
-@pytest.mark.asyncio
 async def test_db_exec():
 
     dg = DependencyGraph()

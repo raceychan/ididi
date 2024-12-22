@@ -1,7 +1,7 @@
 import inspect
 from contextlib import AsyncExitStack, ExitStack
 from contextvars import ContextVar, Token
-from functools import partial, wraps
+from functools import lru_cache, partial, wraps
 from types import MappingProxyType, TracebackType
 from typing import (
     Any,
@@ -340,6 +340,7 @@ class DependencyGraph:
         self._scope_context = ContextVar[Union[SyncScope, AsyncScope]](
             "connection_context"
         )
+
         if self._config.self_inject:
             self.register_dependent(self)
 
@@ -663,6 +664,7 @@ class DependencyGraph:
         """
         return ScopeProxy(self, name=name)
 
+    @lru_cache(None)
     def should_be_scoped(self, dep_type: INode[P, T]) -> bool:
         "Recursively check if a dependent type contains any resource dependency"
 
@@ -728,13 +730,14 @@ class DependencyGraph:
         if scope:
             if not isinstance(cast(Any, scope), AbstractScope):
                 raise PositionalOverrideError(scope)
+
             if is_provided(solution := scope.get_cached(dependent)):
                 return solution
 
-        if is_provided(solution := self._resolution_registry.get(dependent)):
-            return solution
+            if self.should_be_scoped(dependent):
+                return MISSING
 
-        return MISSING
+        return self._resolution_registry.get(dependent)
 
     @overload
     def resolve(

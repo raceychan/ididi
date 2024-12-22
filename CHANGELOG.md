@@ -443,3 +443,9 @@ Improvements:
 Fix:
 
 - previously entry only check if any of its direct dependency is rousource or not, this will cause bug when any of its indirect dependencies is a resource, raise OutOfScope Exception
+
+## version 1.1.5
+
+Fix:
+
+- previously only resource itself will be managed by scope, now if a dependnet depends on a resource, it will also be managed by scope.

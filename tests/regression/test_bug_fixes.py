@@ -188,3 +188,52 @@ def test_not_supported_type():
 
     # with pytest.raises(UnsolvableDependencyError):
     dg.resolve(AnyService)
+
+
+from ididi import AsyncResource, DependencyGraph, use
+
+
+async def test_resource_across_scope():
+    # given a resource Connection
+    # a service that depnds on Connection
+
+    class Connection:
+        def __init__(self):
+            self._opened = False
+            self._closed = False
+
+        async def open(self):
+            self._opened = True
+
+        async def close(self):
+            self._closed = True
+
+    async def conn_factory() -> AsyncResource[Connection]:
+        conn = Connection()
+        await conn.open()
+        print("conn opened!")
+        yield conn
+        await conn.close()
+
+    class Service:
+        def __init__(self, conn: Connection = use(conn_factory)):
+            self._conn = conn
+
+    dg = DependencyGraph()
+
+    async with dg.scope() as scope1:
+        s1 = await scope1.resolve(Service)
+
+    async with dg.scope() as scope2:
+        s2 = await scope2.resolve(Service)
+
+    assert s1 != s2
+    """
+    This would cause error before 1.1.5 bug fix, s1 == s2
+    because in graph.get_resolve_cache
+    we have a fallback stategy if solution of dependent not found in scope
+    then we check if it is in the solutions of graph
+
+    since we only cache resolution to scope if dependent is a resource
+    we might get the same resource across scopes.
+    """
