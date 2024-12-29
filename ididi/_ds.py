@@ -80,7 +80,8 @@ class ResolutionRegistry(BaseRegistry):
     __slots__ = ("_mappings",)
 
     def __init__(self):
-        self._mappings: ResolvedInstances[Any] = {}
+        # should use weakref dict
+        self._mappings: ResolvedInstances[Any] = dict()
 
     def __getitem__(self, dependent_type: Union[type[T], Callable[..., T]]) -> T:
         return self._mappings[dependent_type]

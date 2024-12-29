@@ -318,7 +318,7 @@ class DependencyGraph:
     _nodes: GraphNodes[Any]
     "Map a type to a dependent node"
     _resolved_nodes: GraphNodes[Any]
-    "Nodes that have been recursively resolved and is validated to be resolvable"
+    "Nodes that have been recursively resolved and is validated to be resolvable."
     _type_registry: TypeRegistry
     "Map a type to its implementations"
 
@@ -328,21 +328,23 @@ class DependencyGraph:
         "_resolved_nodes",
         "_resolution_registry",
         "_type_registry",
+        "_registered_singleton",
         "_scope_context",
     )
 
     def __init__(self, *, self_inject: bool = True):
         self._config = GraphConfig(self_inject=self_inject)
-        self._nodes = {}
-        self._resolved_nodes: GraphNodes[Any] = {}
+        self._nodes = dict()
+        self._resolved_nodes: GraphNodes[Any] = dict()
         self._type_registry = TypeRegistry()
         self._resolution_registry = ResolutionRegistry()
+        self._registered_singleton: set[type] = set()
         self._scope_context = ContextVar[Union[SyncScope, AsyncScope]](
             "connection_context"
         )
 
         if self._config.self_inject:
-            self.register_dependent(self)
+            self.register_singleton(self)
 
     def __repr__(self) -> str:
         return (
@@ -354,20 +356,19 @@ class DependencyGraph:
     def __contains__(self, item: type) -> bool:
         return item in self._nodes
 
-    def is_registered_dependent(self, dependent_type: type) -> bool:
-        return (
-            dependent_type not in self._resolved_nodes
-            and dependent_type in self._resolution_registry
-        )
+    def is_registered_singleton(self, dependent_type: type) -> bool:
+        return dependent_type in self._registered_singleton
 
-    def register_dependent(
+    def register_singleton(
         self, dependent: T, dependent_type: Union[type[T], None] = None
     ) -> None:
         """
         Register a dependent instance to be injected, provide a dependent type if it's not the same as the instance type.
         """
-        dependent_type = dependent_type or type(dependent)
+        if dependent_type is None:
+            dependent_type = type(dependent)
         self._resolution_registry.register(dependent_type, dependent)
+        self._registered_singleton.add(dependent_type)
 
     def static_resolve_all(self) -> None:
         unsolved_nodes: set[type] = self._nodes.keys() - self._resolved_nodes.keys()
@@ -567,10 +568,7 @@ class DependencyGraph:
         resolve_node_config: Maybe[NodeConfig] = MISSING,
     ) -> DependentNode[T]:
         """
-        Resolve a dependency without building its instance.
-        Args:
-        dependent: type | Callable[P, T]
-        node_config: NodeConfig
+        Recursively analyze the type information of a dependency.
         """
         if is_unresolved_type(dependent):
             raise TopLevelBulitinTypeError(dependent)
@@ -579,24 +577,24 @@ class DependencyGraph:
 
         def dfs(dependent_factory: INode[P, T]) -> DependentNode[T]:
             if is_class(dependent_factory):
-                dependent = cast(type, dependent_factory)
+                dependent_type = cast(type, dependent_factory)
             else:
-                dependent = resolve_factory(dependent_factory)
+                dependent_type = resolve_factory(dependent_factory)
                 # statically resolve a unnoded factory function
-                if (dependent) not in self.nodes:
+                if (dependent_type) not in self.nodes:
                     factory = cast(INodeFactory[P, T], dependent_factory)
                     node = DependentNode[T].from_factory(
                         factory=factory, config=NodeConfig()
                     )
                     self.register_node(node)
 
-            current_path.append(dependent)
+            current_path.append(dependent_type)
 
-            if dependent in self._resolved_nodes:
-                return self._resolved_nodes[dependent]
+            if dependent_type in self._resolved_nodes:
+                return self._resolved_nodes[dependent_type]
 
-            node = self._resolve_concrete_node(dependent, resolve_node_config)
-            if self.is_registered_dependent(dependent):
+            node = self._resolve_concrete_node(dependent_type, resolve_node_config)
+            if self.is_registered_singleton(dependent_type):
                 return node
 
             for param in node.actualized_params():
@@ -624,7 +622,8 @@ class DependencyGraph:
                 if param.unresolvable:
                     raise UnsolvableDependencyError(
                         dep_name=param.name,
-                        required_type=param.param_type,
+                        dependent_type=dependent_type,
+                        dependency_type=param.param_type,
                         factory=node.factory,
                     )
 
@@ -643,7 +642,7 @@ class DependencyGraph:
                 self._resolved_nodes[param_type] = dep_node
 
             node.check_for_resolvability()
-            self._resolved_nodes[dependent] = node
+            self._resolved_nodes[dependent_type] = node
             current_path.pop()
             return node
 
@@ -760,10 +759,6 @@ class DependencyGraph:
         *args: P.args,
         **overrides: P.kwargs,
     ) -> T:
-        """
-        Resolve a dependency and build its instance.
-        NOTE: overrides will only be applied to the current dependent.
-        """
         if args:
             raise PositionalOverrideError(args)
 
@@ -791,7 +786,7 @@ class DependencyGraph:
                 self._resolution_registry.register(dependent, instance)
             return cast(T, instance)
 
-        # TODO?: avoid these is_context_manager call
+        # TODO?: avoid these is_context_manager call, check factory type instead
         if is_context_manager(resolved):
             if not scope:
                 raise ResourceOutsideScopeError(node.dependent_type)

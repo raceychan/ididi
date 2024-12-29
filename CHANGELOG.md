@@ -471,11 +471,7 @@ async def get_client() -> AsyncGenerator[Client, None]:
         await client.close()
 ```
 
+- improvement
 
-```bash
-0.010549 seoncds to register 123 classes
-
-0.001665 seoncds to statically resolve 123 classes
-
-0.001053 seoncds to resolve 123 instances, 1.052593 seconds for 1000 rounds
-```
+- use a dedicate ds to hold singleton dependent,
+- improve error message for missing annotation / unresolvable dependency 

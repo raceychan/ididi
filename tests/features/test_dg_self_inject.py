@@ -29,7 +29,7 @@ def test_dg_register_dependent():
     dg = DependencyGraph()
     service = UserService()
 
-    dg.register_dependent(service, UserService)
+    dg.register_singleton(service, UserService)
     assert dg.resolve(UserService) is service
 
 

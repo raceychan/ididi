@@ -94,9 +94,9 @@ def resolve_factory_return(sig_return: type[T]) -> type[T]:
 
 def resolve_factory(factory: Callable[..., T]) -> type[T]:
     """
-    Handle Annotated
-    Generator function
-    etc.
+    The dependent type from its factory, based on factory signature.
+
+    should handle Annotate, Generator function, etc.
     """
     sig = get_typed_signature(factory, check_return=True)
     dependent: type[T] = resolve_factory_return(sig.return_annotation)
@@ -199,7 +199,8 @@ def resolve_annotation(annotation: Any) -> type:
     return origin
 
 
-def flatten_annotated(typ: Annotated[Any, Any]):
+def flatten_annotated(typ: Annotated[Any, Any]) -> list[Any]:
+    "Annotated[Annotated[T, Ann1, Ann2], Ann3] -> [T, Ann1, Ann2, Ann3]"
     flattened_metadata: list[Any] = []
     _, *metadata = get_args(typ)
 

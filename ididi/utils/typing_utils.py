@@ -114,6 +114,7 @@ def get_full_typed_signature(call: Callable[..., T]) -> Signature:
     if check_return is True, raise MissingReturnTypeError if the return type is Signature.emp
     """
     signature = Signature.from_callable(call)
+
     globalns = getattr(call, "__globals__", {})
     return Signature(
         parameters=get_typed_params(call),

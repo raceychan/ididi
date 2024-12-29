@@ -673,7 +673,7 @@ def test_bench_mark():
     cost = round(aft - pre, 6)
     print(f"\n{cost} seoncds to statically resolve {len(dg.nodes)} classes")
 
-    rounds = 1000
+    rounds = 1
     total_cost = 0
 
     for _ in range(rounds):

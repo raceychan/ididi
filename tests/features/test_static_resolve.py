@@ -123,7 +123,7 @@ def test_forward_ref_in_local_scope():
 
 def test_static_resolve_would_raise_error(dg: DependencyGraph):
     class DataBase:
-        def __init__(self, engine: str):
+        def __init__(self, engine: int):
             self.engine = engine
 
     class Repository:

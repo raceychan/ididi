@@ -68,9 +68,8 @@ class UnsolvableNodeError(NodeResolveError):
         self.__notes__.append(note)
 
     def add_context(self, dependent: type, param_name: str, param_annotation: type):
-        self.add_note(
-            f"<- {dependent.__name__}({param_name}: {param_annotation.__name__})"
-        )
+        msg = f"<- {dependent.__name__}({param_name}: {param_annotation.__name__})"
+        self.add_note(msg)
 
 
 class ProtocolFacotryNotProvidedError(UnsolvableNodeError):
@@ -111,9 +110,14 @@ class UnsolvableDependencyError(UnsolvableParameterError):
         *,
         dep_name: str,
         factory: Union[Callable[..., Any], type],
-        required_type: type,
+        dependent_type: type,
+        dependency_type: type,
     ):
-        self.message = f"Unable to resolve dependency for parameter in {factory}, value of `{dep_name}: {required_type}` must be provided"
+        type_repr = getattr(dependency_type, "__name__", str(dependency_type))
+        param_repr = f" * {dependent_type.__name__}({dep_name}: {type_repr}), value of `{dep_name}` must be provided"
+        self.message = (
+            f"Unable to resolve dependency for parameter in {factory}, \n{param_repr}"
+        )
         super().__init__(self.message)
 
 
@@ -130,13 +134,17 @@ class ForwardReferenceNotFoundError(UnsolvableParameterError):
 class MissingAnnotationError(UnsolvableParameterError):
     def __init__(
         self,
+        *,
+        dependent_type: type,
         param_name: str,
-        dependent: type,
+        param_type: type,
     ):
         self.param_name = param_name
-        self.dependent = dependent
-        msg = f"Unable to resolve dependency for parameter: {param_name} in {dependent}, annotation for `{param_name}` must be provided"
-        super().__init__(msg)
+        self.dependent = param_type
+
+        param_repr = f" * value of `{param_name}` must be provided"
+        message = f"Unable to resolve dependency for parameter in {dependent_type}, \n{param_repr}"
+        super().__init__(message)
 
 
 class UnsolvableReturnTypeError(UnsolvableParameterError):

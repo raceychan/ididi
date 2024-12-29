@@ -1,5 +1,5 @@
-from contextlib import asynccontextmanager, contextmanager
 from abc import ABC
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from functools import lru_cache
 from inspect import (
@@ -296,7 +296,11 @@ class DependentSignature(Generic[T]):
         for param in params:
             param_annotation = param.annotation
             if param_annotation is INSPECT_EMPTY:
-                e = MissingAnnotationError(param.name, dependent)
+                e = MissingAnnotationError(
+                    dependent_type=dependent,
+                    param_name=param.name,
+                    param_type=param_annotation,
+                )
                 e.add_context(dependent, param.name, type(MISSING))
                 raise e
 
