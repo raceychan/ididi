@@ -2,17 +2,11 @@
 This module separates the type resolution logic between utils.typing_utils and the core logic, where this module wraps functions in utils.typing_utils with specific domain logic.
 """
 
-import collections.abc
-import contextlib
-import inspect
 import sys
-from types import (
-    AsyncGeneratorType,
-    FunctionType,
-    GeneratorType,
-    GenericAlias,
-    MethodType,
-)
+from collections.abc import AsyncGenerator, Generator
+from contextlib import AbstractAsyncContextManager, AbstractContextManager
+from inspect import Signature, isasyncgenfunction, isgeneratorfunction
+from types import FunctionType, GenericAlias, MethodType
 from typing import (
     Annotated,
     Any,
@@ -39,6 +33,14 @@ from .errors import (
     UnsolvableReturnTypeError,
 )
 from .utils.typing_utils import T, eval_type, get_full_typed_signature, is_builtin_type
+
+if sys.version_info >= (3, 10):
+    from types import UnionType
+
+    UNION_META = (Union, UnionType)
+else:
+    UNION_META = (Union,)
+
 
 SyncResource = Union[ContextManager[Any], Closable]
 AsyncResource = Union[AsyncContextManager[Any], AsyncClosable]
@@ -67,7 +69,7 @@ class EmptyInitProtocol(Protocol): ...
 def get_typed_signature(
     call: Callable[..., T],
     check_return: bool = False,
-) -> inspect.Signature:
+) -> Signature:
     """
     Get a typed signature from a factory.
     """
@@ -84,10 +86,7 @@ def resolve_factory_return(sig_return: type[T]) -> type[T]:
     """
     Get dependent type from a factory return
     """
-    if get_origin(sig_return) in (
-        collections.abc.AsyncGenerator,
-        collections.abc.Generator,
-    ):
+    if get_origin(sig_return) in (AsyncGenerator, Generator):
         dependent, *_ = get_args(sig_return)
         return dependent
     return sig_return
@@ -115,15 +114,15 @@ def is_unresolved_type(t: Any) -> bool:
     Examples:
     - builtin types
     """
-    return is_builtin_type(t) or t is inspect.Signature.empty
+    return is_builtin_type(t) or t is Signature.empty
 
 
 def is_context_manager(t: T) -> TypeGuard[ContextManager[T]]:
-    return isinstance(t, contextlib.AbstractContextManager)
+    return isinstance(t, AbstractContextManager)
 
 
 def is_async_context_manager(t: T) -> TypeGuard[AsyncContextManager[T]]:
-    return isinstance(t, contextlib.AbstractAsyncContextManager)
+    return isinstance(t, AbstractAsyncContextManager)
 
 
 def is_any_context_manager_clss(
@@ -133,7 +132,7 @@ def is_any_context_manager_clss(
 
 
 def is_any_generator(func: Union[Callable[..., T], None]):
-    return inspect.isgeneratorfunction(func) or inspect.isasyncgenfunction(func)
+    return isgeneratorfunction(func) or isasyncgenfunction(func)
 
 
 def is_class_or_method(obj: Any) -> bool:
@@ -193,12 +192,7 @@ def resolve_annotation(annotation: Any) -> type:
 
     # === Solvable dependency, NOTE: order matters!===
 
-    if sys.version_info >= (3, 10):
-        union_meta = (types.UnionType, Union)
-    else:
-        union_meta = (Union,)
-
-    if origin in union_meta:
+    if origin in UNION_META:
         union_types = get_args(annotation)
         # we don't care which type is correct, it would be provided by the factory
         return union_types[0]

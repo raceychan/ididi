@@ -1,8 +1,14 @@
-import abc
-import inspect
 from contextlib import asynccontextmanager, contextmanager
+from abc import ABC
 from dataclasses import dataclass
 from functools import lru_cache
+from inspect import (
+    BoundArguments,
+    Parameter,
+    Signature,
+    isasyncgenfunction,
+    isgeneratorfunction,
+)
 from typing import (
     Annotated,
     Any,
@@ -206,7 +212,7 @@ class DependencyParam(Generic[T]):
     __slots__ = ("name", "param", "param_annotation", "param_type", "default")
 
     name: str
-    param: inspect.Parameter
+    param: Parameter
     param_annotation: type  # original type
     param_type: type[T]  # resolved_type
     default: Maybe[T]
@@ -218,8 +224,8 @@ class DependencyParam(Generic[T]):
     def unresolvable(self) -> bool:
         "if the param is variadic or is of builtin without default"
         if self.param.kind in (
-            inspect.Parameter.VAR_POSITIONAL,
-            inspect.Parameter.VAR_KEYWORD,
+            Parameter.VAR_POSITIONAL,
+            Parameter.VAR_KEYWORD,
         ):
             return True
 
@@ -256,18 +262,18 @@ class DependentSignature(Generic[T]):
     def __getitem__(self, param_name: str) -> DependencyParam[Any]:
         return self.dprams[param_name]
 
-    def generate_signature(self) -> inspect.Signature:
+    def generate_signature(self) -> Signature:
         """
         dynamically generate signature based on current params,
         as we might need to actualize forwardref params when bind params
         """
-        return inspect.Signature(
+        return Signature(
             parameters=[p.param for p in self.dprams.values()],
             return_annotation=self.dependent,
             __validate_parameters__=False,
         )
 
-    def bind_arguments(self, resolved_args: dict[str, Any]) -> inspect.BoundArguments:
+    def bind_arguments(self, resolved_args: dict[str, Any]) -> BoundArguments:
         """Bind resolved arguments to the signature."""
         sig = self.generate_signature()
         bound_args = sig.bind_partial(**resolved_args)
@@ -278,7 +284,7 @@ class DependentSignature(Generic[T]):
         cls,
         dependent: type[T],
         factory: INodeFactory[P, T],
-        signature: inspect.Signature,
+        signature: Signature,
     ):
         params = tuple(signature.parameters.values())
 
@@ -452,7 +458,7 @@ class DependentNode(Generic[T]):
             if getattr(self.factory, "_is_protocol", False):
                 raise ProtocolFacotryNotProvidedError(self.factory)
 
-            if issubclass(self.factory, abc.ABC) and (
+            if issubclass(self.factory, ABC) and (
                 abstract_methods := getattr(self.factory, "__abstractmethods__", None)
             ):
                 raise ABCNotImplementedError(self.factory, abstract_methods)
@@ -464,7 +470,7 @@ class DependentNode(Generic[T]):
         dependent: type[T],
         factory: INodeFactory[P, T],
         factory_type: FactoryType,
-        signature: inspect.Signature,
+        signature: Signature,
         config: NodeConfig,
     ) -> "DependentNode[T]":
         dep = Dependent(dependent_type=dependent)
@@ -487,10 +493,10 @@ class DependentNode(Generic[T]):
     ) -> "DependentNode[T]":
         factory_type = "function"
         f = factory
-        if inspect.isgeneratorfunction(f):
+        if isgeneratorfunction(f):
             f = contextmanager(f)
             factory_type = "resource"
-        elif inspect.isasyncgenfunction(f):
+        elif isasyncgenfunction(f):
             f = asynccontextmanager(f)
             factory_type = "resource"
         else:

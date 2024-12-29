@@ -1,4 +1,4 @@
-import inspect
+from inspect import Parameter, Signature
 from typing import (
     Any,
     AsyncGenerator,
@@ -90,12 +90,12 @@ def get_typed_annotation(annotation: Any, globalns: dict[str, Any]) -> Any:
     return annotation
 
 
-def get_typed_params(call: Callable[..., T]) -> list[inspect.Parameter]:
-    signature = inspect.signature(call)
+def get_typed_params(call: Callable[..., T]) -> list[Parameter]:
+    signature = Signature.from_callable(call)
     globalns = getattr(call, "__globals__", {})
     globalns.pop("copyright", None)  #
     typed_params = [
-        inspect.Parameter(
+        Parameter(
             name=param.name,
             kind=param.kind,
             default=param.default,
@@ -106,25 +106,25 @@ def get_typed_params(call: Callable[..., T]) -> list[inspect.Parameter]:
     return typed_params
 
 
-def get_full_typed_signature(call: Callable[..., T]) -> inspect.Signature:
+def get_full_typed_signature(call: Callable[..., T]) -> Signature:
     """
     Get a full typed signature from a callable.
     check_return: bool
 
-    if check_return is True, raise MissingReturnTypeError if the return type is inspect.Signature.emp
+    if check_return is True, raise MissingReturnTypeError if the return type is Signature.emp
     """
-    signature = inspect.signature(call)
+    signature = Signature.from_callable(call)
     globalns = getattr(call, "__globals__", {})
-    return inspect.Signature(
+    return Signature(
         parameters=get_typed_params(call),
         return_annotation=get_typed_annotation(signature.return_annotation, globalns),
     )
 
 
-def get_factory_sig_from_cls(cls: type[T]) -> inspect.Signature:
+def get_factory_sig_from_cls(cls: type[T]) -> Signature:
     """
     Generate a signature from a class via its __init__ method.
     annotate the return type with the class itself.
     """
     params = get_typed_params(cls.__init__)
-    return inspect.Signature(parameters=params, return_annotation=cls)
+    return Signature(parameters=params, return_annotation=cls)

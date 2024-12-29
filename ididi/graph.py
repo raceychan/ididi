@@ -1,7 +1,7 @@
-import inspect
 from contextlib import AsyncExitStack, ExitStack
 from contextvars import ContextVar, Token
 from functools import lru_cache, partial, wraps
+from inspect import isawaitable, iscoroutinefunction
 from types import MappingProxyType, TracebackType
 from typing import (
     Any,
@@ -836,7 +836,7 @@ class DependencyGraph:
         is_reuse = node.config.reuse
         if node.factory_type == "function":
             instance = resolved
-            if inspect.isawaitable(instance):
+            if isawaitable(instance):
                 instance = await instance
 
             if is_reuse:
@@ -936,7 +936,7 @@ class DependencyGraph:
             (self.should_be_scoped(param_type) for _, param_type in unresolved)
         )
 
-        if inspect.iscoroutinefunction(func):
+        if iscoroutinefunction(func):
             async_func: Callable[..., Awaitable[T]] = cast(
                 Callable[..., Awaitable[T]], func
             )

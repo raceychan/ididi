@@ -1,4 +1,4 @@
-import inspect
+from inspect import Signature
 from typing import (
     Any,
     AsyncGenerator,
@@ -16,8 +16,8 @@ from typing import (
 from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import P, R, T
 
-EMPTY_SIGNATURE = inspect.Signature()
-INSPECT_EMPTY = inspect.Signature.empty
+EMPTY_SIGNATURE = Signature()
+INSPECT_EMPTY = Signature.empty
 
 IEmptyFactory = Callable[[], R]
 
@@ -108,8 +108,6 @@ class INodeConfig(IEntryConfig, total=False):
     reuse: bool
 
 
-
-
 class NodeConfig:
     __slots__ = ("reuse", "lazy", "ignore")
 
@@ -134,6 +132,7 @@ class NodeConfig:
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.reuse=}, {self.lazy=}, {self.ignore=})"
+
 
 class EntryConfig(NodeConfig):
     __slots__ = ("lazy", "ignore", "reuse")

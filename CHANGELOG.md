@@ -454,7 +454,7 @@ Fix:
 
 Fix:
 
-- fix a bug where if user menually decorate its async generator / sync factory with contextlib.asynccontextmanager / contextmanager, `DependencyNode.factory_type` would generated as `function` 
+- fix a bug where if user menually decorate its async generator / sync factory with contextlib.asynccontextmanager / contextmanager, `DependencyNode.factory_type` would generated as `function`.
 
 .e.g:
 
@@ -469,4 +469,13 @@ async def get_client() -> AsyncGenerator[Client, None]:
         yield client
     finally:
         await client.close()
+```
+
+
+```bash
+0.010549 seoncds to register 123 classes
+
+0.001665 seoncds to statically resolve 123 classes
+
+0.001053 seoncds to resolve 123 instances, 1.052593 seconds for 1000 rounds
 ```
