@@ -2,10 +2,13 @@ import inspect
 import sys
 import typing as ty
 from abc import ABC, abstractmethod
+from datetime import datetime
+from typing import Optional
 from unittest import mock
 
 import pytest
 
+from ididi import DependencyGraph
 from ididi.errors import (
     ABCNotImplementedError,
     AsyncResourceInSyncError,
@@ -672,3 +675,40 @@ def test_graph_static_resolved_should_not_override():
     dg.merge(dg2)
     assert dg.nodes[ComplianceChecker].factory_type == "function"
     assert ComplianceChecker in dg and DatabaseConfig in dg
+
+
+def test_factory_override_default_value():
+    dg = DependencyGraph()
+
+    class Database: ...
+
+    DB_SINGLETON = Database()
+
+    class UserRepos:
+        def __init__(self, db: Optional[Database] = None):
+            self.db = db
+
+    class Person:
+        def __init__(self, name: str = "p"):
+            self.name = name
+
+    def db_factory() -> Database:
+        return DB_SINGLETON
+
+    db = dg.resolve(UserRepos).db
+    assert isinstance(db, Database)
+    assert db is not DB_SINGLETON
+    dg.node(db_factory)
+    assert dg.resolve(Database) is DB_SINGLETON
+
+    assert dg.resolve(Person).name == "p"
+
+
+def test_graph_ignore():
+    class Timer:
+        def __init__(self, d: datetime):
+            self._d = d
+
+    dg = DependencyGraph(ignore=datetime)
+    with pytest.raises(TypeError):
+        dg.resolve(Timer)

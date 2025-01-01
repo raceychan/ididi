@@ -47,7 +47,7 @@ from ._type_resolve import (
     is_class,
     is_class_or_method,
     is_class_with_empty_init,
-    is_unresolved_type,
+    is_unsolvable_type,
     resolve_annotation,
     resolve_factory_return,
     resolve_forwardref,
@@ -229,7 +229,7 @@ class DependencyParam(Generic[T]):
         ):
             return True
 
-        if self.default is MISSING and is_unresolved_type(self.param_type):
+        if self.default is MISSING and is_unsolvable_type(self.param_type):
             return True
 
         return False
@@ -432,26 +432,27 @@ class DependentNode(Generic[T]):
         ignores = self.config.ignore + ignore
         for param_name, dpram in self.signature:
             param_type: type[T] = dpram.param_type
-            default = dpram.default
-
             if param_name in ignores or param_type in ignores:
                 continue
+            default = dpram.default
 
             if is_provided(default):
                 if param_tuple := (resolve_annotated(param_name, default)):
                     yield param_tuple
-                continue
+
+                # should we compare type or check unresolvable_type?
+                if is_unsolvable_type(param_type):
+                    continue
 
             if param_tuple := (resolve_annotated(param_name, param_type)):
-                yield param_tuple
-                continue
+                (param_name, param_type) = param_tuple
 
             yield (param_name, param_type)
 
     def inject_params(
         self, params: dict[str, Any]
     ) -> Union[T, Awaitable[T], Generator[T, None, None], AsyncGenerator[T, None]]:
-        "Inject params to dependent factory accordidng to its signature, return the dependent object"
+        "Inject dependencies to the dependent accordidng to its signature, return an instance of the dependent type"
         arguments = self.signature.bind_arguments(params).arguments
         r = self.factory(**arguments)
         return r

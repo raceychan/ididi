@@ -475,3 +475,33 @@ async def get_client() -> AsyncGenerator[Client, None]:
 
 - use a dedicate ds to hold singleton dependent,
 - improve error message for missing annotation / unresolvable dependency 
+
+## version 1.1.7
+
+improvements
+
+- factory have higher priority than default value
+
+now, for a non-builtin type, ididi will try to resolve it even with default value, 
+this is because for classses that needs dependency injection, it does not make sense to have a default value in most cases, and in cases where it does, it most likely be like this
+
+```py
+class UserRepos:
+    def __init__(self, db: Optional[Database] = None):
+        self.db = db
+```
+
+and it make more sense to inject `Database` than to ignore it.
+
+
+- global ignore with `DependencyGraph(ignore=(type))`
+
+```py
+class Timer:
+    def __init__(self, d: datetime):
+        self._d = d
+
+dg = DependencyGraph(ignore=datetime)
+with pytest.raises(TypeError):
+    dg.resolve(Timer)
+```

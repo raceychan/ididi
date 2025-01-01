@@ -27,6 +27,7 @@ from typing_extensions import Self, Unpack
 from ._ds import GraphNodes, GraphNodesView, ResolutionRegistry, TypeRegistry, Visitor
 from ._itypes import (
     INSPECT_EMPTY,
+    CIgnore,
     EntryConfig,
     GraphConfig,
     IAnyFactory,
@@ -47,7 +48,7 @@ from ._type_resolve import (
     is_class,
     is_context_manager,
     is_function,
-    is_unresolved_type,
+    is_unsolvable_type,
     resolve_annotation,
     resolve_factory,
 )
@@ -332,8 +333,8 @@ class DependencyGraph:
         "_scope_context",
     )
 
-    def __init__(self, *, self_inject: bool = True):
-        self._config = GraphConfig(self_inject=self_inject)
+    def __init__(self, *, self_inject: bool = True, ignore: Maybe[CIgnore] = MISSING):
+        self._config = GraphConfig(self_inject=self_inject, ignore=ignore)
         self._nodes = dict()
         self._resolved_nodes: GraphNodes[Any] = dict()
         self._type_registry = TypeRegistry()
@@ -570,7 +571,7 @@ class DependencyGraph:
         """
         Recursively analyze the type information of a dependency.
         """
-        if is_unresolved_type(dependent):
+        if is_unsolvable_type(dependent):
             raise TopLevelBulitinTypeError(dependent)
 
         current_path: list[type] = []
@@ -767,10 +768,11 @@ class DependencyGraph:
 
         node: DependentNode[T] = self.static_resolve(dependent)
         node_config = node.config
-
         resolved_params: dict[str, Any] = overrides
 
-        for param_name, param_type in node.unsolved_params(tuple(resolved_params)):
+        ignores = self._config.ignore + tuple(resolved_params)
+
+        for param_name, param_type in node.unsolved_params(ignores):
             if node_config.lazy:
                 dep_node = self.static_resolve(param_type, node_config)
                 resolved_params[param_name] = self._create_lazy_dependent(dep_node)
@@ -820,10 +822,11 @@ class DependencyGraph:
             return resolution
 
         node: DependentNode[T] = self.static_resolve(dependent)
-
         resolved_params: dict[str, Any] = overrides
 
-        for param_name, param_type in node.unsolved_params(tuple(resolved_params)):
+        ignores = self._config.ignore + tuple(resolved_params)
+
+        for param_name, param_type in node.unsolved_params(ignores):
             resolved_params[param_name] = await self.aresolve(param_type, scope)
 
         resolved = node.inject_params(resolved_params)
@@ -908,14 +911,16 @@ class DependencyGraph:
             return configured
 
         config = EntryConfig(**iconfig)
+        should_ignore = self._config.ignore + config.ignore
         sig = get_typed_signature(func)
 
+        depends_on_resource: bool = False
         unresolved: list[tuple[str, type]] = []
         for name, param in sig.parameters.items():
             param_type = resolve_annotation(param.annotation)
-            if name in config.ignore or param_type in config.ignore:
+            if name in should_ignore or param_type in should_ignore:
                 continue
-            if is_unresolved_type(param_type):
+            if is_unsolvable_type(param_type):
                 continue
             if inject_node := (
                 resolve_inject(param_type) or resolve_inject(param.default)
@@ -925,11 +930,9 @@ class DependencyGraph:
                 param_type = inject_node.dependent_type
 
             self.static_resolve(param_type, config)
+            if not depends_on_resource:
+                depends_on_resource = self.should_be_scoped(param_type)
             unresolved.append((name, param_type))
-
-        depends_on_resource: bool = any(
-            (self.should_be_scoped(param_type) for _, param_type in unresolved)
-        )
 
         if iscoroutinefunction(func):
             async_func: Callable[..., Awaitable[T]] = cast(
@@ -1036,7 +1039,7 @@ class DependencyGraph:
             configured = cast(TDecor, partial(self.node, **config))
             return configured
 
-        if is_unresolved_type(factory_or_class):
+        if is_unsolvable_type(factory_or_class):
             raise TopLevelBulitinTypeError(factory_or_class)
 
         factory_return = get_typed_signature(factory_or_class).return_annotation

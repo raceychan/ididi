@@ -42,6 +42,8 @@ INodeFactory = Union[
 ]
 INode = Union[INodeFactory[P, R], type[R]]
 
+CIgnore = Union[Union[str, type], tuple[Union[str, type], ...]]
+
 # P1 = TypeVar("P1")
 # P2 = TypeVar("P2")
 # P3 = TypeVar("P3")
@@ -83,7 +85,7 @@ class TEntryDecor(Protocol):
 
 class IEntryConfig(TypedDict, total=False):
     lazy: bool
-    ignore: Union[Union[str, type], tuple[Union[str, type], ...]]
+    ignore: CIgnore
 
 
 class INodeConfig(IEntryConfig, total=False):
@@ -118,7 +120,7 @@ class NodeConfig:
         *,
         reuse: bool = True,
         lazy: bool = False,
-        ignore: Maybe[Union[Union[str, type], tuple[Union[str, type], ...]]] = MISSING,
+        ignore: Maybe[CIgnore] = MISSING,
     ):
         self.lazy = lazy
 
@@ -141,16 +143,22 @@ class EntryConfig(NodeConfig):
         self,
         *,
         lazy: bool = False,
-        ignore: Maybe[Union[Union[str, type], tuple[Union[str, type], ...]]] = MISSING,
+        ignore: Maybe[CIgnore] = MISSING,
     ):
         super().__init__(reuse=False, lazy=lazy, ignore=ignore)
 
 
 class GraphConfig:
-    __slots__ = "self_inject"
+    __slots__ = ("self_inject", "ignore")
 
-    def __init__(self, *, self_inject: bool = True):
+    def __init__(self, *, self_inject: bool, ignore: Maybe[CIgnore]):
         self.self_inject = self_inject
+        if not is_provided(ignore):
+            ignore = tuple()
+        elif not isinstance(ignore, tuple):
+            ignore = (ignore,)
+
+        self.ignore = ignore
 
 
 @runtime_checkable

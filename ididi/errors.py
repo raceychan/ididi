@@ -68,7 +68,7 @@ class UnsolvableNodeError(NodeResolveError):
         self.__notes__.append(note)
 
     def add_context(self, dependent: type, param_name: str, param_annotation: type):
-        msg = f"<- {dependent.__name__}({param_name}: {param_annotation.__name__})"
+        msg = f"-> {dependent.__name__}({param_name}: {param_annotation.__name__})"
         self.add_note(msg)
 
 
@@ -114,7 +114,7 @@ class UnsolvableDependencyError(UnsolvableParameterError):
         dependency_type: type,
     ):
         type_repr = getattr(dependency_type, "__name__", str(dependency_type))
-        param_repr = f" * {dependent_type.__name__}({dep_name}: {type_repr}), value of `{dep_name}` must be provided"
+        param_repr = f" * {dependent_type.__name__}({dep_name}: {type_repr}) \n value of `{dep_name}` must be provided"
         self.message = (
             f"Unable to resolve dependency for parameter in {factory}, \n{param_repr}"
         )
@@ -142,8 +142,8 @@ class MissingAnnotationError(UnsolvableParameterError):
         self.param_name = param_name
         self.dependent = param_type
 
-        param_repr = f" * value of `{param_name}` must be provided"
-        message = f"Unable to resolve dependency for parameter in {dependent_type}, \n{param_repr}"
+        param_repr = f"\n * value of `{param_name}` must be provided"
+        message = f"Unable to resolve dependency for parameter in {dependent_type}: {param_repr}"
         super().__init__(message)
 
 
@@ -155,7 +155,7 @@ class UnsolvableReturnTypeError(UnsolvableParameterError):
 
     def __init__(self, factory: Callable[..., Any], target: type):
         self.factory = factory
-        msg = f"Factory {factory} must have a return type, instead of {target}"
+        msg = f"Factory {factory} must have a solvable return type, instead of {target}"
         super().__init__(msg)
 
 

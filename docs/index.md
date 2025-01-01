@@ -33,14 +33,24 @@ $ pip install "ididi[graphviz]"
 ### Quick Start
 
 ```python
-import ididi
+from ididi import DependencyGraph, use, entry, AsyncResource
 
-class UserService:
-    def __init__(self, repo: UserRepository):
-        self.repo = repo
+async def conn_factory(engine: AsyncEngine) -> AsyncGenerator[AsyncConnection, None]:
+    async with engine.begin() as conn:
+        yield conn
 
-user_service = ididi.resolve(UserService) 
+class UnitOfWork:
+    def __init__(self, conn: AsyncConnection=use(conn_factory)):
+        self._conn = conn
+
+@entry
+async def main(command: CreateUser, uow: UnitOfWork):
+    await uow.execute(build_query(command))
+
+await main(CreateUser(name='user'))
 ```
+
+This would create a `UnitOfWork` instance with a connection from `conn_factory` when `main` is called.
 
 ## Why Ididi?
 

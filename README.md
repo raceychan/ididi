@@ -36,6 +36,7 @@ pip install ididi[graphviz]
 
 ### Quick Start
 
+
 ```python
 from ididi import DependencyGraph, use, entry, AsyncResource
 
@@ -50,9 +51,11 @@ class UnitOfWork:
 @entry
 async def main(command: CreateUser, uow: UnitOfWork):
     await uow.execute(build_query(command))
+
+await main(CreateUser(name='user'))
 ```
 
-**No Container, No Provider, No Wiring, just *Python***
+This would create a `UnitOfWork` instance, with a opened sqlalchemy.AsyncConnection from `conn_factory` when `main` is called. The connection will be closed when `main` is finished.
 
 ## Features
 
@@ -83,10 +86,12 @@ async def main(sql: str, db: DataBase = use(get_db)) -> ty.Any:
 assert await main("select money from bank")
 ```
 
-> [!NOTE]
+> [!INFORMATION]
 > **`DependencyGraph.node` accepts a wide arrange of types, such as dependent class, sync/async facotry, sync/async resource factory, with typing support.**
 
-### Using Scope to manage resources
+### Scope
+
+Using Scope to manage resources
 
 - **Infinite nested scope is supported.**
 - **Parent scope can be accssed by child scope(within the same context)**
@@ -96,31 +101,38 @@ assert await main("select money from bank")
 
 - **Scopes are separated by context**
 
-> [!NOTE]
+> [!INFORMATION]
 If you have two call stack of `a1 -> b1` and `a2 -> b2`,
     Here `a1` and `a2` are two calls to the same function `a`,
     then, in `b1`, you can only access scope created by the `a1`, not `a2`.
 
 This is particularly useful when you try to separate resources by route, endpoint, request, etc.
 
-#### Async, or not, works either way
+#### Async scope
 
 ```python
 @dg.node
 def get_resource() -> ty.Generator[Resource, None, None]:
     res = Resource()
-    yield res
-    res.close()
+    with res:
+        yield res
+
+@dg.node
+async def get_asyncresource() -> ty.Generator[AsyncResource, None, None]:
+    res = AsyncResource()
+    async with res:
+        yield res
+
 
 with dg.scope() as scope:
     resource = scope.resolve(Resource)
 
 # For async generator
 async with dg.scope() as scope:
-    resource = await scope.resolve(Resource)
+    resource = await scope.resolve(AsyncResource)
 ```
 
-> [!NOTE]
+> [!INFORMATION]
 > `dg.node` will leave your class/factory untouched, i.e., you can use it just like it is not decorated.
 
 #### Contexted Scope
@@ -209,18 +221,13 @@ def get_service(service: Service):
 ```
 
 >[!IMPORTANT]
-DependencyGraph does NOT have to be a global singleton
-
-Although we use `dg` extensively to represent an instance of DependencyGraph for the convenience of explaination,
-it **DOES NOT** mean it has to be a *global singleton*. These are some examples you might inject it into your fastapi app at different levels.
-
 (ididi v1.0.5)
-You can create different dependency graphs in different files, then merge them in the main graph
+You can create different dependency graphs in different files, then merge them into the main graph.
 
 ```py
-from app.features.user import user_graph
-from app.features.auth import auth_graph
-from app.features.payment import payment_graph
+from app.user import user_graph
+from app.auth import auth_graph
+from app.payment import payment_graph
 
 # in your entry file
 
@@ -327,8 +334,8 @@ def write_notification(scope: SyncScope, email: str, message=""):
 `DependencyGraph.resolve`, rsolves dpendent with this order:
 
 1. override
-2. default value
-3. factory
+2. factory
+3. default value
 
 ### Usage of factory
 
@@ -549,13 +556,12 @@ assert instance.inner.value == "overridden"
 static resolve might fail when class contain unresolvable dependencies, when failed, ididi would show a chain of errors like this:
 
 ```bash
-ididi.errors.MissingAnnotationError: Unable to resolve dependency for parameter: env in <class 'Config'>,
-annotation for `env` must be provided
+ididi.errors.MissingAnnotationError: Unable to resolve dependency for parameter in <class 'tests.test_graph.Database'>:
 
-<- Config(env: _Missed)
-<- DataBase(config: Config)
-<- AuthService(db: DataBase)
-<- UserService(auth: AuthService)
+* value of `config` must be provided
+-> Database(config: _Missed)
+-> UserRepository(db: Database)
+-> UserService(repo: UserRepository)
 ```
 
 Where UserService depends on AuthService, which depends on Database, then Config, but Config.env is missing annotation.

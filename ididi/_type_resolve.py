@@ -77,7 +77,7 @@ def get_typed_signature(
     sig_return: Union[type[T], ForwardRef] = sig.return_annotation
     if isinstance(sig_return, ForwardRef):
         raise ForwardReferenceNotFoundError(sig_return)
-    if check_return and is_unresolved_type(sig_return):
+    if check_return and is_unsolvable_type(sig_return):
         raise UnsolvableReturnTypeError(call, sig_return)
     return sig
 
@@ -103,7 +103,7 @@ def resolve_factory(factory: Callable[..., T]) -> type[T]:
     return dependent
 
 
-def is_unresolved_type(t: Any) -> bool:
+def is_unsolvable_type(t: Any) -> bool:
     """
     Types that are not resolved at type resolving.
     Builtin types are unresolvable, but we might have other cases.
@@ -171,15 +171,19 @@ def is_class_with_empty_init(cls: type) -> bool:
 def resolve_forwardref(
     dependent: Union[type[T], Callable[..., T]], ref: ForwardRef
 ) -> type[T]:
-    # if is_function(dependent):
-    #     globalvs = dependent.__globals__
-    # else:
     globalvs = dependent.__init__.__globals__
 
     try:
         return eval_type(ref, globalvs, globalvs)
     except NameError as e:
         raise ForwardReferenceNotFoundError(ref) from e
+
+
+def first_solvable_type(types: tuple[Any, ...]) -> type:
+    for t in types:
+        if not is_unsolvable_type(t):
+            return t
+    return types[0]
 
 
 def resolve_annotation(annotation: Any) -> type:
@@ -194,8 +198,7 @@ def resolve_annotation(annotation: Any) -> type:
 
     if origin in UNION_META:
         union_types = get_args(annotation)
-        # we don't care which type is correct, it would be provided by the factory
-        return union_types[0]
+        return first_solvable_type(union_types)
     return origin
 
 
@@ -209,7 +212,6 @@ def flatten_annotated(typ: Annotated[Any, Any]) -> list[Any]:
             flattened_metadata.extend(flatten_annotated(item))
         else:
             flattened_metadata.append(item)
-
     return flattened_metadata
 
 

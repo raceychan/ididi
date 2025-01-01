@@ -37,7 +37,7 @@ def is_builtin_container(t: Any) -> TypeGuard[ContainerBuiltins[Any]]:
 
 
 def is_builtin_singleton(t: Any) -> TypeGuard[BuiltinSingleton]:
-    return t is None
+    return t is None or t is type(None)
 
 
 def is_builtin_type(
