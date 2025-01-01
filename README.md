@@ -86,7 +86,7 @@ async def main(sql: str, db: DataBase = use(get_db)) -> ty.Any:
 assert await main("select money from bank")
 ```
 
-> [!INFORMATION]
+> [!TIP]
 > **`DependencyGraph.node` accepts a wide arrange of types, such as dependent class, sync/async facotry, sync/async resource factory, with typing support.**
 
 ### Scope
@@ -101,7 +101,7 @@ Using Scope to manage resources
 
 - **Scopes are separated by context**
 
-> [!INFORMATION]
+> [!TIP]
 If you have two call stack of `a1 -> b1` and `a2 -> b2`,
     Here `a1` and `a2` are two calls to the same function `a`,
     then, in `b1`, you can only access scope created by the `a1`, not `a2`.
@@ -132,7 +132,7 @@ async with dg.scope() as scope:
     resource = await scope.resolve(AsyncResource)
 ```
 
-> [!INFORMATION]
+> [!TIP]
 > `dg.node` will leave your class/factory untouched, i.e., you can use it just like it is not decorated.
 
 #### Contexted Scope
