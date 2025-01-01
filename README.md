@@ -38,7 +38,7 @@ pip install ididi[graphviz]
 
 
 ```python
-from ididi import DependencyGraph, use, entry, AsyncResource
+from ididi import use, entry, AsyncResource
 
 async def conn_factory(engine: AsyncEngine) -> AsyncGenerator[AsyncConnection, None]:
     async with engine.begin() as conn:
