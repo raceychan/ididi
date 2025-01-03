@@ -47,7 +47,8 @@ pip install ididi[graphviz]
 
 
 ```python
-from ididi import use, entry, AsyncResource
+from typing import AsyncGenerator
+from ididi import use, entry
 
 async def conn_factory(engine: AsyncEngine) -> AsyncGenerator[AsyncConnection, None]:
     async with engine.begin() as conn:
@@ -61,10 +62,10 @@ class UnitOfWork:
 async def main(command: CreateUser, uow: UnitOfWork):
     await uow.execute(build_query(command))
 
+# note uow is automatically injected here
 await main(CreateUser(name='user'))
 ```
 
-This would create a `UnitOfWork` instance, with a opened sqlalchemy.AsyncConnection from `conn_factory` when `main` is called. The connection will be closed when `main` is finished.
 
 ### Dependency factory 
 
