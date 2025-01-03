@@ -6,8 +6,8 @@ from ididi.errors import UnsolvableDependencyError
 
 class IgnoreNode:
     def __init__(self, name: str, age: int):
-        self.name=name
-        self.age=age
+        self.name = name
+        self.age = age
 
 
 def test_direct_resolve_fail():
@@ -40,3 +40,10 @@ def test_resolve_without_ignore():
     n = dg.resolve(IgnoreNode, name="test", age=3)
     assert n.name == "test"
     assert n.age == 3
+
+
+def test_resolve_with_positinoal_ignore():
+    dg = DependencyGraph()
+    dg.node(ignore=(0, "age"))(IgnoreNode)
+    i = dg.resolve(IgnoreNode, name="r", age=5)
+    assert i.name == "r" and i.age == 5

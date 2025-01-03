@@ -505,3 +505,67 @@ dg = DependencyGraph(ignore=datetime)
 with pytest.raises(TypeError):
     dg.resolve(Timer)
 ```
+
+
+## version 1.1.8
+
+improvements
+
+- change `Scope.register_dependent` to `Scope.register_singleton` to match the change made in 1.1.7 on `DependencyGraph`. 
+
+- positional ignore for node
+
+```py
+def test_ignore():
+    dg = DependencyGraph()
+
+    class Item:
+        def __init__(self, a: int, b: str, c: int):
+            self.a = a
+            self.b = b
+            self.c = c
+
+    with pytest.raises(UnsolvableDependencyError):
+        dg.resolve(Item)
+
+    dg.node(ignore=(0, str, "c"))
+    with pytest.raises(TypeError):
+        dg.resolve(Item)
+
+>>> TypeError: __init__() missing 3 required positional arguments: 'a', 'b', and 'c'
+```
+
+- partial resolve
+
+previously, if a dependent requires a unresolvable dependency without default value, it would raise `UnsolvableDependencyError`,
+this might be a problem when user wants to resolve the dependent by providing the unresolvable dependency with `dg.resolve`.
+
+now `DependencyGraph` accepts a `partial_resolve` parameter, which would allow user to resolve a dependent with missing unsolvable-dependency.
+
+```py
+def test_graph_partial_resolve_with_dep():
+    dg = DependencyGraph(partial_resolve=True)
+
+    class Database: ...
+
+    DATABASE = Database()
+
+    def db_factory() -> Database:
+        return DATABASE
+
+    class Data:
+        def __init__(self, name: str, db: Database = use(db_factory)):
+            self.name = name
+            self.db = db
+
+    dg.node(Data)
+
+    dg.static_resolve(Data)
+
+    with pytest.raises(UnsolvableDependencyError):
+        data = dg.resolve(Data)
+
+    data = dg.resolve(Data, name="data")
+    assert data.name == "data"
+    assert data.db is DATABASE
+```

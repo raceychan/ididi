@@ -167,10 +167,10 @@ def test_sr_false():
         def close(self) -> None:
             return
 
-    @dg.node
     def db_factory() -> DataBase:
         return DataBase("test")
 
+    dg.node(db_factory)
     dg.static_resolve_all()
 
 
@@ -191,3 +191,21 @@ def test_sr_pre_resolved():
     dg.static_resolve(db_factory)
 
     dg.static_resolve_all()
+
+
+def test_ignore():
+    dg = DependencyGraph()
+
+    @dg.node(ignore=(0, str, "c"))
+    class Item:
+        def __init__(self, a: int, b: str, c: int):
+            self.a = a
+            self.b = b
+            self.c = c
+
+    # TypeError: __init__() missing 3 required positional arguments: 'a', 'b', and 'c'
+    with pytest.raises(TypeError):
+        dg.resolve(Item)
+
+    item = dg.resolve(Item, a=1, b="2", c=3)
+    assert item.a == 1 and item.b == "2" and item.c == 3

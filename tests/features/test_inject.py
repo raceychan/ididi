@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Annotated
 
 from ididi import DependencyGraph, entry, use
@@ -5,7 +6,7 @@ from tests.test_data import UserService
 
 
 def get_user_service() -> UserService:
-    return UserService(1, 2)
+    return UserService(db=1, auth=2)
 
 
 async def create_user(service: UserService = use(get_user_service)):
@@ -58,3 +59,21 @@ class SessionService:
 def test_class_inject():
     dg = DependencyGraph()
     dg.resolve(SessionService)
+
+
+def utc_factory() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+
+
+UTC_DATETIME = Annotated[datetime, use(utc_factory)]
+
+def test_resolve_timer():
+    class Timer:
+        def __init__(self, time: UTC_DATETIME):
+            self.time = time
+
+    dg = DependencyGraph()
+    tmer = dg.resolve(Timer)
+    assert tmer.time.tzinfo == timezone.utc

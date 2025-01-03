@@ -409,7 +409,9 @@ class DependentNode(Generic[T]):
     def actualized_params(self) -> Generator[DependencyParam[T], None, None]:
         "iter through dependency params of current node, used in static resolve"
         ignore_params = self.config.ignore
-        for param_name, param in self.signature.dprams.items():
+        for i, (param_name, param) in enumerate(self.signature):
+            if i in ignore_params:
+                continue
             param_type = cast(Union[type, ForwardRef], param.param_type)
             if param_name in ignore_params or param_type in ignore_params:
                 continue
@@ -430,7 +432,9 @@ class DependentNode(Generic[T]):
         self, ignore: tuple[Union[str, type], ...]
     ) -> Generator[tuple[str, type], None, None]:
         ignores = self.config.ignore + ignore
-        for param_name, dpram in self.signature:
+        for i, (param_name, dpram) in enumerate(self.signature):
+            if i in ignores:
+                continue
             param_type: type[T] = dpram.param_type
             if param_name in ignores or param_type in ignores:
                 continue

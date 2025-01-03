@@ -27,9 +27,9 @@ from typing_extensions import Self, Unpack
 from ._ds import GraphNodes, GraphNodesView, ResolutionRegistry, TypeRegistry, Visitor
 from ._itypes import (
     INSPECT_EMPTY,
-    CIgnore,
     EntryConfig,
     GraphConfig,
+    GraphIgnoreConfig,
     IAnyFactory,
     IAsyncFactory,
     IEmptyFactory,
@@ -350,8 +350,16 @@ class DependencyGraph:
         "_scope_context",
     )
 
-    def __init__(self, *, self_inject: bool = True, ignore: Maybe[CIgnore] = MISSING):
-        self._config = GraphConfig(self_inject=self_inject, ignore=ignore)
+    def __init__(
+        self,
+        *,
+        self_inject: bool = True,
+        ignore: Maybe[GraphIgnoreConfig] = MISSING,
+        partial_resolve: bool = False,
+    ):
+        self._config = GraphConfig(
+            self_inject=self_inject, ignore=ignore, partial_resolve=partial_resolve
+        )
         self._nodes = dict()
         self._resolved_nodes: GraphNodes[Any] = dict()
         self._type_registry = TypeRegistry()
@@ -590,7 +598,7 @@ class DependencyGraph:
         """
         Recursively analyze the type information of a dependency.
         """
-        if is_unsolvable_type(dependent):
+        if self._config.partial_resolve is False and is_unsolvable_type(dependent):
             raise TopLevelBulitinTypeError(dependent)
 
         current_path: list[type] = []
@@ -639,7 +647,8 @@ class DependencyGraph:
                     continue
                 if is_provided(param.default):
                     continue
-                if param.unresolvable:
+
+                if not self._config.partial_resolve and param.unresolvable:
                     raise UnsolvableDependencyError(
                         dep_name=param.name,
                         dependent_type=dependent_type,
@@ -739,10 +748,10 @@ class DependencyGraph:
         return scope
 
     def get_resolve_cache(
-        self, dependent: IFactory[P, T], scope: Maybe[AbstractScope[Any]]
+        self, dependent: IFactory[P, T], scope: Maybe[Any]
     ) -> Maybe[T]:
         if scope:
-            if not isinstance(cast(Any, scope), AbstractScope):
+            if not isinstance(scope, AbstractScope):
                 raise PositionalOverrideError(scope)
 
             if is_provided(solution := scope.get_cached(dependent)):
@@ -792,6 +801,9 @@ class DependencyGraph:
         ignores = self._config.ignore + tuple(resolved_params)
 
         for param_name, param_type in node.unsolved_params(ignores):
+            if self._config.partial_resolve and is_unsolvable_type(param_type):
+                continue
+
             if node_config.lazy:
                 dep_node = self.static_resolve(param_type, node_config)
                 resolved_params[param_name] = self._create_lazy_dependent(dep_node)
@@ -844,6 +856,8 @@ class DependencyGraph:
         ignores = self._config.ignore + tuple(resolved_params)
 
         for param_name, param_type in node.unsolved_params(ignores):
+            if self._config.partial_resolve and is_unsolvable_type(param_type):
+                continue
             resolved_params[param_name] = await self.aresolve(param_type, scope)
 
         resolved = node.inject_params(resolved_params)
@@ -947,8 +961,10 @@ class DependencyGraph:
                 param_type = inject_node.dependent_type
 
             self.static_resolve(param_type, config)
-            if not depends_on_resource:
-                depends_on_resource = self.should_be_scoped(param_type)
+            # if True, stay True
+            depends_on_resource = depends_on_resource or self.should_be_scoped(
+                param_type
+            )
             unresolved.append((name, param_type))
 
         if iscoroutinefunction(func):
@@ -963,7 +979,7 @@ class DependencyGraph:
                     for param_name, param_type in unresolved:
                         if param_name in kwargs:
                             continue
-                        resolved = await scope.resolve(param_type)
+                        resolved = await self.aresolve(param_type, scope)
                         kwargs[param_name] = resolved
 
                     r = await async_func(*args, **kwargs)
@@ -991,7 +1007,7 @@ class DependencyGraph:
                     for param_name, param_type in unresolved:
                         if param_name in kwargs:
                             continue
-                        resolved = scope.resolve(param_type)
+                        resolved = self.resolve(param_type, scope)
                         kwargs[param_name] = resolved
 
                     r = sync_func(*args, **kwargs)
@@ -1056,7 +1072,7 @@ class DependencyGraph:
             configured = cast(TDecor, partial(self.node, **config))
             return configured
 
-        if is_unsolvable_type(factory_or_class):
+        if not self._config.partial_resolve and is_unsolvable_type(factory_or_class):
             raise TopLevelBulitinTypeError(factory_or_class)
 
         factory_return = get_typed_signature(factory_or_class).return_annotation

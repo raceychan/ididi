@@ -42,7 +42,11 @@ INodeFactory = Union[
 ]
 INode = Union[INodeFactory[P, R], type[R]]
 
-CIgnore = Union[Union[str, type], tuple[Union[str, type], ...]]
+NodeIgnore = tuple[Union[str, int, type], ...]
+GraphIgnore = tuple[Union[str, type], ...]
+NodeIgnoreConfig = Union[Union[str, int, type], NodeIgnore]
+GraphIgnoreConfig = Union[Union[str, type], GraphIgnore]
+
 
 # P1 = TypeVar("P1")
 # P2 = TypeVar("P2")
@@ -85,7 +89,7 @@ class TEntryDecor(Protocol):
 
 class IEntryConfig(TypedDict, total=False):
     lazy: bool
-    ignore: CIgnore
+    ignore: NodeIgnoreConfig
 
 
 class INodeConfig(IEntryConfig, total=False):
@@ -113,14 +117,14 @@ class INodeConfig(IEntryConfig, total=False):
 class NodeConfig:
     __slots__ = ("reuse", "lazy", "ignore")
 
-    ignore: tuple[Union[str, type], ...]
+    ignore: NodeIgnore
 
     def __init__(
         self,
         *,
         reuse: bool = True,
         lazy: bool = False,
-        ignore: Maybe[CIgnore] = MISSING,
+        ignore: Maybe[NodeIgnoreConfig] = MISSING,
     ):
         self.lazy = lazy
 
@@ -137,21 +141,27 @@ class NodeConfig:
 
 
 class EntryConfig(NodeConfig):
-    __slots__ = ("lazy", "ignore", "reuse")
+    __slots__ = ("reuse", "lazy", "ignore")
 
     def __init__(
         self,
         *,
         lazy: bool = False,
-        ignore: Maybe[CIgnore] = MISSING,
+        ignore: Maybe[NodeIgnoreConfig] = MISSING,
     ):
         super().__init__(reuse=False, lazy=lazy, ignore=ignore)
 
 
 class GraphConfig:
-    __slots__ = ("self_inject", "ignore")
+    __slots__ = ("self_inject", "ignore", "partial_resolve")
 
-    def __init__(self, *, self_inject: bool, ignore: Maybe[CIgnore]):
+    def __init__(
+        self,
+        *,
+        self_inject: bool,
+        ignore: Maybe[GraphIgnoreConfig],
+        partial_resolve: bool,
+    ):
         self.self_inject = self_inject
         if not is_provided(ignore):
             ignore = tuple()
@@ -159,6 +169,7 @@ class GraphConfig:
             ignore = (ignore,)
 
         self.ignore = ignore
+        self.partial_resolve = partial_resolve
 
 
 @runtime_checkable
