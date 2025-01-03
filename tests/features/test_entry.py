@@ -154,7 +154,6 @@ async def test_dg_entry_with_acm():
 
 
 def test_sync_entry_with_override():
-
     dg = DependencyGraph()
 
     @dg.entry(ignore=(CreateUser,))

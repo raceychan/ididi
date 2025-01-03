@@ -79,13 +79,12 @@ Stack = TypeVar("Stack", ExitStack, AsyncExitStack)
 
 
 class AbstractScope(Generic[Stack]):
-    __slots__ = ("_graph", "_stack", "_name", "_pre", "_resolution_registry")
-
     _stack: Stack
     _graph: "DependencyGraph"
     _name: Hashable
     _pre: Maybe[Union["SyncScope", "AsyncScope"]]
     _resolution_registry: ResolutionRegistry
+    _registered_singleton: set[type]
 
     def __repr__(self):
         return f"{self.__class__.__name__}(id={self._name})"
@@ -111,7 +110,7 @@ class AbstractScope(Generic[Stack]):
         else:
             raise OutOfScopeError(name)
 
-    def register_dependent(
+    def register_singleton(
         self, dependent: T, dependent_type: Union[type[T], None] = None
     ) -> None:
         """
@@ -119,12 +118,21 @@ class AbstractScope(Generic[Stack]):
         This is particular useful for top level dependents
         """
 
-        dependent_type = dependent_type or type(dependent)
+        if dependent_type is None:
+            dependent_type = type(dependent)
         self._resolution_registry.register(dependent_type, dependent)
+        self._registered_singleton.add(dependent_type)
 
 
 class SyncScope(AbstractScope[ExitStack]):
-    __slots__ = ("_graph", "_stack", "_name", "_pre", "_resolution_registry")
+    __slots__ = (
+        "_graph",
+        "_stack",
+        "_name",
+        "_pre",
+        "_resolution_registry",
+        "_registered_singleton",
+    )
 
     def __init__(
         self,
@@ -138,6 +146,7 @@ class SyncScope(AbstractScope[ExitStack]):
         self._pre = pre
         self._stack = ExitStack()
         self._resolution_registry = ResolutionRegistry()
+        self._registered_singleton = set()
 
     def __enter__(self) -> "SyncScope":
         return self
@@ -180,7 +189,14 @@ class SyncScope(AbstractScope[ExitStack]):
 
 
 class AsyncScope(AbstractScope[AsyncExitStack]):
-    __slots__ = ("_graph", "_stack", "_name", "_pre", "_resolution_registry")
+    __slots__ = (
+        "_graph",
+        "_stack",
+        "_name",
+        "_pre",
+        "_resolution_registry",
+        "_registered_singleton",
+    )
 
     def __init__(
         self,
@@ -194,6 +210,7 @@ class AsyncScope(AbstractScope[AsyncExitStack]):
         self._pre = pre
         self._stack = AsyncExitStack()
         self._resolution_registry = ResolutionRegistry()
+        self._registered_singleton = set()
 
     async def __aenter__(self) -> "AsyncScope":
         return self
@@ -486,6 +503,8 @@ class DependencyGraph:
         - the type registry
         """
         self._resolution_registry.clear()
+        self._registered_singleton.clear()
+
         if clear_nodes:
             self._type_registry.clear()
             self._resolved_nodes.clear()
@@ -783,12 +802,10 @@ class DependencyGraph:
 
         is_reuse = node_config.reuse
         if node.factory_type == "function":
-            instance = resolved
             if is_reuse:
-                self._resolution_registry.register(dependent, instance)
-            return cast(T, instance)
+                self._resolution_registry.register(dependent, resolved)
+            return cast(T, resolved)
 
-        # TODO?: avoid these is_context_manager call, check factory type instead
         if is_context_manager(resolved):
             if not scope:
                 raise ResourceOutsideScopeError(node.dependent_type)

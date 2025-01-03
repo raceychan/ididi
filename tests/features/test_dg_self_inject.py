@@ -1,4 +1,5 @@
 from ididi import DependencyGraph, Resource
+
 # from ididi._itypes import Resource
 
 
@@ -29,7 +30,7 @@ def test_dg_register_dependent():
     dg = DependencyGraph()
     service = UserService()
 
-    dg.register_singleton(service, UserService)
+    dg.register_singleton(service)
     assert dg.resolve(UserService) is service
 
 
@@ -38,5 +39,5 @@ def test_dg_register_resource_dependent():
     db = DataBase()
     dg.node(get_db)
     with dg.scope() as scope:
-        scope.register_dependent(db, DataBase)
+        scope.register_singleton(db)
         assert scope.resolve(DataBase) is db
