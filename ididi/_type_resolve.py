@@ -114,7 +114,7 @@ def is_unsolvable_type(t: Any) -> bool:
     Examples:
     - builtin types
     """
-    return is_builtin_type(t) or t is Signature.empty
+    return is_builtin_type(t) or t is Signature.empty or t is Any
 
 
 def is_context_manager(t: T) -> TypeGuard[ContextManager[T]]:

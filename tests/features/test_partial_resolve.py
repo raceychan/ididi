@@ -1,3 +1,5 @@
+from typing import Any
+
 import pytest
 
 from ididi import DependencyGraph, use
@@ -66,3 +68,18 @@ def test_graph_partial_resolve_with_dep():
     assert data.name == "data"
 
     assert data.db is DATABASE
+
+
+def test_feat():
+    dg = DependencyGraph()
+
+    class T:
+        def __init__(self, a: Any) -> None:
+            self.a = a
+
+    with pytest.raises(UnsolvableDependencyError):
+        dg.resolve(T)
+
+    dg = DependencyGraph(partial_resolve=True)
+
+    t = dg.resolve(T, a=1)

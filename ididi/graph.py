@@ -647,8 +647,9 @@ class DependencyGraph:
                     continue
                 if is_provided(param.default):
                     continue
-
-                if not self._config.partial_resolve and param.unresolvable:
+                if param.unresolvable:
+                    if self._config.partial_resolve:
+                        continue
                     raise UnsolvableDependencyError(
                         dep_name=param.name,
                         dependent_type=dependent_type,

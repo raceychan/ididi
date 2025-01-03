@@ -68,7 +68,9 @@ class UnsolvableNodeError(NodeResolveError):
         self.__notes__.append(note)
 
     def add_context(self, dependent: type, param_name: str, param_annotation: type):
-        msg = f"-> {dependent.__name__}({param_name}: {param_annotation.__name__})"
+        dep_repr = getattr(dependent, "__name__", str(dependent))
+        param_repr = getattr(param_annotation, "__name__", str(param_annotation))
+        msg = f"-> {dep_repr}({param_name}: {param_repr})"
         self.add_note(msg)
 
 
