@@ -32,6 +32,15 @@ To view viusal dependency graph, install `graphviz`
 pip install ididi[graphviz]
 ```
 
+## Features
+
+- No / minial changes to your existing code
+- Smart injection based on type hints with strong support to `typing` module.
+- Advanced scope support
+- Formated and detail-rich error messages
+- Highly performant, on part with nodejs and go
+
+
 ## Usage
 
 ### Quick Start
@@ -56,16 +65,6 @@ await main(CreateUser(name='user'))
 ```
 
 This would create a `UnitOfWork` instance, with a opened sqlalchemy.AsyncConnection from `conn_factory` when `main` is called. The connection will be closed when `main` is finished.
-
-## Features
-
-- requires no / minial changes to your existing code
-- smart injection based on type hints, strong support to typing, including `typing.Union`, `typing.Annotated`, etc.
-- advanced resource lifetime management with scope, name scope, context scope, etc.
-- sync and async dependency resolution
-- resolving functions, classes, factory functions of classes, etc. 
-- formated and detail-rich error messages
-- highly performant, on part with nodejs and go
 
 ### Dependency factory 
 
@@ -198,26 +197,19 @@ async with dg.scope(app_name) as app_scope:
 For any functions called within the request_scope, you can get the most recent scope with `dg.use_scope()`,
 or its parent scopes, i.e. `dg.use_scope(app_name)` to get app_scope.
 
-### Tutorial
 
-check out documentation for more details
+### More
 
-### Usage of factory
+For more detailed information, check out [Documentation](https://raceychan.github.io/ididi)
 
-check out documentation for more details
+- Tutorial
 
-### Visualize the dependency graph(beta)
+- Usage of factory
 
-check out documentation for more details
+- Visualize the dependency graph(beta)
 
-### Circular Dependency Detection
+- Circular Dependency Detection
 
-check out documentation for more details
+- Lazy Dependency(Beta)
 
-### Lazy Dependency(Beta)
-
-check out documentation for more details
-
-### Error context
-
-check out documentation for more details
+- Error context
