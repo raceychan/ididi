@@ -95,12 +95,11 @@ assert tmer.time.tzinfo == timezone.utc
 
 Using Scope to manage resources
 
-- **Infinite nested scope is supported.**
-- **Parent scope can be accssed by child scope(within the same context)**
-- **Resources will be shared across dependents only withint the same scope(reuse needs to be True)**
+- **Infinite number of nested scope**
+- **Parent scope can be accssed by its child scopes(within the same context)**
+- **Resources will be shared across dependents only withint the same scope**
 - **Resources will be automatically closed and destroyed when the scope is exited.**
 - **Classes that implment `contextlib.AbstractContextManager` or `contextlib.AbstractAsyncContextManager` are also considered to be resources and can/should be resolved within scope.**
-
 - **Scopes are separated by context**
 
 > [!TIP]

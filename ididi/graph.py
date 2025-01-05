@@ -306,17 +306,12 @@ class ScopeProxy:
 class DependencyGraph:
     """
     ### Description:
-    A DAG (Directed Acyclic Graph) where each dependent is a node.
-
-    ```toml
-    [config]
-    self_inject: bool
-    ```
-    whether to inject the graph object into dependent
+    A Directed Acyclic Graph where each dependent is a node.
 
     Example
     ---
     ```python
+    from typing import AsyncGenerator
     from ididi import DependencyGraph, use, entry, AsyncResource
 
     async def conn_factory(engine: AsyncEngine) -> AsyncGenerator[Repository, None]:
@@ -357,6 +352,34 @@ class DependencyGraph:
         ignore: Maybe[GraphIgnoreConfig] = MISSING,
         partial_resolve: bool = False,
     ):
+        """
+        - self_inject:
+
+          - If True, the current instance of the `DependencyGraph` will be injected into any dependency that requires it.
+
+        - ignore:
+
+          - A configuration that defines dependencies to be ignored during resolution.
+          - This can be a tuple of `(dependency_name, dependency_type)`.
+          - For example, `ignore=('name', str)` will ignore dependencies named `'name'` or those of type `str`.
+
+        - partial_resolve:
+
+          - If set to `True`, suppresses the `UnsolvableDependencyError` during static resolution of dependencies.
+          - This assumes that unsolvable dependencies will be provided through an override later.
+
+        ### Example:
+        - Creating a DependencyGraph with self-injection enabled, ignoring 'str' type dependencies, and allowing partial resolution.
+
+            ```python
+            graph = DependencyGraph(self_inject=False, ignore=('name', str), partial_resolve=True)
+            ```
+
+        ### Notes:
+        - `self_inject` is useful when you have a dependency that requires current instance of `DependencyGraph` as its dependency.
+        - `ignore` is a flexible configuration to skip over specific dependencies during resolution.
+        - `partial_resolve` helps to avoid errors when certain dependencies are meant to be provided with overrides.
+        """
         self._config = GraphConfig(
             self_inject=self_inject, ignore=ignore, partial_resolve=partial_resolve
         )
@@ -695,6 +718,9 @@ class DependencyGraph:
         if not (resolved_node := self._resolved_nodes.get(dep_type)):
             resolved_node = self.static_resolve(dep_type)
 
+        if self.is_registered_singleton(resolved_node.dependent_type):
+            return False
+
         if resolved_node.is_resource:
             return True
 
@@ -789,6 +815,27 @@ class DependencyGraph:
         *args: P.args,
         **overrides: P.kwargs,
     ) -> T:
+        """
+        Resolves a dependent, builds all its dependencies, injects them into its factory, and returns the instance.
+
+        ### Resolve Priority:
+        1. Override: Any dependencies provided via keyword arguments will take priority.
+        2. Factory: If no override is provided, the factory's resolution will be used.
+        3. Default Value: If neither an override nor a factory is available, the default value is used.
+        4. __init__: build dependencies according to the `__init__` method of the dependent type
+
+        ### Example:
+
+        Resolve a dependent with overrides and a specific scope
+
+        ```python
+        instance = dependency_graph.resolve(my_factory, scope=my_scope, my_override=override_value)
+        ```
+
+        ### Notes:
+        - Ensure that any overrides are passed as keyword arguments, not positional.
+        """
+
         if args:
             raise PositionalOverrideError(args)
 
@@ -910,7 +957,7 @@ class DependencyGraph:
             then replace it with a new function, \
             where the new func will solve dependency after being called.
 
-        ### - Dependency overrides must be passed as kwarg arguments
+        ### Dependency overrides must be passed as kwarg arguments
 
         it is recommended to put data first then dependencies in func signature
         such as:

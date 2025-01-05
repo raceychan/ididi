@@ -43,7 +43,6 @@ async def test_graph_partial_aresolve():
 
 
 def test_graph_partial_resolve_with_dep():
-    dg = DependencyGraph(partial_resolve=True)
 
     class Database: ...
 
@@ -57,16 +56,19 @@ def test_graph_partial_resolve_with_dep():
             self.name = name
             self.db = db
 
-    dg.node(Data)
+    dg = DependencyGraph()
 
-    dg.static_resolve(Data)
+    with pytest.raises(UnsolvableDependencyError):
+        dg.static_resolve(Data)
+
+    partial_dg = DependencyGraph(partial_resolve=True)
+    partial_dg.static_resolve(Data)
 
     with pytest.raises(TypeError):
-        data = dg.resolve(Data)
+        data = partial_dg.resolve(Data)
 
-    data = dg.resolve(Data, name="data")
+    data = partial_dg.resolve(Data, name="data")
     assert data.name == "data"
-
     assert data.db is DATABASE
 
 
