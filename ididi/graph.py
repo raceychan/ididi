@@ -27,13 +27,11 @@ from typing_extensions import Self, Unpack
 from ._ds import GraphNodes, GraphNodesView, ResolutionRegistry, TypeRegistry, Visitor
 from ._itypes import (
     INSPECT_EMPTY,
-    EntryConfig,
     GraphConfig,
     GraphIgnoreConfig,
     IAnyFactory,
     IAsyncFactory,
     IEmptyFactory,
-    IEntryConfig,
     IFactory,
     INode,
     INodeConfig,
@@ -645,8 +643,8 @@ class DependencyGraph:
                 if sub_node := self._nodes.get(param_type):
                     if sub_node.config.reuse:
                         continue
-                    for n in current_path:
-                        parent_config = self._nodes[n].config
+                    for parent in current_path:
+                        parent_config = self._nodes[parent].config
                         if parent_config.reuse:
                             raise ReusabilityConflictError(current_path, param_type)
                     continue
@@ -933,17 +931,17 @@ class DependencyGraph:
         return cast(T, instance)
 
     @overload
-    def entry(self, **iconfig: Unpack[IEntryConfig]) -> TEntryDecor: ...
+    def entry(self, **iconfig: Unpack[INodeConfig]) -> TEntryDecor: ...
 
     @overload
     def entry(
-        self, func: IFactory[P, T], **iconfig: Unpack[IEntryConfig]
+        self, func: IFactory[P, T], **iconfig: Unpack[INodeConfig]
     ) -> Callable[..., T]: ...
 
     def entry(
         self,
         func: Union[IFactory[P, T], IAsyncFactory[P, T], None] = None,
-        **iconfig: Unpack[IEntryConfig],
+        **iconfig: Unpack[INodeConfig],
     ) -> Union[Callable[..., Union[T, Awaitable[T]]], TEntryDecor]:
         """
         statically resolve dependencies of the decorated function \
@@ -982,7 +980,7 @@ class DependencyGraph:
             configured = cast(TEntryDecor, partial(self.entry, **iconfig))
             return configured
 
-        config = EntryConfig(**iconfig)
+        config = NodeConfig(**iconfig)
         should_ignore = self._config.ignore + config.ignore
         sig = get_typed_signature(func)
 

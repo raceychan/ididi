@@ -50,7 +50,7 @@ class UserService:
         self.auth = auth
 
 
-def user_service_factory():
+def user_service_factory() -> UserService:
     config = Config()
     db = Database(config=DatabaseConfig(config=config))
     cache = Cache(config=CacheConfig(config))

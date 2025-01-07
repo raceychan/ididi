@@ -93,7 +93,6 @@ def get_typed_annotation(annotation: Any, globalns: dict[str, Any]) -> Any:
 def get_typed_params(call: Callable[..., T]) -> list[Parameter]:
     signature = Signature.from_callable(call)
     globalns = getattr(call, "__globals__", {})
-    globalns.pop("copyright", None)  #
     typed_params = [
         Parameter(
             name=param.name,

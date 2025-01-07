@@ -169,3 +169,37 @@ def test_sync_entry_with_override():
     cmd = CreateUser(user_name="0", user_email="2")
     r = func4(cmd=cmd, config=Config())
     assert r == "0"
+
+
+def test_entry_reuse():
+    dg = DependencyGraph()
+
+    rounds = 100
+    dg.reset()
+
+    def create_user(
+        user_name: str, user_email: str, service: UserService
+    ) -> UserService:
+        print("f")
+        return service
+
+    services = set[UserService]()
+
+    create_user = dg.entry(reuse=False)(create_user)
+
+    for _ in range(rounds):
+        services.add(create_user("test", "email"))
+
+    assert len(services) == rounds
+
+    services.clear()
+
+    dg.reset(clear_nodes=True)
+    dg.node(UserService)
+
+    create_user = dg.entry(create_user)
+
+    for _ in range(rounds):
+        services.add(create_user("test", "email"))
+
+    assert len(services) == 1

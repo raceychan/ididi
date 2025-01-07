@@ -18,9 +18,7 @@ VERSION = "1.2.1"
 
 __version__ = VERSION
 
-from ._itypes import EntryConfig as EntryConfig
 from ._itypes import GraphConfig as GraphConfig
-from ._itypes import IEntryConfig as IEntryConfig
 from ._itypes import INode as INode
 from ._itypes import INodeConfig as INodeConfig
 from ._itypes import NodeConfig as NodeConfig

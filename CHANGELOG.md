@@ -602,3 +602,17 @@ def test_registered_singleton():
     assert dg.should_be_scoped(Time) is False
 
 ```
+
+
+## version 1.2.2
+
+- `NodeConfig.ignore` & `GraphConfig.ignore` now supports `TypeAliasType`
+
+only affect type checker
+
+- remove `EntryConfig`, now `entry` share the same config as `NodeConfig`,
+the only difference is now `dg.entry(reuse=True)` is possible, whereas it used to be always False, which does not really make sense, user can share the same dependencies across different calls to the entry function.
+
+
+- `dg._reigster_node`, `dg._remove_node`, are now private, `dg.replace_node` is removed.
+these three methods require user provide a `DependencyNode`, but we want to avoid user having to interact directly with `DependencyNode` to lower complexity.

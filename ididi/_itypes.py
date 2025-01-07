@@ -89,12 +89,12 @@ class TEntryDecor(Protocol):
     def __call__(self, func: Callable[P, T]) -> Callable[..., T]: ...
 
 
-class IEntryConfig(TypedDict, total=False):
-    lazy: bool
-    ignore: NodeIgnoreConfig
+# class IEntryConfig(TypedDict, total=False):
+#     lazy: bool
+#     ignore: NodeIgnoreConfig
 
 
-class INodeConfig(IEntryConfig, total=False):
+class INodeConfig(TypedDict, total=False):
     """
     reuse: bool
     ---
@@ -113,6 +113,8 @@ class INodeConfig(IEntryConfig, total=False):
     types or names to ignore
     """
 
+    lazy: bool
+    ignore: NodeIgnoreConfig
     reuse: bool
 
 
@@ -142,16 +144,16 @@ class NodeConfig:
         return f"{self.__class__.__name__}({self.reuse=}, {self.lazy=}, {self.ignore=})"
 
 
-class EntryConfig(NodeConfig):
-    __slots__ = ("reuse", "lazy", "ignore")
+# class EntryConfig(NodeConfig):
+#     __slots__ = ("reuse", "lazy", "ignore")
 
-    def __init__(
-        self,
-        *,
-        lazy: bool = False,
-        ignore: Maybe[NodeIgnoreConfig] = MISSING,
-    ):
-        super().__init__(reuse=False, lazy=lazy, ignore=ignore)
+#     def __init__(
+#         self,
+#         *,
+#         lazy: bool = False,
+#         ignore: Maybe[NodeIgnoreConfig] = MISSING,
+#     ):
+#         super().__init__(reuse=True, lazy=lazy, ignore=ignore)
 
 
 class GraphConfig:
