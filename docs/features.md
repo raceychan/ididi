@@ -148,6 +148,24 @@ def write_notification(scope: SyncScope, email: str, message=""):
     parent_scope = scope.get_scope(name)
 ```
 
+### Menually register a singleton
+
+If you have an object built without DependencyGraph, yet want it to be injected elsewhere
+use `DependencyGraph.register_singleton`
+
+```py
+
+class Singleton:
+    ...
+
+singleton = Singleton()
+
+dg = DependencyGraph.register_singleton(singleton)
+
+assert dg.resolve(Singleton) is singleton
+```
+
+
 ### Circular Dependency Detection
 
 ididi would detect if circular dependency exists, if so, ididi would give you the circular path

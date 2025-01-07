@@ -34,6 +34,7 @@ from ._itypes import (
     INodeConfig,
     INodeFactory,
     NodeConfig,
+    NodeIgnore,
 )
 from ._type_resolve import (
     IDIDI_INJECT_RESOLVE_MARK,
@@ -429,7 +430,7 @@ class DependentNode(Generic[T]):
             yield param
 
     def unsolved_params(
-        self, ignore: tuple[Union[str, type], ...]
+        self, ignore: NodeIgnore
     ) -> Generator[tuple[str, type], None, None]:
         ignores = self.config.ignore + ignore
         for i, (param_name, dpram) in enumerate(self.signature):

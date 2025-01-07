@@ -405,25 +405,6 @@ class DependencyGraph:
     def __contains__(self, item: type) -> bool:
         return item in self._nodes
 
-    def is_registered_singleton(self, dependent_type: type) -> bool:
-        return dependent_type in self._registered_singleton
-
-    def register_singleton(
-        self, dependent: T, dependent_type: Union[type[T], None] = None
-    ) -> None:
-        """
-        Register a dependent instance to be injected, provide a dependent type if it's not the same as the instance type.
-        """
-        if dependent_type is None:
-            dependent_type = type(dependent)
-        self._resolution_registry.register(dependent_type, dependent)
-        self._registered_singleton.add(dependent_type)
-
-    def static_resolve_all(self) -> None:
-        unsolved_nodes: set[type] = self._nodes.keys() - self._resolved_nodes.keys()
-        for node_type in unsolved_nodes:
-            self.static_resolve(node_type)
-
     @property
     def nodes(self) -> GraphNodesView[Any]:
         return MappingProxyType(self._nodes)
@@ -471,6 +452,82 @@ class DependencyGraph:
             if not current_resolved and other_resolved:
                 self._resolved_nodes[dep_type] = other_resolved
 
+    def _resolve_concrete_type(self, abstract_type: type) -> type:
+        """
+        Resolve abstract type to concrete implementation.
+        """
+        implementations: Maybe[list[type]] = self._type_registry.get(abstract_type)
+
+        if not is_provided(implementations):
+            raise MissingImplementationError(abstract_type)
+
+        last_implementations = implementations[-1]
+        return last_implementations
+
+    def _resolve_concrete_node(
+        self, dependent: type, node_config: Maybe[NodeConfig]
+    ) -> DependentNode[Any]:
+        if registered_node := self._nodes.get(dependent):
+            if is_function(registered_node.factory):
+                return registered_node
+
+        try:
+            concrete_type = self._resolve_concrete_type(dependent)
+        except MissingImplementationError:
+            node = DependentNode[Any].from_node(dependent, config=node_config)
+            self._register_node(node)
+        else:
+            node = self._nodes[concrete_type]
+
+        return node
+
+    def _create_lazy_dependent(self, node: DependentNode[T]) -> LazyDependent[T]:
+        """Create a lazy version of a node with appropriate resolver."""
+
+        def resolver(dep_type: type[T]) -> T:
+            self.static_resolve(dep_type)
+            return self.resolve(dep_type)
+
+        return LazyDependent[T](
+            dependent_type=node.dependent_type,
+            factory=node.factory,
+            signature=node.signature,
+            resolver=resolver,
+        )
+
+    def _remove_node(self, node: DependentNode[Any]) -> None:
+        """
+        Remove a node from the graph and clean up all its references.
+        """
+        dependent_type = node.dependent_type
+
+        self._nodes.pop(dependent_type)
+        self._type_registry.remove(dependent_type)
+        self._resolution_registry.remove(dependent_type)
+        self._resolved_nodes.pop(dependent_type, None)
+
+    def _register_node(self, node: DependentNode[Any]) -> None:
+        """
+        Register a dependency node and update dependency relationships.
+        Automatically registers any unregistered dependencies.
+        """
+
+        dep_type = node.dependent_type
+
+        dependent_type: type = get_origin(dep_type) or dep_type
+
+        # Skip if registered
+        if dependent_type in self._nodes:
+            return
+
+        # Register main type
+        self._nodes[dependent_type] = node
+
+        # Register type mappings
+        self._type_registry.register(dependent_type)
+
+    # ==========================  Public ==========================
+
     def merge(self, other: Union["DependencyGraph", Sequence["DependencyGraph"]]):
         """
         Merge the other graphs into this graph, update the current graph.
@@ -512,17 +569,6 @@ class DependencyGraph:
     def reset_context_scope(self, token: Token[Union[SyncScope, AsyncScope]]):
         self._scope_context.reset(token)
 
-    def remove_node(self, node: DependentNode[Any]) -> None:
-        """
-        Remove a node from the graph and clean up all its references.
-        """
-        dependent_type = node.dependent_type
-
-        self._nodes.pop(dependent_type)
-        self._type_registry.remove(dependent_type)
-        self._resolution_registry.remove(dependent_type)
-        self._resolved_nodes.pop(dependent_type, None)
-
     def reset(self, clear_nodes: bool = False) -> None:
         """
         Clear all resolved instances while maintaining registrations.
@@ -541,77 +587,19 @@ class DependencyGraph:
             self._resolved_nodes.clear()
             self._nodes.clear()
 
-    def _resolve_concrete_type(self, abstract_type: type) -> type:
-        """
-        Resolve abstract type to concrete implementation.
-        """
-        implementations: Maybe[list[type]] = self._type_registry.get(abstract_type)
+    def is_registered_singleton(self, dependent_type: type) -> bool:
+        return dependent_type in self._registered_singleton
 
-        if not is_provided(implementations):
-            raise MissingImplementationError(abstract_type)
-
-        last_implementations = implementations[-1]
-        return last_implementations
-
-    def _resolve_concrete_node(
-        self, dependent: type, node_config: Maybe[NodeConfig]
-    ) -> DependentNode[Any]:
-        if registered_node := self._nodes.get(dependent):
-            if is_function(registered_node.factory):
-                return registered_node
-
-        try:
-            concrete_type = self._resolve_concrete_type(dependent)
-        except MissingImplementationError:
-            node = DependentNode[Any].from_node(dependent, config=node_config)
-            self.register_node(node)
-        else:
-            node = self._nodes[concrete_type]
-
-        return node
-
-    def replace_node(
-        self, old_node: DependentNode[T], new_node: DependentNode[T]
+    def register_singleton(
+        self, dependent: T, dependent_type: Union[type[T], None] = None
     ) -> None:
         """
-        Replace an existing node with a new node.
+        Register a dependent instance to be injected, provide a dependent type if it's not the same as the instance type.
         """
-        self.remove_node(old_node)
-        self.register_node(new_node)
-
-    def _create_lazy_dependent(self, node: DependentNode[T]) -> LazyDependent[T]:
-        """Create a lazy version of a node with appropriate resolver."""
-
-        def resolver(dep_type: type[T]) -> T:
-            self.static_resolve(dep_type)
-            return self.resolve(dep_type)
-
-        return LazyDependent[T](
-            dependent_type=node.dependent_type,
-            factory=node.factory,
-            signature=node.signature,
-            resolver=resolver,
-        )
-
-    def register_node(self, node: DependentNode[Any]) -> None:
-        """
-        Register a dependency node and update dependency relationships.
-        Automatically registers any unregistered dependencies.
-        """
-
-        dep_type = node.dependent_type
-
-        dependent_type: type = get_origin(dep_type) or dep_type
-
-        # Skip if registered
-        if dependent_type in self._nodes:
-            return
-
-        # Register main type
-        self._nodes[dependent_type] = node
-
-        # Register type mappings
-        self._type_registry.register(dependent_type)
+        if dependent_type is None:
+            dependent_type = type(dependent)
+        self._resolution_registry.register(dependent_type, dependent)
+        self._registered_singleton.add(dependent_type)
 
     def static_resolve(
         self,
@@ -637,7 +625,7 @@ class DependencyGraph:
                     node = DependentNode[T].from_factory(
                         factory=factory, config=NodeConfig()
                     )
-                    self.register_node(node)
+                    self._register_node(node)
 
             current_path.append(dependent_type)
 
@@ -665,7 +653,7 @@ class DependencyGraph:
                 if inject_node := (
                     resolve_inject(param_type) or resolve_inject(param.default)
                 ):
-                    self.register_node(inject_node)
+                    self._register_node(inject_node)
                     self._resolved_nodes[param_type] = inject_node
                     continue
                 if is_provided(param.default):
@@ -691,7 +679,7 @@ class DependencyGraph:
                     )
                     raise
 
-                self.register_node(dep_node)
+                self._register_node(dep_node)
                 self._resolved_nodes[param_type] = dep_node
 
             node.check_for_resolvability()
@@ -700,6 +688,11 @@ class DependencyGraph:
             return node
 
         return dfs(dependent)
+
+    def static_resolve_all(self) -> None:
+        unsolved_nodes: set[type] = self._nodes.keys() - self._resolved_nodes.keys()
+        for node_type in unsolved_nodes:
+            self.static_resolve(node_type)
 
     def scope(self, name: Maybe[Hashable] = MISSING) -> ScopeProxy:
         """
@@ -1004,7 +997,7 @@ class DependencyGraph:
             if inject_node := (
                 resolve_inject(param_type) or resolve_inject(param.default)
             ):
-                self.register_node(inject_node)
+                self._register_node(inject_node)
                 self._resolved_nodes[param_type] = inject_node
                 param_type = inject_node.dependent_type
 
@@ -1126,9 +1119,9 @@ class DependencyGraph:
         factory_return = get_typed_signature(factory_or_class).return_annotation
         if factory_return is not INSPECT_EMPTY:
             if old_node := self._nodes.get(resolve_annotation(factory_return)):
-                self.remove_node(old_node)
+                self._remove_node(old_node)
 
         node = DependentNode[T].from_node(factory_or_class, config=NodeConfig(**config))
 
-        self.register_node(node)
+        self._register_node(node)
         return factory_or_class

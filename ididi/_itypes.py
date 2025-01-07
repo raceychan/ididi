@@ -13,6 +13,8 @@ from typing import (
     runtime_checkable,
 )
 
+from typing_extensions import TypeAliasType
+
 from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import P, R, T
 
@@ -42,10 +44,10 @@ INodeFactory = Union[
 ]
 INode = Union[INodeFactory[P, R], type[R]]
 
-NodeIgnore = tuple[Union[str, int, type], ...]
-GraphIgnore = tuple[Union[str, type], ...]
-NodeIgnoreConfig = Union[Union[str, int, type], NodeIgnore]
-GraphIgnoreConfig = Union[Union[str, type], GraphIgnore]
+NodeIgnore = tuple[Union[str, int, type, TypeAliasType], ...]
+GraphIgnore = tuple[Union[str, type, TypeAliasType], ...]
+NodeIgnoreConfig = Union[Union[str, int, type, TypeAliasType], NodeIgnore]
+GraphIgnoreConfig = Union[Union[str, type, TypeAliasType], GraphIgnore]
 
 
 # P1 = TypeVar("P1")
