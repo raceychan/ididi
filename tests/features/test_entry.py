@@ -180,7 +180,6 @@ def test_entry_reuse():
     def create_user(
         user_name: str, user_email: str, service: UserService
     ) -> UserService:
-        print("f")
         return service
 
     services = set[UserService]()

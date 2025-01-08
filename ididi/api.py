@@ -3,7 +3,7 @@ from typing import Any, Awaitable, Callable, Union, cast, overload
 
 from typing_extensions import Unpack
 
-from ._itypes import IAsyncFactory, IFactory, INodeConfig, TEntryDecor
+from .interfaces import IAsyncFactory, IFactory, INodeConfig, TEntryDecor
 from .graph import DependencyGraph as DependencyGraph
 from .utils.typing_utils import P, T
 

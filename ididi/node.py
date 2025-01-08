@@ -26,15 +26,15 @@ from typing import (
 
 from typing_extensions import Unpack
 
-from ._itypes import (
+from .interfaces import (
     EMPTY_SIGNATURE,
     INSPECT_EMPTY,
     INode,
     INodeAnyFactory,
     INodeConfig,
     INodeFactory,
-    NodeConfig,
     NodeIgnore,
+    NodeIgnoreConfig,
 )
 from ._type_resolve import (
     IDIDI_INJECT_RESOLVE_MARK,
@@ -61,6 +61,32 @@ from .errors import (
 )
 from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import P, T, get_factory_sig_from_cls
+
+
+class NodeConfig:
+    __slots__ = ("reuse", "lazy", "ignore")
+
+    ignore: NodeIgnore
+
+    def __init__(
+        self,
+        *,
+        reuse: bool = True,
+        lazy: bool = False,
+        ignore: Maybe[NodeIgnoreConfig] = MISSING,
+    ):
+        self.lazy = lazy
+
+        if not is_provided(ignore):
+            ignore = tuple()
+        elif not isinstance(ignore, tuple):
+            ignore = (ignore,)
+
+        self.ignore = ignore
+        self.reuse = reuse
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.reuse=}, {self.lazy=}, {self.ignore=})"
 
 
 def use(

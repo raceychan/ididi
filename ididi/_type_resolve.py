@@ -26,7 +26,7 @@ from typing import (
 
 from typing_extensions import ParamSpec, TypeGuard
 
-from ._itypes import AsyncClosable, Closable
+from .interfaces import AsyncClosable, Closable
 from .errors import (
     ForwardReferenceNotFoundError,
     GenericDependencyNotSupportedError,

@@ -18,6 +18,7 @@ from typing import (
     TypeVar,
     Union,
     cast,
+    final,
     get_origin,
     overload,
 )
@@ -25,9 +26,8 @@ from typing import (
 from typing_extensions import Self, Unpack
 
 from ._ds import GraphNodes, GraphNodesView, ResolutionRegistry, TypeRegistry, Visitor
-from ._itypes import (
+from .interfaces import (
     INSPECT_EMPTY,
-    GraphConfig,
     GraphIgnoreConfig,
     IAnyFactory,
     IAsyncFactory,
@@ -36,7 +36,6 @@ from ._itypes import (
     INode,
     INodeConfig,
     INodeFactory,
-    NodeConfig,
     TDecor,
     TEntryDecor,
 )
@@ -66,6 +65,7 @@ from .errors import (
 from .node import (
     DependentNode,
     LazyDependent,
+    NodeConfig,
     resolve_annotated,
     resolve_inject,
     should_override,
@@ -301,6 +301,27 @@ class ScopeProxy:
         self._graph.reset_context_scope(self._token)
 
 
+class GraphConfig:
+    __slots__ = ("self_inject", "ignore", "partial_resolve")
+
+    def __init__(
+        self,
+        *,
+        self_inject: bool,
+        ignore: Maybe[GraphIgnoreConfig],
+        partial_resolve: bool,
+    ):
+        self.self_inject = self_inject
+        if not is_provided(ignore):
+            ignore = tuple()
+        elif not isinstance(ignore, tuple):
+            ignore = (ignore,)
+
+        self.ignore = ignore
+        self.partial_resolve = partial_resolve
+
+
+@final
 class DependencyGraph:
     """
     ### Description:

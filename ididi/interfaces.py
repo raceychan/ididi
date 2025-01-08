@@ -14,8 +14,6 @@ from typing import (
 )
 
 from typing_extensions import TypeAliasType
-
-from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import P, R, T
 
 EMPTY_SIGNATURE = Signature()
@@ -111,52 +109,6 @@ class INodeConfig(TypedDict, total=False):
     lazy: bool
     ignore: NodeIgnoreConfig
     reuse: bool
-
-
-class NodeConfig:
-    __slots__ = ("reuse", "lazy", "ignore")
-
-    ignore: NodeIgnore
-
-    def __init__(
-        self,
-        *,
-        reuse: bool = True,
-        lazy: bool = False,
-        ignore: Maybe[NodeIgnoreConfig] = MISSING,
-    ):
-        self.lazy = lazy
-
-        if not is_provided(ignore):
-            ignore = tuple()
-        elif not isinstance(ignore, tuple):
-            ignore = (ignore,)
-
-        self.ignore = ignore
-        self.reuse = reuse
-
-    def __repr__(self):
-        return f"{self.__class__.__name__}({self.reuse=}, {self.lazy=}, {self.ignore=})"
-
-
-class GraphConfig:
-    __slots__ = ("self_inject", "ignore", "partial_resolve")
-
-    def __init__(
-        self,
-        *,
-        self_inject: bool,
-        ignore: Maybe[GraphIgnoreConfig],
-        partial_resolve: bool,
-    ):
-        self.self_inject = self_inject
-        if not is_provided(ignore):
-            ignore = tuple()
-        elif not isinstance(ignore, tuple):
-            ignore = (ignore,)
-
-        self.ignore = ignore
-        self.partial_resolve = partial_resolve
 
 
 @runtime_checkable
