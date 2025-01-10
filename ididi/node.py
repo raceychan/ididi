@@ -27,8 +27,8 @@ from typing import (
 from typing_extensions import Unpack
 
 from ._type_resolve import (
-    IDIDI_INJECT_IGNORE_MARK,
-    IDIDI_INJECT_RESOLVE_MARK,
+    IDIDI_IGNORE_PARAM_MARK,
+    IDIDI_USE_FACTORY_MARK,
     FactoryType,
     ResolveOrder,
     flatten_annotated,
@@ -63,7 +63,7 @@ from .interfaces import (
 from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import P, T, get_factory_sig_from_cls
 
-Ignore = Annotated[T, IDIDI_INJECT_IGNORE_MARK]
+Ignore = Annotated[T, IDIDI_IGNORE_PARAM_MARK]
 
 
 def use(
@@ -81,13 +81,13 @@ def use(
     ```
     """
     node = DependentNode[T].from_node(factory, config=NodeConfig(**iconfig))
-    annt = Annotated[node.dependent_type, node, IDIDI_INJECT_RESOLVE_MARK]
+    annt = Annotated[node.dependent_type, node, IDIDI_USE_FACTORY_MARK]
     return cast(T, annt)
 
 
 def search_meta(meta: list[Any]):
     for i, v in enumerate(meta):
-        if v == IDIDI_INJECT_RESOLVE_MARK:
+        if v == IDIDI_USE_FACTORY_MARK:
             node: DependentNode[Any] = meta[i - 1]
             return node
 
@@ -439,7 +439,7 @@ class DependentNode(Generic[T]):
 
             if get_origin(param_type) is Annotated:
                 annotate_meta = flatten_annotated(param_type)
-                if IDIDI_INJECT_IGNORE_MARK in annotate_meta:
+                if IDIDI_IGNORE_PARAM_MARK in annotate_meta:
                     self.config.ignore = ignore_params + (param_name,)
                     continue
                 elif not search_meta(annotate_meta):

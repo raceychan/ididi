@@ -364,22 +364,18 @@ class DependencyGraph:
           - This can be a tuple of `(dependency_name, dependency_type)`.
           - For example, `ignore=('name', str)` will ignore dependencies named `'name'` or those of type `str`.
 
-        - partial_resolve:
 
-          - If set to `True`, suppresses the `UnsolvableDependencyError` during static resolution of dependencies.
-          - This assumes that unsolvable dependencies will be provided through an override later.
 
         ### Example:
         - Creating a DependencyGraph with self-injection enabled, ignoring 'str' type dependencies, and allowing partial resolution.
 
             ```python
-            graph = DependencyGraph(self_inject=False, ignore=('name', str), partial_resolve=True)
+            graph = DependencyGraph(self_inject=False, ignore=('name', str))
             ```
 
         ### Notes:
         - `self_inject` is useful when you have a dependency that requires current instance of `DependencyGraph` as its dependency.
         - `ignore` is a flexible configuration to skip over specific dependencies during resolution.
-        - `partial_resolve` helps to avoid errors when certain dependencies are meant to be provided with overrides.
         """
         self._config = GraphConfig(self_inject=self_inject, ignore=ignore)
         self._nodes = dict()

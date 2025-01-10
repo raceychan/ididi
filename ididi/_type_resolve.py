@@ -45,8 +45,8 @@ else:
 SyncResource = Union[ContextManager[Any], Closable]
 AsyncResource = Union[AsyncContextManager[Any], AsyncClosable]
 
-IDIDI_INJECT_RESOLVE_MARK = "__ididi_node_mark__"
-IDIDI_INJECT_IGNORE_MARK = "__ididi_ignore_param__"
+IDIDI_USE_FACTORY_MARK = "__ididi_use_factory__"
+IDIDI_IGNORE_PARAM_MARK = "__ididi_ignore_param__"
 
 FactoryType = Literal["default", "function", "resource"]
 # carry this information in node so that resolve does not have to do

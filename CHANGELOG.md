@@ -622,13 +622,31 @@ these three methods require user provide a `DependencyNode`, but we want to avoi
 
 - change `_itypes` to `interfaces`, make it public, since it is unlikely to cause breaking change
 
+- remove `partial_resolve` from DependencyGraph
+
+`partial_resolve` was introduced in `1.2.0`.  it is not a good design,
+it is like a global `try except`, which hides problems instead of solving them.
+
 
 - `Ignore` Annotation
 
+
 ```py
-type Ignore[T] = Annotated[T, "__ididi_ignore_param__"]
+from ididi import Ignore
 
 class User:
     def __init__(self, name: Ignore[str]):
-        self._name = name
+        self.name = name
 ```
+
+which is equivalent to
+
+```
+DependencyGraph().node(ignore="name")(User)
+```
+
+
+both `use` and `Ignore` are designed to be user friendly alternative to `DependencyGraph.node`
+
+
+
