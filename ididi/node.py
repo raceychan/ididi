@@ -254,6 +254,24 @@ class DependencyParam(Generic[T]):
 
         return False
 
+    def replace_type(self, param_type: type[T]) -> "DependencyParam[T]":
+        return DependencyParam(
+            name=self.name,
+            param=self.param,
+            param_annotation=self.param_annotation,
+            param_type=param_type,
+            default=self.default,
+        )
+
+    def replace_default(self, default: Maybe[T]) -> "DependencyParam[T]":
+        return DependencyParam(
+            name=self.name,
+            param=self.param,
+            param_annotation=self.param_annotation,
+            param_type=self.param_type,
+            default=default,
+        )
+
 
 class DependentSignature(Generic[T]):
     __slots__ = ("dependent", "dprams")
@@ -428,38 +446,42 @@ class DependentNode(Generic[T]):
 
     def static_unsolved_params(self) -> Generator[DependencyParam[T], None, None]:
         "params that needs to be statically resolved"
-        ignore_params = self.config.ignore
+        ignores = self.config.ignore
         for i, (param_name, param) in enumerate(self.signature):
-            if i in ignore_params:
-                continue
             param_type = cast(Union[type, ForwardRef], param.param_type)
-            param_default = param.default
-            if param_name in ignore_params or param_type in ignore_params:
+            if i in ignores or param_name in ignores or param_type in ignores:
                 continue
 
             if get_origin(param_type) is Annotated:
                 annotate_meta = flatten_annotated(param_type)
                 if IDIDI_IGNORE_PARAM_MARK in annotate_meta:
-                    self.config.ignore = ignore_params + (param_name,)
+                    self.config.ignore = ignores + (param_name,)
                     continue
-                elif not search_meta(annotate_meta):
+                elif use_node := search_meta(annotate_meta):
+                    yield param
+                    param = param.replace_type(use_node.dependent_type)
+                    self.signature.dprams[param_name] = param
+                    continue
+                else:
                     param_type, *_ = get_args(param_type)
+                    param = param.replace_type(param_type)
 
-            if get_origin(param_default) is Annotated:
-                param_type: Any = param_default
+            if is_provided(param.default) and get_origin(param.default) is Annotated:
+                annt_default = param.default
+                if use_node := resolve_use(annt_default):
+                    param = param.replace_type(annt_default).replace_default(MISSING)
+                    yield param
+                    self.signature.dprams[param_name] = param.replace_type(
+                        use_node.dependent_type
+                    )
+                    continue
 
             if isinstance(param_type, ForwardRef):
                 param_type = resolve_forwardref(self.dependent_type, param_type)
+                param = param.replace_type(param_type)
 
-            param = DependencyParam(
-                name=param_name,
-                param=param.param,
-                param_annotation=param.param_annotation,
-                param_type=param_type,
-                default=param_default,
-            )
-            self.signature.dprams[param_name] = param
             yield param
+            self.signature.dprams[param_name] = param
 
     def unsolved_params(
         self, ignore: NodeIgnore
@@ -473,14 +495,8 @@ class DependentNode(Generic[T]):
             if i in ignores or param_name in ignores or param_type in ignores:
                 continue
 
-            default = dpram.default
-
-            if is_provided(default):
-                if inject_use_node := resolve_use(default):
-                    param_type = inject_use_node.dependent_type
-
-                if is_unsolvable_type(param_type):
-                    continue
+            if is_provided(dpram.default) and is_unsolvable_type(param_type):
+                continue
 
             yield (param_name, param_type)
 

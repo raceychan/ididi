@@ -66,11 +66,10 @@ def test_resolve_instances(dg: DependencyGraph, dependents: list[type]):
 
 @pytest.mark.benchmark
 def test_entry(dg: DependencyGraph, dependents: list[type]):
-    rounds = ROUNDS * 1  # 100
+    rounds = ROUNDS * 100
     dg.reset()
 
     def create_user(user_name: str, user_email: str, service: UserService):
-        print(id(service))
         return "ok"
 
     total = 0
@@ -88,6 +87,7 @@ def test_entry(dg: DependencyGraph, dependents: list[type]):
     )
 
     create_user = dg.entry(create_user)
+    dg.node(reuse=False)(UserService)
 
     total = 0
     for _ in range(rounds):

@@ -645,14 +645,6 @@ class DependencyGraph:
                 if (param_type := param.param_type) in self._resolved_nodes:
                     continue
 
-                if param.unresolvable:
-                    raise UnsolvableDependencyError(
-                        dep_name=param.name,
-                        dependent_type=dependent_type,
-                        dependency_type=param.param_type,
-                        factory=node.factory,
-                    )
-
                 self.check_param_conflict(param_type, current_path)
 
                 if inject_node := resolve_use(param_type):
@@ -662,6 +654,14 @@ class DependencyGraph:
 
                 if is_provided(param.default):
                     continue
+
+                if param.unresolvable:
+                    raise UnsolvableDependencyError(
+                        dep_name=param.name,
+                        dependent_type=dependent_type,
+                        dependency_type=param.param_type,
+                        factory=node.factory,
+                    )
 
                 try:
                     dep_node = dfs(param_type)
