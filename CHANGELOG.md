@@ -616,3 +616,19 @@ the only difference is now `dg.entry(reuse=True)` is possible, whereas it used t
 
 - `dg._reigster_node`, `dg._remove_node`, are now private, `dg.replace_node` is removed.
 these three methods require user provide a `DependencyNode`, but we want to avoid user having to interact directly with `DependencyNode` to lower complexity.
+
+
+## version 1.2.3
+
+- change `_itypes` to `interfaces`, make it public, since it is unlikely to cause breaking change
+
+
+- `Ignore` Annotation
+
+```py
+type Ignore[T] = Annotated[T, "__ididi_ignore_param__"]
+
+class User:
+    def __init__(self, name: Ignore[str]):
+        self._name = name
+```

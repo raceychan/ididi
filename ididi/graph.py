@@ -26,19 +26,6 @@ from typing import (
 from typing_extensions import Self, Unpack
 
 from ._ds import GraphNodes, GraphNodesView, ResolutionRegistry, TypeRegistry, Visitor
-from .interfaces import (
-    INSPECT_EMPTY,
-    GraphIgnoreConfig,
-    IAnyFactory,
-    IAsyncFactory,
-    IEmptyFactory,
-    IFactory,
-    INode,
-    INodeConfig,
-    INodeFactory,
-    TDecor,
-    TEntryDecor,
-)
 from ._type_resolve import (
     get_typed_signature,
     is_async_context_manager,
@@ -62,14 +49,20 @@ from .errors import (
     UnsolvableDependencyError,
     UnsolvableNodeError,
 )
-from .node import (
-    DependentNode,
-    LazyDependent,
-    NodeConfig,
-    resolve_annotated,
-    resolve_inject,
-    should_override,
+from .interfaces import (
+    INSPECT_EMPTY,
+    GraphIgnoreConfig,
+    IAnyFactory,
+    IAsyncFactory,
+    IEmptyFactory,
+    IFactory,
+    INode,
+    INodeConfig,
+    INodeFactory,
+    TDecor,
+    TEntryDecor,
 )
+from .node import DependentNode, LazyDependent, NodeConfig, resolve_use, should_override
 from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import P, T
 
@@ -302,15 +295,9 @@ class ScopeProxy:
 
 
 class GraphConfig:
-    __slots__ = ("self_inject", "ignore", "partial_resolve")
+    __slots__ = ("self_inject", "ignore")
 
-    def __init__(
-        self,
-        *,
-        self_inject: bool,
-        ignore: Maybe[GraphIgnoreConfig],
-        partial_resolve: bool,
-    ):
+    def __init__(self, *, self_inject: bool, ignore: Maybe[GraphIgnoreConfig]):
         self.self_inject = self_inject
         if not is_provided(ignore):
             ignore = tuple()
@@ -318,7 +305,6 @@ class GraphConfig:
             ignore = (ignore,)
 
         self.ignore = ignore
-        self.partial_resolve = partial_resolve
 
 
 @final
@@ -365,11 +351,7 @@ class DependencyGraph:
     )
 
     def __init__(
-        self,
-        *,
-        self_inject: bool = True,
-        ignore: Maybe[GraphIgnoreConfig] = MISSING,
-        partial_resolve: bool = False,
+        self, *, self_inject: bool = True, ignore: Maybe[GraphIgnoreConfig] = MISSING
     ):
         """
         - self_inject:
@@ -399,9 +381,7 @@ class DependencyGraph:
         - `ignore` is a flexible configuration to skip over specific dependencies during resolution.
         - `partial_resolve` helps to avoid errors when certain dependencies are meant to be provided with overrides.
         """
-        self._config = GraphConfig(
-            self_inject=self_inject, ignore=ignore, partial_resolve=partial_resolve
-        )
+        self._config = GraphConfig(self_inject=self_inject, ignore=ignore)
         self._nodes = dict()
         self._resolved_nodes: GraphNodes[Any] = dict()
         self._type_registry = TypeRegistry()
@@ -620,6 +600,16 @@ class DependencyGraph:
         self._resolution_registry.register(dependent_type, dependent)
         self._registered_singleton.add(dependent_type)
 
+    def check_param_conflict(self, param_type: type, current_path: list[type]):
+        if param_type in current_path:
+            i = current_path.index(param_type)
+            cycle = current_path[i:] + [param_type]
+            raise CircularDependencyDetectedError(cycle)
+
+        if (param_node := self._nodes.get(param_type)) and not param_node.config.reuse:
+            if any(self._nodes[p].config.reuse for p in current_path):
+                raise ReusabilityConflictError(current_path, param_type)
+
     def static_resolve(
         self,
         dependent: INode[P, T],
@@ -628,7 +618,7 @@ class DependencyGraph:
         """
         Recursively analyze the type information of a dependency.
         """
-        if self._config.partial_resolve is False and is_unsolvable_type(dependent):
+        if is_unsolvable_type(dependent):
             raise TopLevelBulitinTypeError(dependent)
 
         current_path: list[type] = []
@@ -655,31 +645,11 @@ class DependencyGraph:
             if self.is_registered_singleton(dependent_type):
                 return node
 
-            for param in node.actualized_params():
-                param_type = param.param_type
-                if param_type in current_path:
-                    i = current_path.index(param_type)
-                    cycle = current_path[i:] + [param_type]
-                    raise CircularDependencyDetectedError(cycle)
-                if sub_node := self._nodes.get(param_type):
-                    if sub_node.config.reuse:
-                        continue
-                    for parent in current_path:
-                        parent_config = self._nodes[parent].config
-                        if parent_config.reuse:
-                            raise ReusabilityConflictError(current_path, param_type)
+            for param in node.static_unsolved_params():
+                if (param_type := param.param_type) in self._resolved_nodes:
                     continue
-                if inject_node := (
-                    resolve_inject(param_type) or resolve_inject(param.default)
-                ):
-                    self._register_node(inject_node)
-                    self._resolved_nodes[param_type] = inject_node
-                    continue
-                if is_provided(param.default):
-                    continue
+
                 if param.unresolvable:
-                    if self._config.partial_resolve:
-                        continue
                     raise UnsolvableDependencyError(
                         dep_name=param.name,
                         dependent_type=dependent_type,
@@ -687,8 +657,15 @@ class DependencyGraph:
                         factory=node.factory,
                     )
 
-                if param_tuple := resolve_annotated(param.name, param_type):
-                    _, param_type = param_tuple
+                self.check_param_conflict(param_type, current_path)
+
+                if inject_node := resolve_use(param_type):
+                    self._register_node(inject_node)
+                    self._resolved_nodes[param_type] = inject_node
+                    continue
+
+                if is_provided(param.default):
+                    continue
 
                 try:
                     dep_node = dfs(param_type)
@@ -861,9 +838,6 @@ class DependencyGraph:
         ignores = self._config.ignore + tuple(resolved_params)
 
         for param_name, param_type in node.unsolved_params(ignores):
-            if self._config.partial_resolve and is_unsolvable_type(param_type):
-                continue
-
             if node_config.lazy:
                 dep_node = self.static_resolve(param_type, node_config)
                 resolved_params[param_name] = self._create_lazy_dependent(dep_node)
@@ -916,8 +890,6 @@ class DependencyGraph:
         ignores = self._config.ignore + tuple(resolved_params)
 
         for param_name, param_type in node.unsolved_params(ignores):
-            if self._config.partial_resolve and is_unsolvable_type(param_type):
-                continue
             resolved_params[param_name] = await self.aresolve(param_type, scope)
 
         resolved = node.inject_params(resolved_params)
@@ -1013,9 +985,7 @@ class DependencyGraph:
                 continue
             if is_unsolvable_type(param_type):
                 continue
-            if inject_node := (
-                resolve_inject(param_type) or resolve_inject(param.default)
-            ):
+            if inject_node := (resolve_use(param_type) or resolve_use(param.default)):
                 self._register_node(inject_node)
                 self._resolved_nodes[param_type] = inject_node
                 param_type = inject_node.dependent_type
@@ -1132,7 +1102,7 @@ class DependencyGraph:
             configured = cast(TDecor, partial(self.node, **config))
             return configured
 
-        if not self._config.partial_resolve and is_unsolvable_type(factory_or_class):
+        if is_unsolvable_type(factory_or_class):
             raise TopLevelBulitinTypeError(factory_or_class)
 
         factory_return = get_typed_signature(factory_or_class).return_annotation

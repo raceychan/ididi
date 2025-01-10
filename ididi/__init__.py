@@ -18,13 +18,13 @@ VERSION = "1.2.2"
 
 __version__ = VERSION
 
-from .interfaces import INode as INode
-from .interfaces import INodeConfig as INodeConfig
 from .api import entry as entry
 from .api import resolve as resolve
 from .graph import AsyncScope as AsyncScope
 from .graph import DependencyGraph as DependencyGraph
 from .graph import SyncScope as SyncScope
+from .interfaces import INode as INode
+from .interfaces import INodeConfig as INodeConfig
 from .node import DependentNode as DependentNode
 from .node import NodeConfig as NodeConfig
 from .node import use as use
@@ -32,7 +32,7 @@ from .utils.typing_utils import AsyncResource as AsyncResource
 from .utils.typing_utils import Resource as Resource
 
 try:
-    import graphviz
+    import graphviz as graphviz  # type: ignore
 except ImportError:
     pass
 else:

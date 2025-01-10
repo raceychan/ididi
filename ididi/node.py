@@ -26,16 +26,6 @@ from typing import (
 
 from typing_extensions import Unpack
 
-from .interfaces import (
-    EMPTY_SIGNATURE,
-    INSPECT_EMPTY,
-    INode,
-    INodeAnyFactory,
-    INodeConfig,
-    INodeFactory,
-    NodeIgnore,
-    NodeIgnoreConfig,
-)
 from ._type_resolve import (
     IDIDI_INJECT_RESOLVE_MARK,
     FactoryType,
@@ -59,8 +49,75 @@ from .errors import (
     NotSupportedError,
     ProtocolFacotryNotProvidedError,
 )
+from .interfaces import (
+    EMPTY_SIGNATURE,
+    INSPECT_EMPTY,
+    INode,
+    INodeAnyFactory,
+    INodeConfig,
+    INodeFactory,
+    NodeIgnore,
+    NodeIgnoreConfig,
+)
 from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import P, T, get_factory_sig_from_cls
+
+
+def use(
+    factory: INodeFactory[P, T],
+    **iconfig: Unpack[INodeConfig],
+) -> T:
+    """
+    An annotation to let ididi knows what factory method to use
+    without explicitly register it.
+
+    These two are equivalent
+    ```
+    def func(service: UserService = use(factory)): ...
+    def func(service: Annotated[UserService, use(factory)]): ...
+    ```
+    """
+    node = DependentNode[T].from_node(factory, config=NodeConfig(**iconfig))
+    annt = Annotated[node.dependent_type, node, IDIDI_INJECT_RESOLVE_MARK]
+    return cast(T, annt)
+
+
+def resolve_use(annotation: Any) -> Union["DependentNode[Any]", None]:
+    if get_origin(annotation) is not Annotated:
+        return
+
+    meta: list[Any] = flatten_annotated(annotation)
+
+    for i, v in enumerate(meta):
+        if v == IDIDI_INJECT_RESOLVE_MARK:
+            node: DependentNode[Any] = meta[i - 1]
+            return node
+
+
+# def resolve_annotated(
+#     name: str, ptype: Annotated[Any, Any]
+# ) -> Union[tuple[str, type], None]:
+#     if get_origin(ptype) is not Annotated:
+#         return None
+
+#     if inject_node := (resolve_use(ptype)):
+#         return (name, inject_node.dependent_type)
+#     else:
+#         base_type = get_args(ptype)[0]
+#         return (name, base_type)
+
+
+def should_override(
+    other_node: "DependentNode[T]", current_node: "DependentNode[T]"
+) -> bool:
+    """
+    Check if the other node should override the current node
+    """
+
+    ans = (
+        ResolveOrder[other_node.factory_type] > ResolveOrder[current_node.factory_type]
+    )
+    return ans
 
 
 class NodeConfig:
@@ -87,63 +144,6 @@ class NodeConfig:
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.reuse=}, {self.lazy=}, {self.ignore=})"
-
-
-def use(
-    factory: INodeFactory[P, T],
-    **iconfig: Unpack[INodeConfig],
-) -> T:
-    """
-    An annotation to let ididi knows what factory method to use
-    without explicitly register it.
-
-    These two are equivalent
-    ```
-    def func(service: UserService = use(factory)): ...
-    def func(service: Annotated[UserService, use(factory)]): ...
-    ```
-    """
-    node = DependentNode[T].from_node(factory, config=NodeConfig(**iconfig))
-    annt = Annotated[node.dependent_type, node, IDIDI_INJECT_RESOLVE_MARK]
-    return cast(T, annt)
-
-
-def resolve_inject(annotation: Any) -> Union["DependentNode[Any]", None]:
-    if get_origin(annotation) is not Annotated:
-        return
-
-    meta: list[Any] = flatten_annotated(annotation)
-
-    for i, v in enumerate(meta):
-        if v == IDIDI_INJECT_RESOLVE_MARK:
-            node: DependentNode[Any] = meta[i - 1]
-            return node
-
-
-def resolve_annotated(
-    name: str, ptype: Annotated[Any, Any]
-) -> Union[tuple[str, type], None]:
-    if get_origin(ptype) is not Annotated:
-        return None
-
-    if inject_node := (resolve_inject(ptype)):
-        return (name, inject_node.dependent_type)
-    else:
-        base_type = get_args(ptype)[0]
-        return (name, base_type)
-
-
-def should_override(
-    other_node: "DependentNode[T]", current_node: "DependentNode[T]"
-) -> bool:
-    """
-    Check if the other node should override the current node
-    """
-
-    ans = (
-        ResolveOrder[other_node.factory_type] > ResolveOrder[current_node.factory_type]
-    )
-    return ans
 
 
 class Dependent(Generic[T]):
@@ -433,50 +433,57 @@ class DependentNode(Generic[T]):
             and self.factory_type == "default"
         )
 
-    def actualized_params(self) -> Generator[DependencyParam[T], None, None]:
-        "iter through dependency params of current node, used in static resolve"
+    def static_unsolved_params(self) -> Generator[DependencyParam[T], None, None]:
+        "params that needs to be statically resolved"
         ignore_params = self.config.ignore
         for i, (param_name, param) in enumerate(self.signature):
             if i in ignore_params:
                 continue
             param_type = cast(Union[type, ForwardRef], param.param_type)
+            param_default = param.default
             if param_name in ignore_params or param_type in ignore_params:
                 continue
 
+            if get_origin(param_type) is Annotated:
+                if not resolve_use(param_type):
+                    param_type, *_ = get_args(param_type)
+
+            if is_provided(param_default) and get_origin(param_default) is Annotated:
+                param_type = param_default
+
             if isinstance(param_type, ForwardRef):
                 param_type = resolve_forwardref(self.dependent_type, param_type)
-                param = DependencyParam(
-                    name=param_name,
-                    param=param.param,
-                    param_annotation=param.param_annotation,
-                    param_type=param_type,
-                    default=param.default,
-                )
-                self.signature.dprams[param_name] = param
+
+            param = DependencyParam(
+                name=param_name,
+                param=param.param,
+                param_annotation=param.param_annotation,
+                param_type=param_type,
+                default=param_default,
+            )
+            self.signature.dprams[param_name] = param
             yield param
 
     def unsolved_params(
         self, ignore: NodeIgnore
     ) -> Generator[tuple[str, type], None, None]:
+        "yield dependencies that needs to be resolved"
         ignores = self.config.ignore + ignore
+
         for i, (param_name, dpram) in enumerate(self.signature):
-            if i in ignores:
-                continue
             param_type: type[T] = dpram.param_type
-            if param_name in ignores or param_type in ignores:
+
+            if i in ignores or param_name in ignores or param_type in ignores:
                 continue
+
             default = dpram.default
 
             if is_provided(default):
-                if param_tuple := (resolve_annotated(param_name, default)):
-                    yield param_tuple
+                if inject_use_node := resolve_use(default):
+                    param_type = inject_use_node.dependent_type
 
-                # should we compare type or check unresolvable_type?
                 if is_unsolvable_type(param_type):
                     continue
-
-            if param_tuple := (resolve_annotated(param_name, param_type)):
-                (param_name, param_type) = param_tuple
 
             yield (param_name, param_type)
 

@@ -39,35 +39,12 @@ async def test_nested_annt_entry():
     assert await f() == "aloha"
 
 
-class AuthService: ...
-
-
-def get_auth(user: Annotated[UserService, "random"]) -> AuthService:
-    return AuthService()
-
-
-def test_random_annotated():
-    dg = DependencyGraph()
-    dg.resolve(get_auth)
-
-
-class SessionService:
-    def __init__(self, auth: AuthService = use(get_auth)):
-        self.auth = auth
-
-
-def test_class_inject():
-    dg = DependencyGraph()
-    dg.resolve(SessionService)
-
-
 def utc_factory() -> datetime:
     return datetime.now(timezone.utc)
 
 
-
-
 UTC_DATETIME = Annotated[datetime, use(utc_factory)]
+
 
 def test_resolve_timer():
     class Timer:
@@ -75,5 +52,52 @@ def test_resolve_timer():
             self.time = time
 
     dg = DependencyGraph()
+
+    dg.static_resolve(Timer)
+    assert dg.nodes[datetime].factory is utc_factory
     tmer = dg.resolve(Timer)
     assert tmer.time.tzinfo == timezone.utc
+
+
+def test_plain_annotated():
+
+    class Clock:
+        def __init__(self, time: Annotated[datetime, "aloha"]):
+            self._time = time
+
+    dg = DependencyGraph()
+    dg.static_resolve(Clock)
+
+
+class A:
+    def __init__(self, name: str, time: UTC_DATETIME):
+        self.name = name
+        self.time = time
+
+
+def a_f(time: UTC_DATETIME) -> A:
+    return A("test", time)
+
+
+class B:
+    def __init__(self, *, a: A = use(a_f), age: int = 7):
+        self.alice = a
+        self.age = age
+
+
+def b_f(a: A = use(a_f)) -> B:
+    return B(a=a, age=5)
+
+
+class C:
+    def __init__(self, b: B = use(b_f)):
+        self.berry = b
+
+
+def test_nested_inject():
+    dg = DependencyGraph()
+    cream = dg.resolve(C)
+
+    assert cream.berry.age == 5
+    assert cream.berry.alice.name == "test"
+    assert cream.berry.alice.time

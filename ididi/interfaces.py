@@ -14,6 +14,7 @@ from typing import (
 )
 
 from typing_extensions import TypeAliasType
+
 from .utils.typing_utils import P, R, T
 
 EMPTY_SIGNATURE = Signature()
@@ -119,3 +120,5 @@ class Closable(Protocol):
 @runtime_checkable
 class AsyncClosable(Protocol):
     async def close(self) -> Coroutine[Any, Any, None]: ...
+
+

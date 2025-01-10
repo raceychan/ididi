@@ -24,7 +24,7 @@ class AuthService:
         self.repo = repo
 
 
-def test_reuse_before_nonreuse_error():
+def test_singleton_uses_transilient():
     dg = DependencyGraph()
     dg.node(reuse=False)(Database)
     with pytest.raises(ReusabilityConflictError):

@@ -26,12 +26,12 @@ from typing import (
 
 from typing_extensions import ParamSpec, TypeGuard
 
-from .interfaces import AsyncClosable, Closable
 from .errors import (
     ForwardReferenceNotFoundError,
     GenericDependencyNotSupportedError,
     UnsolvableReturnTypeError,
 )
+from .interfaces import AsyncClosable, Closable
 from .utils.typing_utils import T, eval_type, get_full_typed_signature, is_builtin_type
 
 if sys.version_info >= (3, 10):
@@ -46,6 +46,7 @@ SyncResource = Union[ContextManager[Any], Closable]
 AsyncResource = Union[AsyncContextManager[Any], AsyncClosable]
 
 IDIDI_INJECT_RESOLVE_MARK = "__ididi_node_mark__"
+IDIDI_INJECT_IGNORE_MARK = "__ididi_ignore_param__"
 
 FactoryType = Literal["default", "function", "resource"]
 # carry this information in node so that resolve does not have to do
