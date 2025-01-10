@@ -6,7 +6,7 @@ import sys
 from collections.abc import AsyncGenerator, Generator
 from contextlib import AbstractAsyncContextManager, AbstractContextManager
 from inspect import Signature, isasyncgenfunction, isgeneratorfunction
-from types import FunctionType, GenericAlias, MethodType
+from types import GenericAlias, MethodType
 from typing import (
     Annotated,
     Any,
@@ -152,8 +152,8 @@ def is_class(
     return is_type or is_generic_alias
 
 
-def is_function(obj: Union[type[T], Callable[P, T]]) -> TypeGuard[Callable[P, T]]:
-    return isinstance(obj, FunctionType)
+# def is_function(obj: Union[type[T], Callable[P, T]]) -> TypeGuard[Callable[P, T]]:
+#     return isinstance(obj, FunctionType)
 
 
 def is_class_with_empty_init(cls: type) -> bool:

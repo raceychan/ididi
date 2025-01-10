@@ -31,7 +31,6 @@ from ._type_resolve import (
     is_async_context_manager,
     is_class,
     is_context_manager,
-    is_function,
     is_unsolvable_type,
     resolve_annotation,
     resolve_factory,
@@ -50,7 +49,6 @@ from .errors import (
     UnsolvableNodeError,
 )
 from .interfaces import (
-    INSPECT_EMPTY,
     GraphIgnoreConfig,
     IAnyFactory,
     IAsyncFactory,
@@ -58,7 +56,6 @@ from .interfaces import (
     IFactory,
     INode,
     INodeConfig,
-    INodeFactory,
     TDecor,
     TEntryDecor,
 )
@@ -463,18 +460,17 @@ class DependencyGraph:
         self, dependent: type, node_config: Maybe[NodeConfig]
     ) -> DependentNode[Any]:
         if registered_node := self._nodes.get(dependent):
-            if is_function(registered_node.factory):
+            # user assign implementation
+            if registered_node.factory_type != "default":
                 return registered_node
 
         try:
             concrete_type = self._resolve_concrete_type(dependent)
         except MissingImplementationError:
-            node = DependentNode[Any].from_node(dependent, config=node_config)
-            self._register_node(node)
-        else:
-            node = self._nodes[concrete_type]
+            config_dict: INodeConfig = node_config.asdict() if node_config else {}
+            concrete_type = cast(type, self.node(**config_dict)(dependent))
 
-        return node
+        return self._nodes[concrete_type]
 
     def _create_lazy_dependent(self, node: DependentNode[T]) -> LazyDependent[T]:
         """Create a lazy version of a node with appropriate resolver."""
@@ -622,15 +618,12 @@ class DependencyGraph:
         def dfs(dependent_factory: INode[P, T]) -> DependentNode[T]:
             if is_class(dependent_factory):
                 dependent_type = cast(type, dependent_factory)
+                # if dependent_type not in self._type_registry:
+                #     self.node(dependent_factory)
             else:
                 dependent_type = resolve_factory(dependent_factory)
-                # statically resolve a unnoded factory function
-                if (dependent_type) not in self.nodes:
-                    factory = cast(INodeFactory[P, T], dependent_factory)
-                    node = DependentNode[T].from_factory(
-                        factory=factory, config=NodeConfig()
-                    )
-                    self._register_node(node)
+                if dependent_type not in self._nodes:
+                    self.node(dependent_factory)
 
             current_path.append(dependent_type)
 
@@ -638,6 +631,7 @@ class DependencyGraph:
                 return self._resolved_nodes[dependent_type]
 
             node = self._resolve_concrete_node(dependent_type, resolve_node_config)
+
             if self.is_registered_singleton(dependent_type):
                 return node
 
@@ -649,7 +643,6 @@ class DependencyGraph:
 
                 if inject_node := resolve_use(param_type):
                     self._register_node(inject_node)
-                    self._resolved_nodes[param_type] = inject_node
                     continue
 
                 if is_provided(param.default):
@@ -972,9 +965,9 @@ class DependencyGraph:
         config = NodeConfig(**iconfig)
         ignores = self._config.ignore + config.ignore
         sig = get_typed_signature(func)
-
         depends_on_resource: bool = False
         unresolved: list[tuple[str, type]] = []
+
         for i, (name, param) in enumerate(sig.parameters.items()):
             param_type = resolve_annotation(param.annotation)
             if i in ignores or name in ignores or param_type in ignores:
@@ -987,29 +980,29 @@ class DependencyGraph:
                 param_type = inject_node.dependent_type
 
             self.static_resolve(param_type, config)
-            # if True, stay True
             depends_on_resource = depends_on_resource or self.should_be_scoped(
                 param_type
             )
             unresolved.append((name, param_type))
 
         if iscoroutinefunction(func):
-            async_func: Callable[..., Awaitable[T]] = cast(
-                Callable[..., Awaitable[T]], func
-            )
+            async_func = cast(Callable[..., Awaitable[T]], func)
+            if depends_on_resource:
 
-            @wraps(async_func)
-            async def _async_scoped_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-                context_scope = self.use_scope(create_on_miss=True, as_async=True)
-                async with context_scope as scope:
-                    for param_name, param_type in unresolved:
-                        if param_name in kwargs:
-                            continue
-                        resolved = await self.aresolve(param_type, scope)
-                        kwargs[param_name] = resolved
+                @wraps(async_func)
+                async def _async_scoped_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+                    context_scope = self.use_scope(create_on_miss=True, as_async=True)
+                    async with context_scope as scope:
+                        for param_name, param_type in unresolved:
+                            if param_name in kwargs:
+                                continue
+                            resolved = await self.aresolve(param_type, scope)
+                            kwargs[param_name] = resolved
 
-                    r = await async_func(*args, **kwargs)
-                    return r
+                        r = await async_func(*args, **kwargs)
+                        return r
+
+                return _async_scoped_wrapper
 
             @wraps(async_func)
             async def _async_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
@@ -1022,22 +1015,25 @@ class DependencyGraph:
                 r = await async_func(*args, **kwargs)
                 return r
 
-            return _async_scoped_wrapper if depends_on_resource else _async_wrapper
+            return _async_wrapper
         else:
-            sync_func: Callable[..., T] = cast(Callable[..., T], func)
+            sync_func = cast(Callable[..., T], func)
+            if depends_on_resource:
 
-            @wraps(sync_func)
-            def _sync_scoped_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-                context_scope = self.use_scope(create_on_miss=True, as_async=False)
-                with context_scope as scope:
-                    for param_name, param_type in unresolved:
-                        if param_name in kwargs:
-                            continue
-                        resolved = self.resolve(param_type, scope)
-                        kwargs[param_name] = resolved
+                @wraps(sync_func)
+                def _sync_scoped_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+                    context_scope = self.use_scope(create_on_miss=True, as_async=False)
+                    with context_scope as scope:
+                        for param_name, param_type in unresolved:
+                            if param_name in kwargs:
+                                continue
+                            resolved = self.resolve(param_type, scope)
+                            kwargs[param_name] = resolved
 
-                    r = sync_func(*args, **kwargs)
-                    return r
+                        r = sync_func(*args, **kwargs)
+                        return r
+
+                return _sync_scoped_wrapper
 
             @wraps(sync_func)
             def _sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
@@ -1050,7 +1046,7 @@ class DependencyGraph:
                 r = sync_func(*args, **kwargs)
                 return r
 
-            return _sync_scoped_wrapper if depends_on_resource else _sync_wrapper
+            return _sync_wrapper
 
     @overload
     def node(self, factory_or_class: type[T]) -> type[T]: ...
@@ -1101,12 +1097,11 @@ class DependencyGraph:
         if is_unsolvable_type(factory_or_class):
             raise TopLevelBulitinTypeError(factory_or_class)
 
-        factory_return = get_typed_signature(factory_or_class).return_annotation
-        if factory_return is not INSPECT_EMPTY:
-            if old_node := self._nodes.get(resolve_annotation(factory_return)):
+        if not is_class(factory_or_class):
+            dep = resolve_factory(factory_or_class)
+            if old_node := self._nodes.get(dep):
                 self._remove_node(old_node)
 
         node = DependentNode[T].from_node(factory_or_class, config=NodeConfig(**config))
-
         self._register_node(node)
-        return factory_or_class
+        return cast(INode[P, T], factory_or_class)

@@ -85,7 +85,7 @@ def use(
     return cast(T, annt)
 
 
-def search_meta(meta: list[Any]):
+def search_meta(meta: list[Any]) -> Union["DependentNode[Any]", None]:
     for i, v in enumerate(meta):
         if v == IDIDI_USE_FACTORY_MARK:
             node: DependentNode[Any] = meta[i - 1]
@@ -137,6 +137,9 @@ class NodeConfig:
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.reuse=}, {self.lazy=}, {self.ignore=})"
+
+    def asdict(self) -> INodeConfig:
+        return INodeConfig(reuse=self.reuse, lazy=self.lazy, ignore=self.ignore)
 
 
 class Dependent(Generic[T]):
@@ -263,7 +266,7 @@ class DependencyParam(Generic[T]):
             default=self.default,
         )
 
-    def replace_default(self, default: Maybe[T]) -> "DependencyParam[T]":
+    def replace_default(self, default: T) -> "DependencyParam[T]":
         return DependencyParam(
             name=self.name,
             param=self.param,
@@ -342,6 +345,8 @@ class DependentSignature(Generic[T]):
                 e.add_context(dependent, param.name, type(MISSING))
                 raise e
 
+            param_type = resolve_annotation(param_annotation)
+
             if param.default == INSPECT_EMPTY:
                 default = MISSING
             else:
@@ -351,12 +356,18 @@ class DependentSignature(Generic[T]):
                 name=param.name,
                 param=param,
                 param_annotation=param_annotation,
-                param_type=resolve_annotation(param_annotation),
+                param_type=param_type,
                 default=default,
             )
             dep_params[param.name] = dep_param
 
         return cls(dprams=dep_params, dependent=dependent)
+
+    def filter_ignore(self, ignore: NodeIgnore):
+        for i, (param_name, param) in enumerate(self.dprams.items()):
+            if (i in ignore) or (param_name in ignore) or (param.param_type in ignore):
+                continue
+            yield param_name, param
 
 
 # ======================= Node =====================================
@@ -447,32 +458,24 @@ class DependentNode(Generic[T]):
     def static_unsolved_params(self) -> Generator[DependencyParam[T], None, None]:
         "params that needs to be statically resolved"
         ignores = self.config.ignore
-        for i, (param_name, param) in enumerate(self.signature):
+        for param_name, param in self.signature.filter_ignore(ignores):
             param_type = cast(Union[type, ForwardRef], param.param_type)
-            if i in ignores or param_name in ignores or param_type in ignores:
-                continue
 
             if get_origin(param_type) is Annotated:
-                annotate_meta = flatten_annotated(param_type)
-                if IDIDI_IGNORE_PARAM_MARK in annotate_meta:
-                    self.config.ignore = ignores + (param_name,)
-                    continue
-                elif use_node := search_meta(annotate_meta):
+                if node := resolve_use(param_type):
                     yield param
-                    param = param.replace_type(use_node.dependent_type)
-                    self.signature.dprams[param_name] = param
+                    self.signature.dprams[param_name] = param.replace_type(
+                        node.dependent_type
+                    )
                     continue
-                else:
-                    param_type, *_ = get_args(param_type)
-                    param = param.replace_type(param_type)
 
             if is_provided(param.default) and get_origin(param.default) is Annotated:
                 annt_default = param.default
-                if use_node := resolve_use(annt_default):
+                if node := resolve_use(annt_default):
                     param = param.replace_type(annt_default).replace_default(MISSING)
                     yield param
                     self.signature.dprams[param_name] = param.replace_type(
-                        use_node.dependent_type
+                        node.dependent_type
                     )
                     continue
 
@@ -488,16 +491,10 @@ class DependentNode(Generic[T]):
     ) -> Generator[tuple[str, type], None, None]:
         "yield dependencies that needs to be resolved"
         ignores = self.config.ignore + ignore
-
-        for i, (param_name, dpram) in enumerate(self.signature):
-            param_type: type[T] = dpram.param_type
-
-            if i in ignores or param_name in ignores or param_type in ignores:
+        for param_name, param in self.signature.filter_ignore(ignores):
+            param_type: type[T] = param.param_type
+            if is_provided(param.default) and is_unsolvable_type(param_type):
                 continue
-
-            if is_provided(dpram.default) and is_unsolvable_type(param_type):
-                continue
-
             yield (param_name, param_type)
 
     def inject_params(
@@ -505,8 +502,7 @@ class DependentNode(Generic[T]):
     ) -> Union[T, Awaitable[T], Generator[T, None, None], AsyncGenerator[T, None]]:
         "Inject dependencies to the dependent accordidng to its signature, return an instance of the dependent type"
         arguments = self.signature.bind_arguments(params).arguments
-        r = self.factory(**arguments)
-        return r
+        return self.factory(**arguments)
 
     def check_for_resolvability(self) -> None:
         if isinstance(self.factory, type):
@@ -531,6 +527,17 @@ class DependentNode(Generic[T]):
     ) -> "DependentNode[T]":
         dep = Dependent(dependent_type=dependent)
         sig = DependentSignature[T].from_signature(dependent, factory, signature)
+
+        for name, param in sig.filter_ignore(config.ignore):
+            param_type = param.param_type
+            if get_origin(param_type) is Annotated:
+                annotate_meta = flatten_annotated(param_type)
+                if IDIDI_IGNORE_PARAM_MARK in annotate_meta:
+                    config.ignore = config.ignore + (name,)
+                elif IDIDI_USE_FACTORY_MARK not in annotate_meta:
+                    param_type, *_ = get_args(param_type)
+                    sig.dprams[name] = param.replace_type(param_type)
+
         node = DependentNode(
             dependent=dep,
             factory=factory,
