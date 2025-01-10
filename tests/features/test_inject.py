@@ -6,7 +6,7 @@ from tests.test_data import UserService
 
 
 def get_user_service() -> UserService:
-    return UserService(db=1, auth=2)
+    return UserService(db=1, auth=2)  # type: ignore
 
 
 async def create_user(service: UserService = use(get_user_service)):

@@ -974,14 +974,14 @@ class DependencyGraph:
             return configured
 
         config = NodeConfig(**iconfig)
-        should_ignore = self._config.ignore + config.ignore
+        ignores = self._config.ignore + config.ignore
         sig = get_typed_signature(func)
 
         depends_on_resource: bool = False
         unresolved: list[tuple[str, type]] = []
-        for name, param in sig.parameters.items():
+        for i, (name, param) in enumerate(sig.parameters.items()):
             param_type = resolve_annotation(param.annotation)
-            if name in should_ignore or param_type in should_ignore:
+            if i in ignores or name in ignores or param_type in ignores:
                 continue
             if is_unsolvable_type(param_type):
                 continue

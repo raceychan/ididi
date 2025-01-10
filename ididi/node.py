@@ -27,6 +27,7 @@ from typing import (
 from typing_extensions import Unpack
 
 from ._type_resolve import (
+    IDIDI_INJECT_IGNORE_MARK,
     IDIDI_INJECT_RESOLVE_MARK,
     FactoryType,
     ResolveOrder,
@@ -62,6 +63,8 @@ from .interfaces import (
 from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import P, T, get_factory_sig_from_cls
 
+Ignore = Annotated[T, IDIDI_INJECT_IGNORE_MARK]
+
 
 def use(
     factory: INodeFactory[P, T],
@@ -82,29 +85,19 @@ def use(
     return cast(T, annt)
 
 
-def resolve_use(annotation: Any) -> Union["DependentNode[Any]", None]:
-    if get_origin(annotation) is not Annotated:
-        return
-
-    meta: list[Any] = flatten_annotated(annotation)
-
+def search_meta(meta: list[Any]):
     for i, v in enumerate(meta):
         if v == IDIDI_INJECT_RESOLVE_MARK:
             node: DependentNode[Any] = meta[i - 1]
             return node
 
 
-# def resolve_annotated(
-#     name: str, ptype: Annotated[Any, Any]
-# ) -> Union[tuple[str, type], None]:
-#     if get_origin(ptype) is not Annotated:
-#         return None
+def resolve_use(annotation: Any) -> Union["DependentNode[Any]", None]:
+    if get_origin(annotation) is not Annotated:
+        return
 
-#     if inject_node := (resolve_use(ptype)):
-#         return (name, inject_node.dependent_type)
-#     else:
-#         base_type = get_args(ptype)[0]
-#         return (name, base_type)
+    meta: list[Any] = flatten_annotated(annotation)
+    return search_meta(meta)
 
 
 def should_override(
@@ -445,11 +438,15 @@ class DependentNode(Generic[T]):
                 continue
 
             if get_origin(param_type) is Annotated:
-                if not resolve_use(param_type):
+                annotate_meta = flatten_annotated(param_type)
+                if IDIDI_INJECT_IGNORE_MARK in annotate_meta:
+                    self.config.ignore = ignore_params + (param_name,)
+                    continue
+                elif not search_meta(annotate_meta):
                     param_type, *_ = get_args(param_type)
 
-            if is_provided(param_default) and get_origin(param_default) is Annotated:
-                param_type = param_default
+            if get_origin(param_default) is Annotated:
+                param_type: Any = param_default
 
             if isinstance(param_type, ForwardRef):
                 param_type = resolve_forwardref(self.dependent_type, param_type)

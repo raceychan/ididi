@@ -26,6 +26,7 @@ from .graph import SyncScope as SyncScope
 from .interfaces import INode as INode
 from .interfaces import INodeConfig as INodeConfig
 from .node import DependentNode as DependentNode
+from .node import Ignore as Ignore
 from .node import NodeConfig as NodeConfig
 from .node import use as use
 from .utils.typing_utils import AsyncResource as AsyncResource
