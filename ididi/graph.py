@@ -897,66 +897,6 @@ class DependencyGraph:
             scope=scope,
         )
 
-    # def resolve(
-    #     self,
-    #     dependent: IFactory[P, T],
-    #     scope: Maybe[SyncScope] = MISSING,
-    #     /,
-    #     *args: P.args,
-    #     **overrides: P.kwargs,
-    # ) -> T:
-    #     if args:
-    #         raise PositionalOverrideError(args)
-
-    #     if is_provided(resolution := self.get_resolve_cache(dependent, scope)):
-    #         return resolution
-
-    #     to_build: list[tuple[IFactory[P, T], Union[str, None], dict[str, Any]]] = [
-    #         (dependent, None, overrides.copy())
-    #     ]
-    #     resolved: dict[IFactory[P, T], T] = {}  # dependent -> instance
-
-    #     provided_params = tuple(overrides)
-
-    #     while to_build:
-    #         current, param_name, current_params = to_build.pop()
-
-    #         node = self.static_resolve(current, ignore=provided_params)
-    #         if node.factory_type == "aresource":
-    #             raise AsyncResourceInSyncError(node.dependent_type)
-
-    #         # Get dependencies
-    #         ignores = self._config.ignore + node.config.ignore + provided_params
-    #         unsolved = node.unsolved_params(ignores)
-
-    #         # Check if all dependencies are built
-    #         missing_deps = False
-
-    #         # Check required dependencies
-    #         for param_name, param_type in unsolved:
-    #             if is_provided(resolution := self.get_resolve_cache(param_type, scope)):
-    #                 current_params[param_name] = resolution
-    #             elif param_type in resolved:
-    #                 current_params[param_name] = resolved[param_type]
-    #             else:
-    #                 missing_deps = True
-    #                 to_build.append((current, param_name, current_params))
-    #                 to_build.append((param_type, None, {}))
-    #                 break
-
-    #         # If all dependencies are ready, build it
-    #         if missing_deps is False:
-    #             instance = cast(T, node.inject_params(current_params))
-    #             resolved[current] = self._manage_resolved(
-    #                 resolved=instance,
-    #                 dependent_type=node.dependent_type,
-    #                 factory_type=node.factory_type,
-    #                 is_reuse=node.config.reuse,
-    #                 scope=scope,
-    #             )
-
-    #     return resolved[dependent]
-
     async def aresolve(
         self,
         dependent: IFactory[P, T],
