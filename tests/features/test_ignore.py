@@ -24,7 +24,7 @@ def db_fact(dg: DependencyGraph) -> Database:
 
 
 def service_factory(
-    *, db: Database = use(db_fact), auth: AuthenticationService, name: Ignore[str]
+    *, db: Database = use(db_fact), auth: AuthenticationService, name: str
 ) -> UserService:
     return UserService(db=db, auth=auth)
 

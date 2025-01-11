@@ -650,3 +650,29 @@ both `use` and `Ignore` are designed to be user friendly alternative to `Depende
 
 
 
+## version 1.2.4
+
+
+Improvements:
+
+- minor performance gain, 60% faster for instance resolve, should resolve 0.2 million instances in 1 second, although still 40 times slower than hard-coded factory, we tried replace recursive appraoch with iterative, no luck, only tiny improvements, so we stay at recursive appraoch
+
+Fix:
+in previous patch
+
+```py
+def service_factory(
+    *, db: Database = use(db_fact), auth: AuthenticationService, name: str
+) -> UserService:
+    return UserService(db=db, auth=auth)
+
+
+def test_resolve():
+    dg = DependencyGraph()
+
+    dg.resolve(service_factory, name="aloha")
+```
+
+woud raise `UnsolvableDependencyError`, because `name` is a str without default values, 
+when when we resolve it, we will first static_resolve it, which would raise error,
+now if dependencies that are provided with overrides won't be statically resolved. 
