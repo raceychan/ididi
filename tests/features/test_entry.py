@@ -182,16 +182,16 @@ def test_entry_reuse():
     ) -> UserService:
         return service
 
-    services = set[UserService]()
+    SERVICES = set[UserService]()
 
     create_user = dg.entry(reuse=False)(create_user)
 
     for _ in range(rounds):
-        services.add(create_user("test", "email"))
+        SERVICES.add(create_user("test", "email"))
 
-    assert len(services) == rounds
+    assert len(SERVICES) == rounds
 
-    services.clear()
+    SERVICES.clear()
 
     dg.reset(clear_nodes=True)
     dg.node(UserService)
@@ -199,6 +199,6 @@ def test_entry_reuse():
     create_user = dg.entry(create_user)
 
     for _ in range(rounds):
-        services.add(create_user("test", "email"))
+        SERVICES.add(create_user("test", "email"))
 
-    assert len(services) == 1
+    assert len(SERVICES) == 1

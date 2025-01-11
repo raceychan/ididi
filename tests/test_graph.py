@@ -416,7 +416,7 @@ def test_dependency_override(dg: DependencyGraph):
     instance = dg.resolve(Service, name="overridden")
     assert instance.name == "overridden"
 
-
+@pytest.mark.debug
 def test_nested_dependency_override(dg: DependencyGraph):
     @dg.node
     class Inner:

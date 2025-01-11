@@ -509,6 +509,54 @@ class DependencyGraph:
         self._register_node(node)
         return node
 
+    def _manage_resolved(
+        self,
+        resolved: T,
+        dependent_type: type[T],
+        factory_type: str,
+        is_reuse: bool,
+        scope: Maybe[SyncScope],
+    ):
+        if factory_type in ("default", "function"):
+            instance = resolved
+            if is_reuse:
+                self._resolution_registry.register(dependent_type, resolved)
+        else:
+            if not scope:
+                raise ResourceOutsideScopeError(dependent_type)
+
+            instance = scope.enter_context(cast(ContextManager[T], resolved))
+            if is_reuse:
+                scope.cache_result(dependent_type, instance)
+        return instance
+
+    async def _manage_aresolved(
+        self,
+        resolved: Union[T, Awaitable[T]],
+        dependent_type: type[T],
+        factory_type: str,
+        is_reuse: bool,
+        scope: Maybe[AsyncScope],
+    ):
+        if factory_type in ("default", "function"):
+            instance = await resolved if isawaitable(resolved) else resolved
+            if is_reuse:
+                self._resolution_registry.register(dependent_type, instance)
+        else:
+            if not scope:
+                raise ResourceOutsideScopeError(dependent_type)
+
+            if factory_type == "resource":
+                instance = scope.enter_context(cast(ContextManager[T], resolved))
+            else:
+                instance = await scope.enter_async_context(
+                    cast(AsyncContextManager[T], resolved)
+                )
+            if is_reuse:
+                scope.cache_result(dependent_type, instance)
+
+        return cast(T, instance)
+
     # ==========================  Public ==========================
 
     def merge(self, other: Union["DependencyGraph", Sequence["DependencyGraph"]]):
@@ -604,6 +652,9 @@ class DependencyGraph:
         """
         Recursively analyze the type information of a dependency.
         """
+        if node := self._resolved_nodes.get(dependent):
+            return node
+
         if is_unsolvable_type(dependent):
             raise TopLevelBulitinTypeError(dependent)
 
@@ -641,7 +692,7 @@ class DependencyGraph:
                 self.check_param_conflict(param_type, current_path)
 
                 if inject_node := resolve_use(param_type):
-                    self._register_node(inject_node)
+                    self._node(inject_node.factory)
                     continue
 
                 if is_provided(param.default):
@@ -837,21 +888,74 @@ class DependencyGraph:
                 overrides[param_name] = self.resolve(param_type, scope)
 
         dependent_type = node.dependent_type
-        resolved = node.inject_params(overrides)
+        resolved = cast(T, node.inject_params(overrides))
+        return self._manage_resolved(
+            resolved=resolved,
+            dependent_type=dependent_type,
+            factory_type=node.factory_type,
+            is_reuse=node_config.reuse,
+            scope=scope,
+        )
 
-        is_reuse = node_config.reuse
-        if node.factory_type in ("default", "function"):
-            instance = resolved
-            if is_reuse:
-                self._resolution_registry.register(dependent_type, resolved)
-        else:
-            if not scope:
-                raise ResourceOutsideScopeError(dependent_type)
+    # def resolve(
+    #     self,
+    #     dependent: IFactory[P, T],
+    #     scope: Maybe[SyncScope] = MISSING,
+    #     /,
+    #     *args: P.args,
+    #     **overrides: P.kwargs,
+    # ) -> T:
+    #     if args:
+    #         raise PositionalOverrideError(args)
 
-            instance = scope.enter_context(cast(ContextManager[T], resolved))
-            if is_reuse:
-                scope.cache_result(dependent_type, instance)
-        return cast(T, instance)
+    #     if is_provided(resolution := self.get_resolve_cache(dependent, scope)):
+    #         return resolution
+
+    #     to_build: list[tuple[IFactory[P, T], Union[str, None], dict[str, Any]]] = [
+    #         (dependent, None, overrides.copy())
+    #     ]
+    #     resolved: dict[IFactory[P, T], T] = {}  # dependent -> instance
+
+    #     provided_params = tuple(overrides)
+
+    #     while to_build:
+    #         current, param_name, current_params = to_build.pop()
+
+    #         node = self.static_resolve(current, ignore=provided_params)
+    #         if node.factory_type == "aresource":
+    #             raise AsyncResourceInSyncError(node.dependent_type)
+
+    #         # Get dependencies
+    #         ignores = self._config.ignore + node.config.ignore + provided_params
+    #         unsolved = node.unsolved_params(ignores)
+
+    #         # Check if all dependencies are built
+    #         missing_deps = False
+
+    #         # Check required dependencies
+    #         for param_name, param_type in unsolved:
+    #             if is_provided(resolution := self.get_resolve_cache(param_type, scope)):
+    #                 current_params[param_name] = resolution
+    #             elif param_type in resolved:
+    #                 current_params[param_name] = resolved[param_type]
+    #             else:
+    #                 missing_deps = True
+    #                 to_build.append((current, param_name, current_params))
+    #                 to_build.append((param_type, None, {}))
+    #                 break
+
+    #         # If all dependencies are ready, build it
+    #         if missing_deps is False:
+    #             instance = cast(T, node.inject_params(current_params))
+    #             resolved[current] = self._manage_resolved(
+    #                 resolved=instance,
+    #                 dependent_type=node.dependent_type,
+    #                 factory_type=node.factory_type,
+    #                 is_reuse=node.config.reuse,
+    #                 scope=scope,
+    #             )
+
+    #     return resolved[dependent]
 
     async def aresolve(
         self,
@@ -879,28 +983,14 @@ class DependencyGraph:
             overrides[param_name] = await self.aresolve(param_type, scope)
 
         dependent_type = node.dependent_type
-        resolved = node.inject_params(overrides)
-        is_reuse = node.config.reuse
-
-        if node.factory_type in ("default", "function"):
-            instance = await resolved if isawaitable(resolved) else resolved
-            if is_reuse:
-                self._resolution_registry.register(dependent_type, instance)
-        else:
-            if not scope:
-                raise ResourceOutsideScopeError(dependent_type)
-
-            if node.factory_type == "resource":
-                instance = scope.enter_context(cast(ContextManager[T], resolved))
-            else:
-
-                instance = await scope.enter_async_context(
-                    cast(AsyncContextManager[T], resolved)
-                )
-            if is_reuse:
-                scope.cache_result(dependent_type, instance)
-
-        return cast(T, instance)
+        resolved = cast(Union[T, Awaitable[T]], node.inject_params(overrides))
+        return await self._manage_aresolved(
+            resolved=resolved,
+            dependent_type=dependent_type,
+            factory_type=node.factory_type,
+            is_reuse=node.config.reuse,
+            scope=scope,
+        )
 
     @overload
     def entry(self, **iconfig: Unpack[INodeConfig]) -> TEntryDecor: ...

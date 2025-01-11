@@ -66,13 +66,16 @@ def test_resolve_instances(dg: DependencyGraph, dependents: list[type]):
 
 @pytest.mark.benchmark
 def test_entry(dg: DependencyGraph, dependents: list[type]):
-    rounds = ROUNDS * 100
-    dg.reset()
+    rounds = ROUNDS * 1
+    dg.reset(clear_nodes=True)
+
+    SERVICE_REGISTRY: set[UserService] = set()
 
     def create_user(user_name: str, user_email: str, service: UserService):
+        SERVICE_REGISTRY.add(service)
         return "ok"
 
-    total = 0
+    normal_total = 0
 
     for _ in range(rounds):
         pre = perf_counter()
@@ -80,49 +83,41 @@ def test_entry(dg: DependencyGraph, dependents: list[type]):
         assert create_user("test", "email", service=user_service) == "ok"
         aft = perf_counter()
         cost = round(aft - pre, 12)
-        total += cost
+        normal_total += cost
+
+    assert len(SERVICE_REGISTRY) == rounds
+
+    SERVICE_REGISTRY.clear()
+
+    normal_total = round(normal_total, 6)
 
     print(
-        f"\n{round(total, 6)} seoncds to call regular function {create_user.__name__} {rounds} times"
+        f"\n{normal_total} seoncds to call regular function {create_user.__name__} {rounds} times"
     )
 
-    create_user = dg.entry(create_user)
-    dg.node(reuse=False)(UserService)
+    create_user = dg.entry(reuse=False)(create_user)
+    assert dg.nodes[UserService].config.reuse is False
 
-    total = 0
+    entry_total = 0
     for _ in range(rounds):
         pre = perf_counter()
         assert create_user("test", "email") == "ok"
         aft = perf_counter()
         cost = round(aft - pre, 6)
-        total += cost
+        entry_total += cost
+
+    assert len(SERVICE_REGISTRY) == rounds
+
+    entry_total = round(entry_total, 6)
 
     print(
-        f"\n{round(total, 6)} seoncds to call entry version of {create_user.__name__} {rounds} times"
+        f"\n{entry_total} seoncds to call entry version of {create_user.__name__} {rounds} times"
     )
 
+    ratio = round(entry_total / normal_total, 6)
 
-"""
-0.012446 seoncds to register 122 classes
-0.010367 seoncds to statically resolve 122 classes
-0.001249 seoncds to resolve 122 instances
-"""
+    print(f"current implementation is {ratio} times slower")
 
-
-"""
-1.0.10
-0.019022 seoncds to register 122 classes
-0.00338 seoncds to statically resolve 122 classes
-0.001264 seoncds to resolve 122 instances
-"""
-
-"""
-1.1.0
-
-0.020025 seoncds to register 122 classes
-0.003467 seoncds to statically resolve 122 classes
-0.001032 seoncds to resolve 122 instances
-"""
 
 """
 1.1.2
@@ -141,4 +136,12 @@ def test_entry(dg: DependencyGraph, dependents: list[type]):
 0.000878 seoncds to resolve 100 instances
 0.099846 seoncds to call regular function create_user 100000 times
 0.104534 seoncds to call entry version of create_user 100000 times
+"""
+
+"""
+0.014508 seoncds to register 100 classes
+0.003526 seoncds to statically resolve 100 classes
+0.000816 seoncds to resolve 100 instances
+0.001143 seoncds to call regular function create_user 1000 times
+0.09091 seoncds to call entry version of create_user 1000 times
 """
