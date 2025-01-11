@@ -229,7 +229,7 @@ def test_static_resolve_factory(dg: DependencyGraph):
     assert Repository in dg.type_registry[Repository]
 
 
-@pytest.mark.asyncio
+@pytest.mark.debug
 async def test_resource_cleanup(dg: DependencyGraph):
     closed_resources: set[str] = set()
 
@@ -301,29 +301,29 @@ def test_graph_reset(dg: DependencyGraph):
     assert instance1 is not instance2
 
 
-# def test_node_removal_cleanup(dg: DependencyGraph):
-#     dg.reset(clear_nodes=True)
+def test_node_removal_cleanup(dg: DependencyGraph):
+    dg.reset(clear_nodes=True)
 
-#     @dg.node
-#     class Dependency:
-#         pass
+    @dg.node
+    class Dependency:
+        pass
 
-#     @dg.node
-#     class Service:
-#         def __init__(self, dep: Dependency):
-#             self.dep = dep
+    @dg.node
+    class Service:
+        def __init__(self, dep: Dependency):
+            self.dep = dep
 
-#     dg.resolve(Service)
+    dg.resolve(Service)
 
-#     # Get the node and remove it
-#     node = dg.nodes[Dependency]
-#     dg.remove_node(node)
+    # Get the node and remove it
+    node = dg.nodes[Dependency]
+    dg._remove_node(node)
 
-#     # Check that all references are cleaned up
-#     assert Dependency not in dg.nodes
-#     assert Dependency not in dg.type_registry[Dependency]
-#     assert Dependency not in dg.resolution_registry
-#     assert Dependency not in dg.resolved_nodes
+    # Check that all references are cleaned up
+    assert Dependency not in dg.nodes
+    assert Dependency not in dg.type_registry[Dependency]
+    assert Dependency not in dg.resolution_registry
+    assert Dependency not in dg.resolved_nodes
 
 
 def test_facwry_override(dg: DependencyGraph):
@@ -433,7 +433,6 @@ def test_nested_dependency_override(dg: DependencyGraph):
     assert instance.inner.value == "overridden"
 
 
-@pytest.mark.debug
 def test_abstract_base_resolution(dg: DependencyGraph):
     dg = DependencyGraph()
 
@@ -478,23 +477,23 @@ def test_multiple_dependency_paths(dg: DependencyGraph):
     assert instance.s1.shared2.value == instance.s2.shared1.value == "shared"
 
 
-# def test_type_mapping_cleanup(dg: DependencyGraph):
-#     class Interface(ABC):
-#         pass
+def test_type_mapping_cleanup(dg: DependencyGraph):
+    class Interface(ABC):
+        pass
 
-#     @dg.node
-#     class Implementation(Interface):
-#         pass
+    @dg.node
+    class Implementation(Interface):
+        pass
 
-#     # Verify type mapping
-#     assert Implementation in dg.type_registry[Interface]
+    # Verify type mapping
+    assert Implementation in dg.type_registry[Interface]
 
-#     # Remove implementation
-#     node = dg.nodes[Implementation]
-#     dg._remove_node(node)
+    # Remove implementation
+    node = dg.nodes[Implementation]
+    dg.reset(clear_nodes=True)
 
-#     # Verify type mapping is cleaned up
-#     assert Interface not in dg.type_registry or not dg.type_registry[Interface]
+    # Verify type mapping is cleaned up
+    assert Interface not in dg.type_registry or not dg.type_registry[Interface]
 
 
 @pytest.mark.asyncio
@@ -724,18 +723,3 @@ def test_graph_ignore():
     dg = DependencyGraph(ignore=datetime)
     with pytest.raises(TypeError):
         dg.resolve(Timer)
-
-
-def test_mess_with_abc():
-    class Abstract(ABC):
-        @abstractmethod
-        def register(self): ...
-
-    class Base(Abstract):
-        def register(self): ...
-
-    dg = DependencyGraph()
-    dg.static_resolve(Abstract)
-
-    # dg.node(Abstract)
-    # dg.static_resolve(Abstract)

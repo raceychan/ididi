@@ -34,12 +34,14 @@ from ._type_resolve import (
     flatten_annotated,
     get_args,
     get_typed_signature,
-    is_any_context_manager_clss,
-    is_any_generator,
+    is_actxmgr_cls,
     is_class,
     is_class_or_method,
     is_class_with_empty_init,
+    is_ctxmgr_cls,
     is_unsolvable_type,
+    isasyncgenfunction,
+    isgeneratorfunction,
     resolve_annotation,
     resolve_factory_return,
     resolve_forwardref,
@@ -446,14 +448,7 @@ class DependentNode(Generic[T]):
 
     @property
     def is_resource(self) -> bool:
-        if self.factory_type == "resource":
-            return True
-
-        # class that implements __(a)enter__ and __(a)exit__
-        return (
-            is_any_context_manager_clss(self._dependent.dependent_type)
-            and self.factory_type == "default"
-        )
+        return self.factory_type in ("resource", "aresource")
 
     def static_unsolved_params(self) -> Generator[DependencyParam[T], None, None]:
         "params that needs to be statically resolved"
@@ -554,17 +549,18 @@ class DependentNode(Generic[T]):
         if config.lazy:
             raise NotSupportedError("Lazy dependency is not supported for factories")
 
-        factory_type = "resource"
-        if isgeneratorfunction(factory):
-            f = contextmanager(factory)
-        elif isasyncgenfunction(factory):
+        f = factory
+        factory_type: FactoryType
+        if isasyncgenfunction(factory):
             f = asynccontextmanager(factory)
-        elif is_any_generator(_ := getattr(factory, "__wrapped__", None)):
-            # user decorate a generator with contextlib.asynccontextmanager
-            f = factory
+            factory_type = "aresource"
+        elif isgeneratorfunction(factory):
+            f = contextmanager(factory)
+            factory_type = "resource"
+        elif genfunc := getattr(factory, "__wrapped__", None):
+            factory_type = "aresource" if isasyncgenfunction(genfunc) else "resource"
         else:
             factory_type = "function"
-            f = factory
 
         signature = get_typed_signature(f, check_return=True)
         dependent: type[T] = resolve_factory_return(signature.return_annotation)
@@ -584,21 +580,22 @@ class DependentNode(Generic[T]):
         if hasattr(dependent, "__origin__"):
             if res := get_origin(dependent):
                 dependent = res
-
         if is_class_with_empty_init(dependent):
-            return cls.create(
-                dependent=dependent,
-                factory=dependent,
-                factory_type="default",
-                signature=EMPTY_SIGNATURE,
-                config=config,
-            )
+            signature = EMPTY_SIGNATURE
+        else:
+            signature = get_factory_sig_from_cls(dependent)
 
-        signature = get_factory_sig_from_cls(dependent)
+        if is_ctxmgr_cls(dependent):
+            factory_type = "resource"
+        elif is_actxmgr_cls(dependent):
+            factory_type = "aresource"
+        else:
+            factory_type = "default"
+
         return cls.create(
             dependent=dependent,
             factory=dependent,
-            factory_type="default",
+            factory_type=factory_type,
             signature=signature,
             config=config,
         )

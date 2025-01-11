@@ -48,7 +48,7 @@ AsyncResource = Union[AsyncContextManager[Any], AsyncClosable]
 IDIDI_USE_FACTORY_MARK = "__ididi_use_factory__"
 IDIDI_IGNORE_PARAM_MARK = "__ididi_ignore_param__"
 
-FactoryType = Literal["default", "function", "resource"]
+FactoryType = Literal["default", "function", "resource", "aresource"]
 # carry this information in node so that resolve does not have to do
 # iscontextmanager check
 
@@ -56,6 +56,7 @@ ResolveOrder: dict[FactoryType, int] = {
     "default": 1,
     "function": 2,
     "resource": 3,
+    "aresource": 3,
 }
 # when merge graphs we need to make sure a node with default constructor
 # does not override a node with resource
@@ -123,22 +124,27 @@ def is_unsolvable_type(t: Any) -> bool:
     return is_builtin_type(t) or t is Signature.empty or t is Any
 
 
-def is_context_manager(t: T) -> TypeGuard[ContextManager[T]]:
-    return isinstance(t, AbstractContextManager)
+# def is_context_manager(t: T) -> TypeGuard[ContextManager[T]]:
+#     return isinstance(t, AbstractContextManager)
 
 
-def is_async_context_manager(t: T) -> TypeGuard[AsyncContextManager[T]]:
-    return isinstance(t, AbstractAsyncContextManager)
+# def is_async_context_manager(t: T) -> TypeGuard[AsyncContextManager[T]]:
+#     return isinstance(t, AbstractAsyncContextManager)
+
+# def is_any_generator(func: Union[Callable[..., T], None]):
+#     return isgeneratorfunction(func) or isasyncgenfunction(func)
 
 
-def is_any_context_manager_clss(
+def is_actxmgr_cls(
     t: type[T],
-) -> TypeGuard[Union[type[ContextManager[T]], type[AsyncContextManager[T]]]]:
-    return issubclass(t, (ContextManager, AsyncContextManager))
+) -> TypeGuard[type[AsyncContextManager[T]]]:
+    return issubclass(t, AsyncContextManager)
 
 
-def is_any_generator(func: Union[Callable[..., T], None]):
-    return isgeneratorfunction(func) or isasyncgenfunction(func)
+def is_ctxmgr_cls(
+    t: type[T],
+) -> TypeGuard[type[ContextManager[T]]]:
+    return issubclass(t, ContextManager)
 
 
 def is_class_or_method(obj: Any) -> bool:

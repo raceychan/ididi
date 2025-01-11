@@ -234,12 +234,3 @@ class TopLevelBulitinTypeError(GraphResolveError):
         super().__init__(
             f"Using builtin type {dependency_type} as a top level dependency is not supported"
         )
-
-
-# class MissingImplementationError(GraphResolveError):
-#     """
-#     Raised when a type has no implementations.
-#     """
-
-#     def __init__(self, dependency_type: type):
-#         super().__init__(f"No implementations found for {dependency_type}")

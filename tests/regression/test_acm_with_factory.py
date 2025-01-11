@@ -43,8 +43,8 @@ async def test_resolve_with_factory():
     dg.node(sync_factory)
 
     acm = dg.resolve(ACM)
+    assert dg.nodes[ACM].factory_type == "function"
     assert not acm._closed
-
 
 async def test_user_defined_acm():
 
@@ -55,5 +55,6 @@ async def test_user_defined_acm():
 
     dg = DependencyGraph()
     dg.static_resolve(acm_factory)
-    assert dg.nodes[ACM].factory is acm_factory
-    assert dg.nodes[ACM].factory_type == "resource"
+    acm_node = dg.nodes[ACM]
+    assert acm_node.factory is acm_factory
+    assert acm_node.factory_type == "aresource"

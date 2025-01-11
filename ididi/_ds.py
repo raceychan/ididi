@@ -68,14 +68,6 @@ class TypeRegistry(BaseRegistry):
 
         del self._mappings[dependent_type]
 
-    # def get(
-    #     self,
-    #     dependent_type: Union[type[T], Callable[..., T]],
-    #     /,
-    #     default: Maybe[list[type[T]]] = MISSING,
-    # ) -> Maybe[list[type[T]]]:
-    #     return self._mappings.get(dependent_type, default)
-
 
 class ResolutionRegistry(BaseRegistry):
     __slots__ = ("_mappings",)

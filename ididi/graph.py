@@ -28,9 +28,7 @@ from typing_extensions import Self, Unpack
 from ._ds import GraphNodes, GraphNodesView, ResolutionRegistry, TypeRegistry, Visitor
 from ._type_resolve import (
     get_typed_signature,
-    is_async_context_manager,
     is_class,
-    is_context_manager,
     is_unsolvable_type,
     resolve_annotation,
     resolve_factory,
@@ -823,6 +821,9 @@ class DependencyGraph:
         provided_params = tuple(overrides)
         node: DependentNode[T] = self.static_resolve(dependent, ignore=provided_params)
 
+        if node.factory_type == "aresource":
+            raise AsyncResourceInSyncError(node.dependent_type)
+
         node_config = node.config
         ignores = self._config.ignore + node_config.ignore + provided_params
         unsolved_params = node.unsolved_params(ignores)
@@ -835,26 +836,21 @@ class DependencyGraph:
             for param_name, param_type in unsolved_params:
                 overrides[param_name] = self.resolve(param_type, scope)
 
+        dependent_type = node.dependent_type
         resolved = node.inject_params(overrides)
 
         is_reuse = node_config.reuse
-        if node.factory_type == "function":
-            if is_reuse:
-                self._resolution_registry.register(dependent, resolved)
-            return cast(T, resolved)
-
-        if is_context_manager(resolved):
-            if not scope:
-                raise ResourceOutsideScopeError(node.dependent_type)
-            instance = scope.enter_context(resolved)
-            if is_reuse:
-                scope.cache_result(dependent, instance)
-        elif is_async_context_manager(resolved):
-            raise AsyncResourceInSyncError(resolved)
-        else:
+        if node.factory_type in ("default", "function"):
             instance = resolved
             if is_reuse:
-                self._resolution_registry.register(dependent, instance)
+                self._resolution_registry.register(dependent_type, resolved)
+        else:
+            if not scope:
+                raise ResourceOutsideScopeError(dependent_type)
+
+            instance = scope.enter_context(cast(ContextManager[T], resolved))
+            if is_reuse:
+                scope.cache_result(dependent_type, instance)
         return cast(T, instance)
 
     async def aresolve(
@@ -882,34 +878,27 @@ class DependencyGraph:
         for param_name, param_type in node.unsolved_params(ignores):
             overrides[param_name] = await self.aresolve(param_type, scope)
 
+        dependent_type = node.dependent_type
         resolved = node.inject_params(overrides)
-
         is_reuse = node.config.reuse
-        if node.factory_type == "function":
-            instance = resolved
-            if isawaitable(instance):
-                instance = await instance
 
+        if node.factory_type in ("default", "function"):
+            instance = await resolved if isawaitable(resolved) else resolved
             if is_reuse:
-                self._resolution_registry.register(dependent, instance)
-            return cast(T, instance)
-
-        if is_async_context_manager(resolved):
-            if not scope:
-                raise ResourceOutsideScopeError(node.dependent_type)
-            instance = await scope.enter_async_context(resolved)
-            if is_reuse:
-                scope.cache_result(dependent, instance)
-        elif is_context_manager(resolved):
-            if not scope:
-                raise ResourceOutsideScopeError(node.dependent_type)
-            instance = scope.enter_context(resolved)
-            if is_reuse:
-                scope.cache_result(dependent, instance)
+                self._resolution_registry.register(dependent_type, instance)
         else:
-            instance = resolved
+            if not scope:
+                raise ResourceOutsideScopeError(dependent_type)
+
+            if node.factory_type == "resource":
+                instance = scope.enter_context(cast(ContextManager[T], resolved))
+            else:
+
+                instance = await scope.enter_async_context(
+                    cast(AsyncContextManager[T], resolved)
+                )
             if is_reuse:
-                self._resolution_registry.register(dependent, instance)
+                scope.cache_result(dependent_type, instance)
 
         return cast(T, instance)
 
