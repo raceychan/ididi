@@ -58,6 +58,7 @@ class TypeRegistry(BaseRegistry):
 
     def register(self, dependent_type: type[T]) -> None:
         self._mappings[dependent_type].append(dependent_type)
+
         for base in get_bases(dependent_type):
             self._mappings[base].append(dependent_type)
 
@@ -67,13 +68,13 @@ class TypeRegistry(BaseRegistry):
 
         del self._mappings[dependent_type]
 
-    def get(
-        self,
-        dependent_type: Union[type[T], Callable[..., T]],
-        /,
-        default: Maybe[list[type[T]]] = MISSING,
-    ) -> Maybe[list[type[T]]]:
-        return self._mappings.get(dependent_type, default)
+    # def get(
+    #     self,
+    #     dependent_type: Union[type[T], Callable[..., T]],
+    #     /,
+    #     default: Maybe[list[type[T]]] = MISSING,
+    # ) -> Maybe[list[type[T]]]:
+    #     return self._mappings.get(dependent_type, default)
 
 
 class ResolutionRegistry(BaseRegistry):

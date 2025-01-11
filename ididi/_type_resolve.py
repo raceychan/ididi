@@ -87,9 +87,14 @@ def resolve_factory_return(sig_return: type[T]) -> type[T]:
     """
     Get dependent type from a factory return
     """
-    if get_origin(sig_return) in (AsyncGenerator, Generator):
+    origin_return = get_origin(sig_return)
+
+    if origin_return in (AsyncGenerator, Generator):
         dependent, *_ = get_args(sig_return)
         return dependent
+
+    if isinstance(origin_return, type) and get_args(sig_return):
+        return origin_return
     return sig_return
 
 

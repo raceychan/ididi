@@ -433,6 +433,7 @@ def test_nested_dependency_override(dg: DependencyGraph):
     assert instance.inner.value == "overridden"
 
 
+@pytest.mark.debug
 def test_abstract_base_resolution(dg: DependencyGraph):
     dg = DependencyGraph()
 
@@ -723,3 +724,18 @@ def test_graph_ignore():
     dg = DependencyGraph(ignore=datetime)
     with pytest.raises(TypeError):
         dg.resolve(Timer)
+
+
+def test_mess_with_abc():
+    class Abstract(ABC):
+        @abstractmethod
+        def register(self): ...
+
+    class Base(Abstract):
+        def register(self): ...
+
+    dg = DependencyGraph()
+    dg.static_resolve(Abstract)
+
+    # dg.node(Abstract)
+    # dg.static_resolve(Abstract)

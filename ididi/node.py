@@ -138,8 +138,8 @@ class NodeConfig:
     def __repr__(self):
         return f"{self.__class__.__name__}({self.reuse=}, {self.lazy=}, {self.ignore=})"
 
-    def asdict(self) -> INodeConfig:
-        return INodeConfig(reuse=self.reuse, lazy=self.lazy, ignore=self.ignore)
+    # def asdict(self) -> INodeConfig:
+    #     return INodeConfig(reuse=self.reuse, lazy=self.lazy, ignore=self.ignore)
 
 
 class Dependent(Generic[T]):
@@ -472,17 +472,15 @@ class DependentNode(Generic[T]):
             if is_provided(param.default) and get_origin(param.default) is Annotated:
                 annt_default = param.default
                 if node := resolve_use(annt_default):
-                    param = param.replace_type(annt_default).replace_default(MISSING)
-                    yield param
+                    yield param.replace_type(annt_default)
                     self.signature.dprams[param_name] = param.replace_type(
                         node.dependent_type
-                    )
+                    ).replace_default(MISSING)
                     continue
 
             if isinstance(param_type, ForwardRef):
                 param_type = resolve_forwardref(self.dependent_type, param_type)
                 param = param.replace_type(param_type)
-
             yield param
             self.signature.dprams[param_name] = param
 
@@ -490,8 +488,7 @@ class DependentNode(Generic[T]):
         self, ignore: NodeIgnore
     ) -> Generator[tuple[str, type], None, None]:
         "yield dependencies that needs to be resolved"
-        ignores = self.config.ignore + ignore
-        for param_name, param in self.signature.filter_ignore(ignores):
+        for param_name, param in self.signature.filter_ignore(ignore):
             param_type: type[T] = param.param_type
             if is_provided(param.default) and is_unsolvable_type(param_type):
                 continue
@@ -504,7 +501,7 @@ class DependentNode(Generic[T]):
         arguments = self.signature.bind_arguments(params).arguments
         return self.factory(**arguments)
 
-    def check_for_resolvability(self) -> None:
+    def check_for_implementations(self) -> None:
         if isinstance(self.factory, type):
             # no factory override
             if getattr(self.factory, "_is_protocol", False):
@@ -554,18 +551,20 @@ class DependentNode(Generic[T]):
         factory: INodeFactory[P, T],
         config: NodeConfig,
     ) -> "DependentNode[T]":
-        factory_type = "function"
-        f = factory
-        if isgeneratorfunction(f):
-            f = contextmanager(f)
-            factory_type = "resource"
-        elif isasyncgenfunction(f):
-            f = asynccontextmanager(f)
-            factory_type = "resource"
+        if config.lazy:
+            raise NotSupportedError("Lazy dependency is not supported for factories")
+
+        factory_type = "resource"
+        if isgeneratorfunction(factory):
+            f = contextmanager(factory)
+        elif isasyncgenfunction(factory):
+            f = asynccontextmanager(factory)
+        elif is_any_generator(_ := getattr(factory, "__wrapped__", None)):
+            # user decorate a generator with contextlib.asynccontextmanager
+            f = factory
         else:
-            # case where user decorate a generator with contextlib.asynccontextmanager
-            if is_any_generator(_ := getattr(factory, "__wrapped__", None)):
-                factory_type = "resource"
+            factory_type = "function"
+            f = factory
 
         signature = get_typed_signature(f, check_return=True)
         dependent: type[T] = resolve_factory_return(signature.return_annotation)
@@ -625,9 +624,5 @@ class DependentNode(Generic[T]):
             dependent = cast(type[T], factory_or_class)
             return cls.from_class(dependent=dependent, config=config)
         else:
-            if config.lazy:
-                raise NotSupportedError(
-                    "Lazy dependency is not supported for factories"
-                )
             factory = cast(INodeFactory[P, T], factory_or_class)
             return cls.from_factory(factory=factory, config=config)

@@ -120,5 +120,3 @@ class Closable(Protocol):
 @runtime_checkable
 class AsyncClosable(Protocol):
     async def close(self) -> Coroutine[Any, Any, None]: ...
-
-

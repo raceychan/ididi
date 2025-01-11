@@ -2,8 +2,12 @@ from typing import Generic, TypeVar
 
 import pytest
 
-from ididi import DependencyGraph
-from ididi.errors import ForwardReferenceNotFoundError, UnsolvableReturnTypeError
+from ididi import DependencyGraph, Ignore
+from ididi.errors import (
+    ForwardReferenceNotFoundError,
+    UnsolvableDependencyError,
+    UnsolvableReturnTypeError,
+)
 
 dg = DependencyGraph()
 # Define a generic type variable
@@ -28,17 +32,13 @@ class Dog(Animal[str]):
         return f"{self.value} says woof!"
 
 
-# Factory class with generic return type
-@dg.node
-def animal_factory(animal_type: str) -> Animal[str]:
-    return Dog(animal_type)
-
-
-# Test cases
 def test_factory_generic_return():
     # Create a Dog instance using the factory
-    dog = animal_factory("Buddy")
+    # Factory class with generic return type
+    def animal_factory(animal_type: Ignore[str]) -> Animal[str]:
+        return Dog(animal_type)
 
+    dog = dg.resolve(animal_factory, animal_type="Buddy")
     assert isinstance(dog, Animal)
     assert isinstance(dog, Dog)
     assert dog.get_value() == "Buddy"
@@ -67,3 +67,18 @@ def user_service_factory() -> "UserService": ...
 def test_forward_factory():
     dg.node(user_service_factory)
     dg.static_resolve(user_service_factory)
+
+
+# Factory class with generic return type
+def animal_factory(animal_type: str) -> Animal[str]:
+    return Dog(animal_type)
+
+
+def test_direct_resolve_with_override():
+    dg = DependencyGraph()
+    # this should not raise ididi.errors.UnsolvableDependencyError
+    # since animal_type is provided, we should not care about resolvability
+    with pytest.raises(UnsolvableDependencyError):
+        dg.static_resolve(animal_factory)
+
+    dg.resolve(animal_factory, animal_type="cat")

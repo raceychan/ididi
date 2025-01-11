@@ -46,7 +46,6 @@ class A:
     def __init__(self, b: B, c: C, d: D): ...
 
 
-@pytest.mark.debug
 def test_visitor():
     dg = DependencyGraph()
     dg.static_resolve(A)

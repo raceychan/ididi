@@ -39,7 +39,6 @@ from .errors import (
     AsyncResourceInSyncError,
     CircularDependencyDetectedError,
     MergeWithScopeStartedError,
-    MissingImplementationError,
     OutOfScopeError,
     PositionalOverrideError,
     ResourceOutsideScopeError,
@@ -49,6 +48,7 @@ from .errors import (
     UnsolvableNodeError,
 )
 from .interfaces import (
+    GraphIgnore,
     GraphIgnoreConfig,
     IAnyFactory,
     IAsyncFactory,
@@ -444,33 +444,15 @@ class DependencyGraph:
             if not current_resolved and other_resolved:
                 self._resolved_nodes[dep_type] = other_resolved
 
-    def _resolve_concrete_type(self, abstract_type: type) -> type:
-        """
-        Resolve abstract type to concrete implementation.
-        """
-        implementations: Maybe[list[type]] = self._type_registry.get(abstract_type)
+    def _resolve_concrete_node(self, dependent: type[T]) -> DependentNode[Any]:
+        # user assign impl via factory
+        if (node := self._nodes.get(dependent)) and node.factory_type != "default":
+            return node
 
-        if not is_provided(implementations):
-            raise MissingImplementationError(abstract_type)
-
-        last_implementations = implementations[-1]
-        return last_implementations
-
-    def _resolve_concrete_node(
-        self, dependent: type, node_config: Maybe[NodeConfig]
-    ) -> DependentNode[Any]:
-        if registered_node := self._nodes.get(dependent):
-            # user assign implementation
-            if registered_node.factory_type != "default":
-                return registered_node
-
-        try:
-            concrete_type = self._resolve_concrete_type(dependent)
-        except MissingImplementationError:
-            config_dict: INodeConfig = node_config.asdict() if node_config else {}
-            concrete_type = cast(type, self.node(**config_dict)(dependent))
-
-        return self._nodes[concrete_type]
+        concrete_type = self._type_registry[dependent][-1]
+        concrete_node = self._nodes[concrete_type]
+        concrete_node.check_for_implementations()
+        return concrete_node
 
     def _create_lazy_dependent(self, node: DependentNode[T]) -> LazyDependent[T]:
         """Create a lazy version of a node with appropriate resolver."""
@@ -516,6 +498,18 @@ class DependencyGraph:
 
         # Register type mappings
         self._type_registry.register(dependent_type)
+
+    def _node(
+        self, dependent: INode[P, T], config: Maybe[NodeConfig] = MISSING
+    ) -> DependentNode[T]:
+        config = config or NodeConfig()
+        node = DependentNode[T].from_node(dependent, config=config)
+
+        if ori_node := self._nodes.get(node.dependent_type):
+            if should_override(node, ori_node):
+                self._remove_node(ori_node)
+        self._register_node(node)
+        return node
 
     # ==========================  Public ==========================
 
@@ -598,14 +592,16 @@ class DependencyGraph:
             cycle = current_path[i:] + [param_type]
             raise CircularDependencyDetectedError(cycle)
 
-        if (param_node := self._nodes.get(param_type)) and not param_node.config.reuse:
+        if (subnode := self._nodes.get(param_type)) and not subnode.config.reuse:
             if any(self._nodes[p].config.reuse for p in current_path):
                 raise ReusabilityConflictError(current_path, param_type)
 
     def static_resolve(
         self,
         dependent: INode[P, T],
-        resolve_node_config: Maybe[NodeConfig] = MISSING,
+        *,
+        config: Maybe[NodeConfig] = MISSING,
+        ignore: Maybe[GraphIgnore] = MISSING,
     ) -> DependentNode[T]:
         """
         Recursively analyze the type information of a dependency.
@@ -615,27 +611,32 @@ class DependencyGraph:
 
         current_path: list[type] = []
 
-        def dfs(dependent_factory: INode[P, T]) -> DependentNode[T]:
+        def dfs(
+            dependent_factory: INode[P, T], ignore: GraphIgnore
+        ) -> DependentNode[T]:
             if is_class(dependent_factory):
                 dependent_type = cast(type, dependent_factory)
-                # if dependent_type not in self._type_registry:
-                #     self.node(dependent_factory)
+                # when we register a concrete node we also register its bases to type_registry
+                if dependent_type not in self._type_registry:
+                    self._node(dependent_type, config)
             else:
                 dependent_type = resolve_factory(dependent_factory)
                 if dependent_type not in self._nodes:
-                    self.node(dependent_factory)
-
-            current_path.append(dependent_type)
+                    self._node(dependent, config)
 
             if dependent_type in self._resolved_nodes:
                 return self._resolved_nodes[dependent_type]
 
-            node = self._resolve_concrete_node(dependent_type, resolve_node_config)
+            node = self._resolve_concrete_node(dependent_type)
 
             if self.is_registered_singleton(dependent_type):
                 return node
 
+            current_path.append(dependent_type)
             for param in node.static_unsolved_params():
+                if param.name in ignore:
+                    continue
+
                 if (param_type := param.param_type) in self._resolved_nodes:
                     continue
 
@@ -657,22 +658,21 @@ class DependencyGraph:
                     )
 
                 try:
-                    dep_node = dfs(param_type)
+                    pnode = dfs(param_type, ())
                 except UnsolvableNodeError as une:
                     une.add_context(
                         node.dependent_type, param.name, param.param_annotation
                     )
                     raise
 
-                self._register_node(dep_node)
-                self._resolved_nodes[param_type] = dep_node
+                self._register_node(pnode)
+                self._resolved_nodes[param_type] = pnode
 
-            node.check_for_resolvability()
-            self._resolved_nodes[dependent_type] = node
             current_path.pop()
+            self._resolved_nodes[dependent_type] = node
             return node
 
-        return dfs(dependent)
+        return dfs(dependent, ignore or ())
 
     def static_resolve_all(self) -> None:
         unsolved_nodes: set[type] = self._nodes.keys() - self._resolved_nodes.keys()
@@ -820,20 +820,22 @@ class DependencyGraph:
         if is_provided(resolution := self.get_resolve_cache(dependent, scope)):
             return resolution
 
-        node: DependentNode[T] = self.static_resolve(dependent)
+        provided_params = tuple(overrides)
+        node: DependentNode[T] = self.static_resolve(dependent, ignore=provided_params)
+
         node_config = node.config
-        resolved_params: dict[str, Any] = overrides
+        ignores = self._config.ignore + node_config.ignore + provided_params
+        unsolved_params = node.unsolved_params(ignores)
 
-        ignores = self._config.ignore + tuple(resolved_params)
+        if node_config.lazy:
+            for param_name, param_type in unsolved_params:
+                dep_node = self.static_resolve(param_type, config=node_config)
+                overrides[param_name] = self._create_lazy_dependent(dep_node)
+        else:
+            for param_name, param_type in unsolved_params:
+                overrides[param_name] = self.resolve(param_type, scope)
 
-        for param_name, param_type in node.unsolved_params(ignores):
-            if node_config.lazy:
-                dep_node = self.static_resolve(param_type, node_config)
-                resolved_params[param_name] = self._create_lazy_dependent(dep_node)
-            else:
-                resolved_params[param_name] = self.resolve(param_type, scope)
-
-        resolved = node.inject_params(resolved_params)
+        resolved = node.inject_params(overrides)
 
         is_reuse = node_config.reuse
         if node.factory_type == "function":
@@ -873,15 +875,14 @@ class DependencyGraph:
         if is_provided(resolution := self.get_resolve_cache(dependent, scope)):
             return resolution
 
-        node: DependentNode[T] = self.static_resolve(dependent)
-        resolved_params: dict[str, Any] = overrides
-
-        ignores = self._config.ignore + tuple(resolved_params)
+        provided_params = tuple(overrides)
+        node: DependentNode[T] = self.static_resolve(dependent, ignore=provided_params)
+        ignores = self._config.ignore + node.config.ignore + provided_params
 
         for param_name, param_type in node.unsolved_params(ignores):
-            resolved_params[param_name] = await self.aresolve(param_type, scope)
+            overrides[param_name] = await self.aresolve(param_type, scope)
 
-        resolved = node.inject_params(resolved_params)
+        resolved = node.inject_params(overrides)
 
         is_reuse = node.config.reuse
         if node.factory_type == "function":
@@ -979,7 +980,7 @@ class DependencyGraph:
                 self._resolved_nodes[param_type] = inject_node
                 param_type = inject_node.dependent_type
 
-            self.static_resolve(param_type, config)
+            self.static_resolve(param_type, config=config)
             depends_on_resource = depends_on_resource or self.should_be_scoped(
                 param_type
             )
@@ -1097,11 +1098,5 @@ class DependencyGraph:
         if is_unsolvable_type(factory_or_class):
             raise TopLevelBulitinTypeError(factory_or_class)
 
-        if not is_class(factory_or_class):
-            dep = resolve_factory(factory_or_class)
-            if old_node := self._nodes.get(dep):
-                self._remove_node(old_node)
-
-        node = DependentNode[T].from_node(factory_or_class, config=NodeConfig(**config))
-        self._register_node(node)
-        return cast(INode[P, T], factory_or_class)
+        self._node(factory_or_class, config=NodeConfig(**config))
+        return factory_or_class

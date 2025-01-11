@@ -91,8 +91,9 @@ class ABCNotImplementedError(UnsolvableNodeError):
     """
 
     def __init__(self, abc: type, abstract_methods: frozenset[str]):
+
         super().__init__(
-            f"ABC {abc} has no valid implementations, either provide a implementation that implements {abstract_methods} or a factory"
+            f"ABC {abc} has no valid implementations, either provide a implementation that implements {tuple(m for m in abstract_methods)} or a factory"
         )
 
 
@@ -235,10 +236,10 @@ class TopLevelBulitinTypeError(GraphResolveError):
         )
 
 
-class MissingImplementationError(GraphResolveError):
-    """
-    Raised when a type has no implementations.
-    """
+# class MissingImplementationError(GraphResolveError):
+#     """
+#     Raised when a type has no implementations.
+#     """
 
-    def __init__(self, dependency_type: type):
-        super().__init__(f"No implementations found for {dependency_type}")
+#     def __init__(self, dependency_type: type):
+#         super().__init__(f"No implementations found for {dependency_type}")
