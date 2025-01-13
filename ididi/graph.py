@@ -27,6 +27,13 @@ from typing import (
 from typing_extensions import Self, Unpack
 
 from ._ds import GraphNodes, GraphNodesView, ResolutionRegistry, TypeRegistry, Visitor
+from ._node import (
+    DependentNode,
+    LazyDependent,
+    NodeConfig,
+    resolve_use,
+    should_override,
+)
 from ._type_resolve import (
     get_typed_signature,
     is_class,
@@ -58,7 +65,6 @@ from .interfaces import (
     TDecor,
     TEntryDecor,
 )
-from .node import DependentNode, LazyDependent, NodeConfig, resolve_use, should_override
 from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import P, T
 
@@ -463,7 +469,7 @@ class DependencyGraph:
         return LazyDependent[T](
             dependent_type=node.dependent_type,
             factory=node.factory,
-            signature=node.signature,
+            signature=node.dependencies,
             resolver=resolver,
         )
 
@@ -485,17 +491,10 @@ class DependencyGraph:
         """
 
         dep_type = node.dependent_type
-
         dependent_type: type = get_origin(dep_type) or dep_type
-
-        # Skip if registered
         if dependent_type in self._nodes:
             return
-
-        # Register main type
         self._nodes[dependent_type] = node
-
-        # Register type mappings
         self._type_registry.register(dependent_type)
 
     def _node(
@@ -710,9 +709,7 @@ class DependencyGraph:
                 try:
                     pnode = dfs(param_type, ())
                 except UnsolvableNodeError as une:
-                    une.add_context(
-                        node.dependent_type, param.name, param.param_annotation
-                    )
+                    une.add_context(node.dependent_type, param.name, param.param_type)
                     raise
 
                 self._register_node(pnode)
@@ -933,6 +930,31 @@ class DependencyGraph:
             scope=scope,
         )
 
+    def _static_resolve_entry(self, config: NodeConfig, func: IFactory[P, T]):
+        ignores = self._config.ignore + config.ignore
+        func_params = get_typed_signature(func).parameters.items()
+        depends_on_resource: bool = False
+        unresolved: list[tuple[str, type]] = []
+
+        for i, (name, param) in enumerate(func_params):
+            param_type = resolve_annotation(param.annotation)
+            if i in ignores or name in ignores or param_type in ignores:
+                continue
+            if is_unsolvable_type(param_type):
+                continue
+            if inject_node := (resolve_use(param_type) or resolve_use(param.default)):
+                self._register_node(inject_node)
+                self._resolved_nodes[param_type] = inject_node
+                param_type = inject_node.dependent_type
+
+            self.static_resolve(param_type, config=config)
+            depends_on_resource = depends_on_resource or self.should_be_scoped(
+                param_type
+            )
+            unresolved.append((name, param_type))
+
+        return depends_on_resource, unresolved
+
     @overload
     def entry(self, **iconfig: Unpack[INodeConfig]) -> TEntryDecor: ...
 
@@ -984,31 +1006,16 @@ class DependencyGraph:
             return configured
 
         config = NodeConfig(**iconfig)
-        ignores = self._config.ignore + config.ignore
-        sig = get_typed_signature(func)
-        depends_on_resource: bool = False
-        unresolved: list[tuple[str, type]] = []
+        require_scope, unresolved = self._static_resolve_entry(config, func)
 
-        for i, (name, param) in enumerate(sig.parameters.items()):
-            param_type = resolve_annotation(param.annotation)
-            if i in ignores or name in ignores or param_type in ignores:
-                continue
-            if is_unsolvable_type(param_type):
-                continue
-            if inject_node := (resolve_use(param_type) or resolve_use(param.default)):
-                self._register_node(inject_node)
-                self._resolved_nodes[param_type] = inject_node
-                param_type = inject_node.dependent_type
+        # def reset_deps():
+        #     nonlocal unresolved
 
-            self.static_resolve(param_type, config=config)
-            depends_on_resource = depends_on_resource or self.should_be_scoped(
-                param_type
-            )
-            unresolved.append((name, param_type))
+        #     _, unresolved = self._static_resolve_entry(config, func)
 
         if iscoroutinefunction(func):
             async_func = cast(Callable[..., Awaitable[T]], func)
-            if depends_on_resource:
+            if require_scope:
 
                 @wraps(async_func)
                 async def _async_scoped_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
@@ -1023,6 +1030,7 @@ class DependencyGraph:
                         r = await async_func(*args, **kwargs)
                         return r
 
+                # _async_scoped_wrapper.reset_deps = reset_deps
                 return _async_scoped_wrapper
 
             @wraps(async_func)
@@ -1036,10 +1044,11 @@ class DependencyGraph:
                 r = await async_func(*args, **kwargs)
                 return r
 
+            # _async_wrapper.reset_deps = reset_deps
             return _async_wrapper
         else:
             sync_func = cast(Callable[..., T], func)
-            if depends_on_resource:
+            if require_scope:
 
                 @wraps(sync_func)
                 def _sync_scoped_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
@@ -1054,6 +1063,7 @@ class DependencyGraph:
                         r = sync_func(*args, **kwargs)
                         return r
 
+                # _sync_scoped_wrapper.reset_deps = reset_deps
                 return _sync_scoped_wrapper
 
             @wraps(sync_func)
@@ -1067,6 +1077,7 @@ class DependencyGraph:
                 r = sync_func(*args, **kwargs)
                 return r
 
+            # _sync_wrapper.reset_deps = reset_deps
             return _sync_wrapper
 
     @overload

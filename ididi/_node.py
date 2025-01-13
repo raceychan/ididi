@@ -2,6 +2,7 @@ from abc import ABC
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from functools import lru_cache
+from inspect import _ParameterKind  # type: ignore
 from inspect import (
     BoundArguments,
     Parameter,
@@ -177,7 +178,7 @@ class LazyDependent(Dependent[T]):
         *,
         dependent_type: type[T],
         factory: INodeFactory[P, T],
-        signature: "DependentSignature[T]",
+        signature: "Dependencies[T]",
         resolver: Callable[[type[T]], T],
         cached_instance: Maybe[Union[T, Awaitable[T]]] = MISSING,
     ):
@@ -234,12 +235,11 @@ class DependencyParam(Generic[T]):
     default: the default value of the param, 5, in this case.
     """
 
-    __slots__ = ("name", "param", "param_annotation", "param_type", "default")
+    __slots__ = ("name", "param", "param_kind", "param_type", "default")
 
     name: str
-    param: Parameter
-    param_annotation: type  # original type
     param_type: type[T]  # resolved_type
+    param_kind: _ParameterKind
     default: Maybe[T]
 
     def __repr__(self) -> str:
@@ -248,7 +248,7 @@ class DependencyParam(Generic[T]):
     @property
     def unresolvable(self) -> bool:
         "if the param is variadic or is of builtin without default"
-        if self.param.kind in (
+        if self.param_kind in (
             Parameter.VAR_POSITIONAL,
             Parameter.VAR_KEYWORD,
         ):
@@ -262,8 +262,7 @@ class DependencyParam(Generic[T]):
     def replace_type(self, param_type: type[T]) -> "DependencyParam[T]":
         return DependencyParam(
             name=self.name,
-            param=self.param,
-            param_annotation=self.param_annotation,
+            param_kind=self.param_kind,
             param_type=param_type,
             default=self.default,
         )
@@ -271,24 +270,18 @@ class DependencyParam(Generic[T]):
     def replace_default(self, default: T) -> "DependencyParam[T]":
         return DependencyParam(
             name=self.name,
-            param=self.param,
-            param_annotation=self.param_annotation,
+            param_kind=self.param_kind,
             param_type=self.param_type,
             default=default,
         )
 
 
-class DependentSignature(Generic[T]):
-    __slots__ = ("dependent", "dprams")
+class Dependencies(Generic[T]):
+    __slots__ = ("_deps", "_sig")
 
-    def __init__(
-        self,
-        *,
-        dependent: type[Union[T, None]] = type(None),
-        dprams: Union[dict[str, DependencyParam[Any]], None],
-    ):
-        self.dependent = dependent
-        self.dprams = dprams or {}
+    def __init__(self, deps: dict[str, DependencyParam[Any]]):
+        self._deps = deps or {}
+        self._sig: Union[Signature, None] = None
 
     """
     # hash by dependent, and param names
@@ -297,35 +290,48 @@ class DependentSignature(Generic[T]):
     """
 
     def __iter__(self) -> Iterator[tuple[str, DependencyParam[Any]]]:
-        return iter(self.dprams.items())
+        return iter(self._deps.items())
 
     def __len__(self) -> int:
-        return len(self.dprams)
+        return len(self._deps)
 
     def __getitem__(self, param_name: str) -> DependencyParam[Any]:
-        return self.dprams[param_name]
+        return self._deps[param_name]
 
-    def generate_signature(self) -> Signature:
+    def update(self, param_name: str, param_val: DependencyParam[Any]):
+        self._deps[param_name] = param_val
+
+    @property
+    def signature(self) -> Signature:
         """
         dynamically generate signature based on current params,
         as we might need to actualize forwardref params when bind params
         """
-        return Signature(
-            parameters=[p.param for p in self.dprams.values()],
-            return_annotation=self.dependent,
-            __validate_parameters__=False,
-        )
+
+        if self._sig is None:
+
+            self._sig = Signature(
+                parameters=[
+                    Parameter(
+                        name=p.name,
+                        kind=p.param_kind,
+                        default=p.default,
+                    )
+                    for p in self._deps.values()
+                ],
+                __validate_parameters__=False,
+            )
+        return self._sig
 
     def bind_arguments(self, resolved_args: dict[str, Any]) -> BoundArguments:
         """Bind resolved arguments to the signature."""
-        sig = self.generate_signature()
-        bound_args = sig.bind_partial(**resolved_args)
+        bound_args = self.signature.bind_partial(**resolved_args)
         return bound_args
 
     @classmethod
     def from_signature(
         cls,
-        dependent: type[T],
+        dependent_type: type[T],
         factory: INodeFactory[P, T],
         signature: Signature,
     ):
@@ -334,17 +340,17 @@ class DependentSignature(Generic[T]):
         if is_class_or_method(factory):
             params = params[1:]  # skip 'self'
 
-        dep_params: dict[str, DependencyParam[Any]] = {}
+        dependencies: dict[str, DependencyParam[Any]] = {}
 
         for param in params:
             param_annotation = param.annotation
             if param_annotation is INSPECT_EMPTY:
                 e = MissingAnnotationError(
-                    dependent_type=dependent,
+                    dependent_type=dependent_type,
                     param_name=param.name,
                     param_type=param_annotation,
                 )
-                e.add_context(dependent, param.name, type(MISSING))
+                e.add_context(dependent_type, param.name, type(MISSING))
                 raise e
 
             param_type = resolve_annotation(param_annotation)
@@ -356,17 +362,16 @@ class DependentSignature(Generic[T]):
 
             dep_param = DependencyParam(
                 name=param.name,
-                param=param,
-                param_annotation=param_annotation,
+                param_kind=param.kind,
                 param_type=param_type,
                 default=default,
             )
-            dep_params[param.name] = dep_param
+            dependencies[param.name] = dep_param
 
-        return cls(dprams=dep_params, dependent=dependent)
+        return cls(dependencies)
 
     def filter_ignore(self, ignore: NodeIgnore):
-        for i, (param_name, param) in enumerate(self.dprams.items()):
+        for i, (param_name, param) in enumerate(self._deps.items()):
             if (i in ignore) or (param_name in ignore) or (param.param_type in ignore):
                 continue
             yield param_name, param
@@ -414,7 +419,7 @@ class DependentNode(Generic[T]):
     whether this node is reusable, default is True
     """
 
-    __slots__ = ("_dependent", "factory", "factory_type", "signature", "config")
+    __slots__ = ("_dependent", "factory", "factory_type", "dependencies", "config")
 
     def __init__(
         self,
@@ -422,13 +427,18 @@ class DependentNode(Generic[T]):
         dependent: Dependent[T],
         factory: INodeAnyFactory[T],
         factory_type: FactoryType,
-        signature: DependentSignature[T],
+        dependencies: Dependencies[T],
         config: NodeConfig,
     ):
+        """
+        TODO:
+        - cancel Dependent, use dependent_type directly
+        - refactor DependentSignature to Dependencies
+        """
         self._dependent = dependent
         self.factory = factory
         self.factory_type: FactoryType = factory_type
-        self.signature = signature
+        self.dependencies = dependencies
         self.config = config
 
     def __repr__(self) -> str:
@@ -453,14 +463,14 @@ class DependentNode(Generic[T]):
     def static_unsolved_params(self) -> Generator[DependencyParam[T], None, None]:
         "params that needs to be statically resolved"
         ignores = self.config.ignore
-        for param_name, param in self.signature.filter_ignore(ignores):
+        for param_name, param in self.dependencies.filter_ignore(ignores):
             param_type = cast(Union[type, ForwardRef], param.param_type)
 
             if get_origin(param_type) is Annotated:
                 if node := resolve_use(param_type):
                     yield param
-                    self.signature.dprams[param_name] = param.replace_type(
-                        node.dependent_type
+                    self.dependencies.update(
+                        param_name, param.replace_type(node.dependent_type)
                     )
                     continue
 
@@ -468,22 +478,28 @@ class DependentNode(Generic[T]):
                 annt_default = param.default
                 if node := resolve_use(annt_default):
                     yield param.replace_type(annt_default)
-                    self.signature.dprams[param_name] = param.replace_type(
-                        node.dependent_type
-                    ).replace_default(MISSING)
+                    self.dependencies.update(
+                        param_name,
+                        param.replace_type(node.dependent_type).replace_default(
+                            MISSING
+                        ),
+                    )
                     continue
 
             if isinstance(param_type, ForwardRef):
-                param_type = resolve_forwardref(self.dependent_type, param_type)
-                param = param.replace_type(param_type)
+                new_type = resolve_forwardref(self.dependent_type, param_type)
+                param = param.replace_type(new_type)
+
             yield param
-            self.signature.dprams[param_name] = param
+
+            if param.param_type != param_type:
+                self.dependencies.update(param_name, param)
 
     def unsolved_params(
         self, ignore: NodeIgnore
     ) -> Generator[tuple[str, type], None, None]:
         "yield dependencies that needs to be resolved"
-        for param_name, param in self.signature.filter_ignore(ignore):
+        for param_name, param in self.dependencies.filter_ignore(ignore):
             param_type: type[T] = param.param_type
             if is_provided(param.default) and is_unsolvable_type(param_type):
                 continue
@@ -493,7 +509,7 @@ class DependentNode(Generic[T]):
         self, params: dict[str, Any]
     ) -> Union[T, Awaitable[T], Generator[T, None, None], AsyncGenerator[T, None]]:
         "Inject dependencies to the dependent accordidng to its signature, return an instance of the dependent type"
-        arguments = self.signature.bind_arguments(params).arguments
+        arguments = self.dependencies.bind_arguments(params).arguments
         return self.factory(**arguments)
 
     def check_for_implementations(self) -> None:
@@ -517,10 +533,9 @@ class DependentNode(Generic[T]):
         signature: Signature,
         config: NodeConfig,
     ) -> "DependentNode[T]":
-        dep = Dependent(dependent_type=dependent)
-        sig = DependentSignature[T].from_signature(dependent, factory, signature)
+        deps = Dependencies[T].from_signature(dependent, factory, signature)
 
-        for name, param in sig.filter_ignore(config.ignore):
+        for name, param in deps.filter_ignore(config.ignore):
             param_type = param.param_type
             if get_origin(param_type) is Annotated:
                 annotate_meta = flatten_annotated(param_type)
@@ -528,13 +543,13 @@ class DependentNode(Generic[T]):
                     config.ignore = config.ignore + (name,)
                 elif IDIDI_USE_FACTORY_MARK not in annotate_meta:
                     param_type, *_ = get_args(param_type)
-                    sig.dprams[name] = param.replace_type(param_type)
+                    deps.update(name, param.replace_type(param_type))
 
         node = DependentNode(
-            dependent=dep,
+            dependent=Dependent(dependent_type=dependent),
             factory=factory,
             factory_type=factory_type,
-            signature=sig,
+            dependencies=deps,
             config=config,
         )
         return node

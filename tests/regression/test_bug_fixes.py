@@ -173,7 +173,7 @@ def test_complex_type():
 
     node = dg.nodes[Service]
     assert node.factory is service_factory
-    assert str(node.signature)
+    assert str(node.dependencies)
 
 
 def test_not_supported_type():

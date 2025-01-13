@@ -115,14 +115,14 @@ def test_node_signature_change_after_factory(dg: DependencyGraph):
 
     dg.static_resolve(UserService)
     node = dg.nodes[UserService]
-    assert len(node.signature.dprams) == 3
+    assert len(node.dependencies) == 3
 
     @dg.node
     def user_service_factory(repo: UserRepository, auth: AuthService) -> UserService:
         return UserService(repo, auth)
 
     node = dg.nodes[UserService]
-    assert len(node.signature.dprams) == 2
+    assert len(node.dependencies) == 2
 
 
 def test_top_level_builtin_dependency(dg: DependencyGraph):
@@ -415,6 +415,7 @@ def test_dependency_override(dg: DependencyGraph):
     # Override with kwargs
     instance = dg.resolve(Service, name="overridden")
     assert instance.name == "overridden"
+
 
 @pytest.mark.debug
 def test_nested_dependency_override(dg: DependencyGraph):

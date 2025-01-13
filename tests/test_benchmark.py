@@ -110,6 +110,8 @@ def test_entry(dg: DependencyGraph, dependents: list[type]):
 
     entry_total = round(entry_total, 6)
 
+
+
     print(
         f"\n{entry_total} seoncds to call entry version of {create_user.__name__} {rounds} times"
     )

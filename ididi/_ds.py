@@ -2,8 +2,8 @@ from collections import defaultdict
 from types import MappingProxyType
 from typing import Any, Callable, Union
 
+from ._node import DependentNode
 from ._type_resolve import get_bases
-from .node import DependentNode
 from .utils.param_utils import MISSING, Maybe
 from .utils.typing_utils import T
 
@@ -132,7 +132,9 @@ class Visitor:
         def _get_deps(node_type: type) -> list[type]:
             node = self._nodes[node_type]
             return [
-                p.param_type for _, p in node.signature if p.param_type in self._nodes
+                p.param_type
+                for _, p in node.dependencies
+                if p.param_type in self._nodes
             ]
 
         def dfs(node_type: type):
@@ -157,7 +159,7 @@ class Visitor:
 
         def collect_dependent(node_type: type):
             node = self._nodes[node_type]
-            if any(p.param_type is dependency for _, p in node.signature):
+            if any(p.param_type is dependency for _, p in node.dependencies):
                 dependents.append(node_type)
 
         self._dfs(list(self._nodes), pre_visit=collect_dependent)
@@ -165,7 +167,7 @@ class Visitor:
 
     def get_dependencies(self, dependent: type, recursive: bool = False) -> list[type]:
         if not recursive:
-            return [p.param_type for _, p in self._nodes[dependent].signature]
+            return [p.param_type for _, p in self._nodes[dependent].dependencies]
 
         def collect_dependencies(t: type):
             if t != dependent:

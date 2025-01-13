@@ -50,14 +50,26 @@ class UserService:
         self.auth = auth
 
 
-def user_service_factory() -> UserService:
-    config = Config()
-    db = Database(config=DatabaseConfig(config=config))
-    cache = Cache(config=CacheConfig(config))
-    logger = Logger(config=config)
-    return UserService(
-        db=db, auth=AuthenticationService(db=db, cache=cache, logger=logger)
+def config_factory() -> Config:
+    return Config()
+
+
+def db_factory() -> Database:
+    return Database(DatabaseConfig(config_factory()))
+
+
+def cache_factory():
+    return Cache(config=CacheConfig(config_factory()))
+
+
+def auth_factory() -> AuthenticationService:
+    return AuthenticationService(
+        db=db_factory(), cache=cache_factory(), logger=Logger(config=config_factory())
     )
+
+
+def user_service_factory() -> UserService:
+    return UserService(db=db_factory(), auth=auth_factory())
 
 
 class ProfileService:

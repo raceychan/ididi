@@ -2,7 +2,7 @@ import pytest
 
 from ididi.errors import NotSupportedError
 from ididi.graph import DependencyGraph
-from ididi.node import LazyDependent
+from ididi._node import LazyDependent
 
 """
 LazyDependent: a special kind of dependent that represents a dependency that will be resolved later.

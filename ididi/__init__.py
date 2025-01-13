@@ -25,10 +25,10 @@ from .graph import DependencyGraph as DependencyGraph
 from .graph import SyncScope as SyncScope
 from .interfaces import INode as INode
 from .interfaces import INodeConfig as INodeConfig
-from .node import DependentNode as DependentNode
-from .node import Ignore as Ignore
-from .node import NodeConfig as NodeConfig
-from .node import use as use
+from ._node import DependentNode as DependentNode
+from ._node import Ignore as Ignore
+from ._node import NodeConfig as NodeConfig
+from ._node import use as use
 from .utils.typing_utils import AsyncResource as AsyncResource
 from .utils.typing_utils import Resource as Resource
 

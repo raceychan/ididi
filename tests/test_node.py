@@ -1,4 +1,4 @@
-from ididi.node import DependentNode
+from ididi import DependentNode
 
 
 class A:
@@ -84,7 +84,7 @@ def test_empty_init():
         pass
 
     node = DependentNode.from_node(EmptyService)
-    assert not node.signature
+    assert not node.dependencies
 
 
 # def test_factory_without_return_type():
@@ -129,7 +129,7 @@ def test_varidc_keyword_args():
             self.kwargs = kwargs
 
     node = DependentNode.from_node(Service)
-    assert node.signature.dprams["kwargs"].unresolvable
+    assert node.dependencies["kwargs"].unresolvable
     repr(node)
 
 
