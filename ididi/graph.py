@@ -9,6 +9,7 @@ from typing import (
     AsyncGenerator,
     Awaitable,
     Callable,
+    ClassVar,
     ContextManager,
     Generator,
     Generic,
@@ -328,6 +329,10 @@ class DependencyGraph:
     ```
     """
 
+    _scope_context: ClassVar[ContextVar[Union[SyncScope, AsyncScope]]] = ContextVar(
+        "idid_scope_ctx"
+    )
+
     _nodes: GraphNodes[Any]
     "Map a type to a dependent node"
     _resolved_nodes: GraphNodes[Any]
@@ -342,7 +347,6 @@ class DependencyGraph:
         "_resolution_registry",
         "_type_registry",
         "_registered_singleton",
-        "_scope_context",
     )
 
     def __init__(
@@ -378,9 +382,6 @@ class DependencyGraph:
         self._type_registry = TypeRegistry()
         self._resolution_registry = ResolutionRegistry()
         self._registered_singleton: set[type] = set()
-        self._scope_context = ContextVar[Union[SyncScope, AsyncScope]](
-            "connection_context"
-        )
 
         if self._config.self_inject:
             self.register_singleton(self)
