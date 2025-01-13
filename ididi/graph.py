@@ -27,13 +27,7 @@ from typing import (
 from typing_extensions import Self, Unpack
 
 from ._ds import GraphNodes, GraphNodesView, ResolutionRegistry, TypeRegistry, Visitor
-from ._node import (
-    DependentNode,
-    LazyDependent,
-    NodeConfig,
-    resolve_use,
-    should_override,
-)
+from ._node import DependentNode, NodeConfig, resolve_use, should_override
 from ._type_resolve import (
     get_typed_signature,
     is_class,
@@ -459,19 +453,19 @@ class DependencyGraph:
         concrete_node.check_for_implementations()
         return concrete_node
 
-    def _create_lazy_dependent(self, node: DependentNode[T]) -> LazyDependent[T]:
-        """Create a lazy version of a node with appropriate resolver."""
+    # def _create_lazy_dependent(self, node: DependentNode[T]) -> LazyDependent[T]:
+    #     """Create a lazy version of a node with appropriate resolver."""
 
-        def resolver(dep_type: type[T]) -> T:
-            self.static_resolve(dep_type)
-            return self.resolve(dep_type)
+    #     def resolver(dep_type: type[T]) -> T:
+    #         self.static_resolve(dep_type)
+    #         return self.resolve(dep_type)
 
-        return LazyDependent[T](
-            dependent_type=node.dependent_type,
-            factory=node.factory,
-            signature=node.dependencies,
-            resolver=resolver,
-        )
+    #     return LazyDependent[T](
+    #         dependent_type=node.dependent_type,
+    #         factory=node.factory,
+    #         signature=node.dependencies,
+    #         resolver=resolver,
+    #     )
 
     def _remove_node(self, node: DependentNode[Any]) -> None:
         """
@@ -832,6 +826,77 @@ class DependencyGraph:
         **overrides: P.kwargs,
     ) -> T: ...
 
+    # def resolve(
+    #     self,
+    #     dependent: IFactory[P, T],
+    #     scope: Maybe[SyncScope] = MISSING,
+    #     /,
+    #     *args: P.args,
+    #     **overrides: P.kwargs,
+    # ) -> T:
+    #     """
+    #     Resolves a dependent, builds all its dependencies, injects them into its factory, and returns the instance.
+
+    #     ### Resolve Priority:
+    #     1. Override: Any dependencies provided via keyword arguments will take priority.
+    #     2. Factory: If no override is provided, the factory's resolution will be used.
+    #     3. Default Value: If neither an override nor a factory is available, the default value is used.
+    #     4. __init__: build dependencies according to the `__init__` method of the dependent type
+
+    #     ### Example:
+
+    #     Resolve a dependent with overrides and a specific scope
+
+    #     ```python
+    #     instance = dependency_graph.resolve(my_factory, scope=my_scope, my_override=override_value)
+    #     ```
+
+    #     ### Notes:
+    #     - Ensure that any overrides are passed as keyword arguments, not positional.
+    #     """
+
+    #     if args:
+    #         raise PositionalOverrideError(args)
+
+    #     if is_provided(resolution := self.get_resolve_cache(dependent, scope)):
+    #         return resolution
+
+    #     provided_params = tuple(overrides)
+    #     node: DependentNode[T] = self.static_resolve(dependent, ignore=provided_params)
+
+    #     if node.factory_type == "aresource":
+    #         raise AsyncResourceInSyncError(node.dependent_type)
+
+    #     node_config = node.config
+    #     ignores = self._config.ignore + node_config.ignore + provided_params
+    #     unsolved_params = node.unsolved_params(ignores)
+
+    #     for param_name, param_type in unsolved_params:
+    #         overrides[param_name] = self.resolve(param_type, scope)
+
+    #     dependent_type = node.dependent_type
+    #     resolved = cast(T, node.inject_params(overrides))
+    #     return self._manage_resolved(
+    #         resolved=resolved,
+    #         dependent_type=dependent_type,
+    #         factory_type=node.factory_type,
+    #         is_reuse=node_config.reuse,
+    #         scope=scope,
+    #     )
+
+    def get_static_info(
+        self,
+        dep: IFactory[P, T],
+        static_cache: dict[IFactory[P, T], Any],
+        provided_params: tuple[str, ...],
+    ) -> tuple[DependentNode[T], tuple[tuple[str, IFactory[P, T]], ...]]:
+        if dep not in static_cache:
+            node = self.static_resolve(dep, ignore=provided_params)
+            ignores = self._config.ignore + node.config.ignore + tuple(provided_params)
+            unsolved = tuple(node.unsolved_params(ignores))
+            static_cache[dep] = (node, unsolved)
+        return static_cache[dep]
+
     def resolve(
         self,
         dependent: IFactory[P, T],
@@ -840,27 +905,6 @@ class DependencyGraph:
         *args: P.args,
         **overrides: P.kwargs,
     ) -> T:
-        """
-        Resolves a dependent, builds all its dependencies, injects them into its factory, and returns the instance.
-
-        ### Resolve Priority:
-        1. Override: Any dependencies provided via keyword arguments will take priority.
-        2. Factory: If no override is provided, the factory's resolution will be used.
-        3. Default Value: If neither an override nor a factory is available, the default value is used.
-        4. __init__: build dependencies according to the `__init__` method of the dependent type
-
-        ### Example:
-
-        Resolve a dependent with overrides and a specific scope
-
-        ```python
-        instance = dependency_graph.resolve(my_factory, scope=my_scope, my_override=override_value)
-        ```
-
-        ### Notes:
-        - Ensure that any overrides are passed as keyword arguments, not positional.
-        """
-
         if args:
             raise PositionalOverrideError(args)
 
@@ -868,32 +912,76 @@ class DependencyGraph:
             return resolution
 
         provided_params = tuple(overrides)
-        node: DependentNode[T] = self.static_resolve(dependent, ignore=provided_params)
 
-        if node.factory_type == "aresource":
-            raise AsyncResourceInSyncError(node.dependent_type)
+        # Track dependencies and their depth for optimal resolution order
+        dependency_graph: dict[IFactory[P, T], set[IFactory[P, T]]] = {}
 
-        node_config = node.config
-        ignores = self._config.ignore + node_config.ignore + provided_params
-        unsolved_params = node.unsolved_params(ignores)
+        depths: dict[IFactory[P, T], int] = {}
 
-        if node_config.lazy:
-            for param_name, param_type in unsolved_params:
-                dep_node = self.static_resolve(param_type, config=node_config)
-                overrides[param_name] = self._create_lazy_dependent(dep_node)
-        else:
-            for param_name, param_type in unsolved_params:
-                overrides[param_name] = self.resolve(param_type, scope)
+        # Pre-compute static resolutions and parameter requirements
+        static_cache: dict[
+            IFactory[P, T],
+            tuple[DependentNode[T], tuple[tuple[str, IFactory[P, T]], ...]],
+        ] = {}
 
-        dependent_type = node.dependent_type
-        resolved = cast(T, node.inject_params(overrides))
-        return self._manage_resolved(
-            resolved=resolved,
-            dependent_type=dependent_type,
-            factory_type=node.factory_type,
-            is_reuse=node_config.reuse,
-            scope=scope,
+        # First pass: Build dependency graph and compute depths
+        stack = [(dependent, 0)]
+        while stack:
+            current, depth = stack.pop()
+            if current not in dependency_graph:
+                dependency_graph[current] = set()
+                depths[current] = depth
+                node, unsolved = self.get_static_info(
+                    current, static_cache, provided_params
+                )
+
+                if node.factory_type == "aresource":
+                    raise AsyncResourceInSyncError(node.dependent_type)
+
+                for param_name, param_type in unsolved:
+                    if not is_provided(self.get_resolve_cache(param_type, scope)):
+                        dependency_graph[current].add(param_type)
+                        stack.append((param_type, depth + 1))
+
+        # Sort dependencies by depth for optimal resolution order
+        to_build = sorted(
+            dependency_graph.keys(),
+            key=lambda x: depths[x],
+            reverse=True,  # Start with deepest dependencies
         )
+
+        # Resolution phase
+        resolved: dict[IFactory[P, T], T] = {}
+        params_cache: dict[IFactory[P, T], dict[str, Any]] = {
+            dep: {} for dep in to_build
+        }
+
+        # Initialize with overrides
+        params_cache[dependent] = overrides
+
+        # Resolve in optimal order
+        for current in to_build:
+            node, unsolved = self.get_static_info(
+                current, static_cache, provided_params
+            )
+            current_params = params_cache[current]
+
+            for param_name, param_type in unsolved:
+                if is_provided(resolution := self.get_resolve_cache(param_type, scope)):
+                    current_params[param_name] = resolution
+                else:
+                    current_params[param_name] = resolved[param_type]
+
+            instance = cast(T, node.inject_params(current_params))
+            resolved[current] = self._manage_resolved(
+                resolved=instance,
+                dependent_type=node.dependent_type,
+                factory_type=node.factory_type,
+                is_reuse=node.config.reuse,
+                scope=scope,
+            )
+
+        return resolved[dependent]
 
     async def aresolve(
         self,

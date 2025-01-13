@@ -15,7 +15,6 @@ from typing import (
     Any,
     AsyncGenerator,
     Awaitable,
-    Callable,
     ForwardRef,
     Generator,
     Generic,
@@ -145,78 +144,78 @@ class NodeConfig:
     #     return INodeConfig(reuse=self.reuse, lazy=self.lazy, ignore=self.ignore)
 
 
-class Dependent(Generic[T]):
-    """Represents a concrete (non-forward-reference) dependent type."""
+# class Dependent(Generic[T]):
+#     """Represents a concrete (non-forward-reference) dependent type."""
 
-    __slots__ = ("dependent_type",)
+#     __slots__ = ("dependent_type",)
 
-    def __init__(self, dependent_type: type[T]):
-        self.dependent_type = dependent_type
+#     def __init__(self, dependent_type: type[T]):
+#         self.dependent_type = dependent_type
 
-    def __repr__(self) -> str:
-        return self.dependent_name
+#     def __repr__(self) -> str:
+#         return self.dependent_name
 
-    @property
-    def dependent_name(self) -> str:
-        return self.dependent_type.__name__
+#     @property
+#     def dependent_name(self) -> str:
+#         return self.dependent_type.__name__
 
 
-# NOTE: we might want to make this a descriptor
-# for dpram in node.signature
-#     setattr(node.dependent_type, LazyDescriptor)
-class LazyDependent(Dependent[T]):
-    __slots__ = (
-        "dependent_type",
-        "factory",
-        "signature",
-        "resolver",
-        "cached_instance",
-    )
+# # NOTE: we might want to make this a descriptor
+# # for dpram in node.signature
+# #     setattr(node.dependent_type, LazyDescriptor)
+# class LazyDependent(Dependent[T]):
+#     __slots__ = (
+#         "dependent_type",
+#         "factory",
+#         "signature",
+#         "resolver",
+#         "cached_instance",
+#     )
 
-    def __init__(
-        self,
-        *,
-        dependent_type: type[T],
-        factory: INodeFactory[P, T],
-        signature: "Dependencies[T]",
-        resolver: Callable[[type[T]], T],
-        cached_instance: Maybe[Union[T, Awaitable[T]]] = MISSING,
-    ):
-        self.dependent_type = dependent_type
-        self.factory = factory
-        self.signature = signature
-        self.resolver = resolver
-        self.cached_instance = cached_instance
+#     def __init__(
+#         self,
+#         *,
+#         dependent_type: type[T],
+#         factory: INodeFactory[P, T],
+#         signature: "Dependencies[T]",
+#         resolver: Callable[[type[T]], T],
+#         cached_instance: Maybe[Union[T, Awaitable[T]]] = MISSING,
+#     ):
+#         self.dependent_type = dependent_type
+#         self.factory = factory
+#         self.signature = signature
+#         self.resolver = resolver
+#         self.cached_instance = cached_instance
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self.dependent_type})"
+#     def __repr__(self) -> str:
+#         return f"{self.__class__.__name__}({self.dependent_type})"
 
-    def __getattr__(self, attrname: str, /) -> Any:
-        """
-        dynamically build the dependent type on the fly
-        """
-        classattr = self.dependent_type.__dict__.get(attrname)
+#     def __getattr__(self, attrname: str, /) -> Any:
+#         """
+#         dynamically build the dependent type on the fly
+#         """
+#         classattr = self.dependent_type.__dict__.get(attrname)
 
-        try:
-            if isinstance(classattr, property):
-                raise KeyError(attrname)
-            dpram = self.signature[attrname]
-            return dpram.param_type
-        except KeyError:
-            if self.cached_instance is MISSING:
-                self.cached_instance = self.resolver(self.dependent_type)
-            return self.cached_instance.__getattribute__(attrname)
+#         try:
+#             if isinstance(classattr, property):
+#                 raise KeyError(attrname)
+#             dpram = self.signature[attrname]
+#             return dpram.param_type
+#         except KeyError:
+#             if self.cached_instance is MISSING:
+#                 self.cached_instance = self.resolver(self.dependent_type)
+#             return self.cached_instance.__getattribute__(attrname)
 
-    @property
-    def dependent_name(self) -> str:
-        return self.dependent_type.__name__
+#     @property
+#     def dependent_name(self) -> str:
+#         return self.dependent_type.__name__
 
 
 # ======================= Signature =====================================
 
 
 @dataclass(frozen=True)
-class DependencyParam(Generic[T]):
+class Dependency(Generic[T]):
     """'dpram' for short
     Represents a parameter and its corresponding dependency node
 
@@ -259,16 +258,16 @@ class DependencyParam(Generic[T]):
 
         return False
 
-    def replace_type(self, param_type: type[T]) -> "DependencyParam[T]":
-        return DependencyParam(
+    def replace_type(self, param_type: type[T]) -> "Dependency[T]":
+        return Dependency(
             name=self.name,
             param_kind=self.param_kind,
             param_type=param_type,
             default=self.default,
         )
 
-    def replace_default(self, default: T) -> "DependencyParam[T]":
-        return DependencyParam(
+    def replace_default(self, default: T) -> "Dependency[T]":
+        return Dependency(
             name=self.name,
             param_kind=self.param_kind,
             param_type=self.param_type,
@@ -279,7 +278,7 @@ class DependencyParam(Generic[T]):
 class Dependencies(Generic[T]):
     __slots__ = ("_deps", "_sig")
 
-    def __init__(self, deps: dict[str, DependencyParam[Any]]):
+    def __init__(self, deps: dict[str, Dependency[Any]]):
         self._deps = deps or {}
         self._sig: Union[Signature, None] = None
 
@@ -289,16 +288,16 @@ class Dependencies(Generic[T]):
         return hash((self.dependent, tuple(self.dprams.keys())))
     """
 
-    def __iter__(self) -> Iterator[tuple[str, DependencyParam[Any]]]:
+    def __iter__(self) -> Iterator[tuple[str, Dependency[Any]]]:
         return iter(self._deps.items())
 
     def __len__(self) -> int:
         return len(self._deps)
 
-    def __getitem__(self, param_name: str) -> DependencyParam[Any]:
+    def __getitem__(self, param_name: str) -> Dependency[Any]:
         return self._deps[param_name]
 
-    def update(self, param_name: str, param_val: DependencyParam[Any]):
+    def update(self, param_name: str, param_val: Dependency[Any]):
         self._deps[param_name] = param_val
 
     @property
@@ -340,7 +339,7 @@ class Dependencies(Generic[T]):
         if is_class_or_method(factory):
             params = params[1:]  # skip 'self'
 
-        dependencies: dict[str, DependencyParam[Any]] = {}
+        dependencies: dict[str, Dependency[Any]] = {}
 
         for param in params:
             param_annotation = param.annotation
@@ -360,7 +359,7 @@ class Dependencies(Generic[T]):
             else:
                 default = param.default
 
-            dep_param = DependencyParam(
+            dep_param = Dependency(
                 name=param.name,
                 param_kind=param.kind,
                 param_type=param_type,
@@ -419,12 +418,12 @@ class DependentNode(Generic[T]):
     whether this node is reusable, default is True
     """
 
-    __slots__ = ("_dependent", "factory", "factory_type", "dependencies", "config")
+    __slots__ = ("dependent_type", "factory", "factory_type", "dependencies", "config")
 
     def __init__(
         self,
         *,
-        dependent: Dependent[T],
+        dependent_type: type[T],
         factory: INodeAnyFactory[T],
         factory_type: FactoryType,
         dependencies: Dependencies[T],
@@ -435,32 +434,24 @@ class DependentNode(Generic[T]):
         - cancel Dependent, use dependent_type directly
         - refactor DependentSignature to Dependencies
         """
-        self._dependent = dependent
+        self.dependent_type = dependent_type
         self.factory = factory
         self.factory_type: FactoryType = factory_type
         self.dependencies = dependencies
         self.config = config
 
     def __repr__(self) -> str:
-        str_repr = f"{self.__class__.__name__}(type: {self._dependent}"
+        str_repr = f"{self.__class__.__name__}(type: {self.dependent_type}"
         if self.factory_type != "default":
             str_repr += f", factory: {self.factory.__qualname__}"
         str_repr += ")"
         return str_repr
 
     @property
-    def dependent(self) -> Dependent[T]:
-        return self._dependent
-
-    @property
-    def dependent_type(self) -> type[T]:
-        return self._dependent.dependent_type
-
-    @property
     def is_resource(self) -> bool:
         return self.factory_type in ("resource", "aresource")
 
-    def static_unsolved_params(self) -> Generator[DependencyParam[T], None, None]:
+    def static_unsolved_params(self) -> Generator[Dependency[T], None, None]:
         "params that needs to be statically resolved"
         ignores = self.config.ignore
         for param_name, param in self.dependencies.filter_ignore(ignores):
@@ -527,13 +518,13 @@ class DependentNode(Generic[T]):
     def create(
         cls,
         *,
-        dependent: type[T],
+        dependent_type: type[T],
         factory: INodeFactory[P, T],
         factory_type: FactoryType,
         signature: Signature,
         config: NodeConfig,
     ) -> "DependentNode[T]":
-        deps = Dependencies[T].from_signature(dependent, factory, signature)
+        deps = Dependencies[T].from_signature(dependent_type, factory, signature)
 
         for name, param in deps.filter_ignore(config.ignore):
             param_type = param.param_type
@@ -546,7 +537,7 @@ class DependentNode(Generic[T]):
                     deps.update(name, param.replace_type(param_type))
 
         node = DependentNode(
-            dependent=Dependent(dependent_type=dependent),
+            dependent_type=dependent_type,
             factory=factory,
             factory_type=factory_type,
             dependencies=deps,
@@ -580,7 +571,7 @@ class DependentNode(Generic[T]):
         signature = get_typed_signature(f, check_return=True)
         dependent: type[T] = resolve_factory_return(signature.return_annotation)
         node = cls.create(
-            dependent=dependent,
+            dependent_type=dependent,
             factory=cast(INodeFactory[P, T], f),
             factory_type=factory_type,
             signature=signature,
@@ -608,7 +599,7 @@ class DependentNode(Generic[T]):
             factory_type = "default"
 
         return cls.create(
-            dependent=dependent,
+            dependent_type=dependent,
             factory=dependent,
             factory_type=factory_type,
             signature=signature,
