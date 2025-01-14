@@ -110,8 +110,6 @@ def test_entry(dg: DependencyGraph, dependents: list[type]):
 
     entry_total = round(entry_total, 6)
 
-
-
     print(
         f"\n{entry_total} seoncds to call entry version of {create_user.__name__} {rounds} times"
     )
@@ -141,9 +139,13 @@ def test_entry(dg: DependencyGraph, dependents: list[type]):
 """
 
 """
-0.014508 seoncds to register 100 classes
-0.003526 seoncds to statically resolve 100 classes
-0.000816 seoncds to resolve 100 instances
-0.001143 seoncds to call regular function create_user 1000 times
-0.09091 seoncds to call entry version of create_user 1000 times
+1.2.5
+
+0.014147 seoncds to register 100 classes
+0.002431 seoncds to statically resolve 100 classes
+0.000558 seoncds to resolve 100 instances
+0.001477 seoncds to call regular function create_user 1000 times
+0.033853 seoncds to call entry version of create_user 1000 times
+
+current implementation is 22.920108 times slower
 """

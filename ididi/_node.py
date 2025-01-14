@@ -18,6 +18,7 @@ from typing import (
     ForwardRef,
     Generator,
     Generic,
+    Iterable,
     Iterator,
     Union,
     cast,
@@ -46,10 +47,9 @@ from ._type_resolve import (
     resolve_factory_return,
     resolve_forwardref,
 )
-from .errors import (
+from .errors import (  # NotSupportedError,
     ABCNotImplementedError,
     MissingAnnotationError,
-    NotSupportedError,
     ProtocolFacotryNotProvidedError,
 )
 from .interfaces import (
@@ -418,7 +418,14 @@ class DependentNode(Generic[T]):
     whether this node is reusable, default is True
     """
 
-    __slots__ = ("dependent_type", "factory", "factory_type", "dependencies", "config")
+    __slots__ = (
+        "dependent_type",
+        "factory",
+        "factory_type",
+        "dependencies",
+        "config",
+        # "_unsolved_params",
+    )
 
     def __init__(
         self,
@@ -439,6 +446,7 @@ class DependentNode(Generic[T]):
         self.factory_type: FactoryType = factory_type
         self.dependencies = dependencies
         self.config = config
+        # self._unsolved_params: Union[tuple[tuple[str, type], ...], None] = None
 
     def __repr__(self) -> str:
         str_repr = f"{self.__class__.__name__}(type: {self.dependent_type}"
@@ -451,9 +459,15 @@ class DependentNode(Generic[T]):
     def is_resource(self) -> bool:
         return self.factory_type in ("resource", "aresource")
 
-    def static_unsolved_params(self) -> Generator[Dependency[T], None, None]:
+    def static_unsolved_params(
+        self, ignore: Maybe[NodeIgnore] = MISSING
+    ) -> Generator[Dependency[T], None, None]:
         "params that needs to be statically resolved"
-        ignores = self.config.ignore
+        if is_provided(ignore):
+            ignores = self.config.ignore + ignore
+        else:
+            ignores = self.config.ignore
+
         for param_name, param in self.dependencies.filter_ignore(ignores):
             param_type = cast(Union[type, ForwardRef], param.param_type)
 
@@ -486,20 +500,24 @@ class DependentNode(Generic[T]):
             if param.param_type != param_type:
                 self.dependencies.update(param_name, param)
 
-    def unsolved_params(
-        self, ignore: NodeIgnore
-    ) -> Generator[tuple[str, type], None, None]:
+    # @lru_cache(None)
+    def unsolved_params(self, ignore: NodeIgnore) -> Iterable[tuple[str, type]]:
         "yield dependencies that needs to be resolved"
-        for param_name, param in self.dependencies.filter_ignore(ignore):
+        ignores = self.config.ignore + ignore
+        for param_name, param in self.dependencies.filter_ignore(ignore=ignores):
             param_type: type[T] = param.param_type
+            # e.gP a: str = 5
             if is_provided(param.default) and is_unsolvable_type(param_type):
                 continue
-            yield (param_name, param_type)
+            param_pair = (param_name, param_type)
+            yield param_pair
 
     def inject_params(
-        self, params: dict[str, Any]
+        self, params: Union[dict[str, Any], None] = None
     ) -> Union[T, Awaitable[T], Generator[T, None, None], AsyncGenerator[T, None]]:
         "Inject dependencies to the dependent accordidng to its signature, return an instance of the dependent type"
+        if not params:
+            return self.factory()
         arguments = self.dependencies.bind_arguments(params).arguments
         return self.factory(**arguments)
 
@@ -552,9 +570,8 @@ class DependentNode(Generic[T]):
         factory: INodeFactory[P, T],
         config: NodeConfig,
     ) -> "DependentNode[T]":
-        if config.lazy:
-            raise NotSupportedError("Lazy dependency is not supported for factories")
-
+        # if config.lazy:
+        #     raise NotSupportedError("Lazy dependency is not supported for factories")
         f = factory
         factory_type: FactoryType
         if isasyncgenfunction(factory):
