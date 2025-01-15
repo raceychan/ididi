@@ -116,7 +116,7 @@ def should_override(
 
 
 class NodeConfig:
-    __slots__ = ("reuse", "lazy", "ignore")
+    __slots__ = ("reuse", "ignore")
 
     ignore: NodeIgnore
 
@@ -124,10 +124,8 @@ class NodeConfig:
         self,
         *,
         reuse: bool = True,
-        lazy: bool = False,
         ignore: Maybe[NodeIgnoreConfig] = MISSING,
     ):
-        self.lazy = lazy
 
         if not is_provided(ignore):
             ignore = tuple()
@@ -138,77 +136,7 @@ class NodeConfig:
         self.reuse = reuse
 
     def __repr__(self):
-        return f"{self.__class__.__name__}({self.reuse=}, {self.lazy=}, {self.ignore=})"
-
-    # def asdict(self) -> INodeConfig:
-    #     return INodeConfig(reuse=self.reuse, lazy=self.lazy, ignore=self.ignore)
-
-
-# class Dependent(Generic[T]):
-#     """Represents a concrete (non-forward-reference) dependent type."""
-
-#     __slots__ = ("dependent_type",)
-
-#     def __init__(self, dependent_type: type[T]):
-#         self.dependent_type = dependent_type
-
-#     def __repr__(self) -> str:
-#         return self.dependent_name
-
-#     @property
-#     def dependent_name(self) -> str:
-#         return self.dependent_type.__name__
-
-
-# # NOTE: we might want to make this a descriptor
-# # for dpram in node.signature
-# #     setattr(node.dependent_type, LazyDescriptor)
-# class LazyDependent(Dependent[T]):
-#     __slots__ = (
-#         "dependent_type",
-#         "factory",
-#         "signature",
-#         "resolver",
-#         "cached_instance",
-#     )
-
-#     def __init__(
-#         self,
-#         *,
-#         dependent_type: type[T],
-#         factory: INodeFactory[P, T],
-#         signature: "Dependencies[T]",
-#         resolver: Callable[[type[T]], T],
-#         cached_instance: Maybe[Union[T, Awaitable[T]]] = MISSING,
-#     ):
-#         self.dependent_type = dependent_type
-#         self.factory = factory
-#         self.signature = signature
-#         self.resolver = resolver
-#         self.cached_instance = cached_instance
-
-#     def __repr__(self) -> str:
-#         return f"{self.__class__.__name__}({self.dependent_type})"
-
-#     def __getattr__(self, attrname: str, /) -> Any:
-#         """
-#         dynamically build the dependent type on the fly
-#         """
-#         classattr = self.dependent_type.__dict__.get(attrname)
-
-#         try:
-#             if isinstance(classattr, property):
-#                 raise KeyError(attrname)
-#             dpram = self.signature[attrname]
-#             return dpram.param_type
-#         except KeyError:
-#             if self.cached_instance is MISSING:
-#                 self.cached_instance = self.resolver(self.dependent_type)
-#             return self.cached_instance.__getattribute__(attrname)
-
-#     @property
-#     def dependent_name(self) -> str:
-#         return self.dependent_type.__name__
+        return f"{self.__class__.__name__}({self.reuse=}, {self.ignore=})"
 
 
 # ======================= Signature =====================================
@@ -234,7 +162,7 @@ class Dependency(Generic[T]):
     default: the default value of the param, 5, in this case.
     """
 
-    __slots__ = ("name", "param", "param_kind", "param_type", "default")
+    __slots__ = ("name", "param_kind", "param_type", "default")
 
     name: str
     param_type: type[T]  # resolved_type
@@ -242,7 +170,11 @@ class Dependency(Generic[T]):
     default: Maybe[T]
 
     def __repr__(self) -> str:
-        return f"{self.name}: {self.param_type}"
+        return f"Dependency({self.name}: {self.type_repr}={self.default})"
+
+    @property
+    def type_repr(self):
+        return getattr(self.param_type, "__name__", f"{self.param_type}")
 
     @property
     def unresolvable(self) -> bool:
@@ -299,6 +231,12 @@ class Dependencies(Generic[T]):
 
     def update(self, param_name: str, param_val: Dependency[Any]):
         self._deps[param_name] = param_val
+
+    def __repr__(self):
+        deps_repr = ", ".join(
+            f"{name}: {dep.type_repr}={dep.default}" for name, dep in self
+        )
+        return f"Depenencies({deps_repr})"
 
     @property
     def signature(self) -> Signature:
@@ -409,10 +347,6 @@ class DependentNode(Generic[T]):
 
     ## [config]
 
-    lazy: bool
-    ---
-    whether this node is lazy, default is False
-
     reuse: bool
     ---
     whether this node is reusable, default is True
@@ -460,13 +394,10 @@ class DependentNode(Generic[T]):
         return self.factory_type in ("resource", "aresource")
 
     def static_unsolved_params(
-        self, ignore: Maybe[NodeIgnore] = MISSING
+        self, ignore: NodeIgnore
     ) -> Generator[Dependency[T], None, None]:
         "params that needs to be statically resolved"
-        if is_provided(ignore):
-            ignores = self.config.ignore + ignore
-        else:
-            ignores = self.config.ignore
+        ignores = self.config.ignore + ignore
 
         for param_name, param in self.dependencies.filter_ignore(ignores):
             param_type = cast(Union[type, ForwardRef], param.param_type)
@@ -500,13 +431,12 @@ class DependentNode(Generic[T]):
             if param.param_type != param_type:
                 self.dependencies.update(param_name, param)
 
-    # @lru_cache(None)
     def unsolved_params(self, ignore: NodeIgnore) -> Iterable[tuple[str, type]]:
         "yield dependencies that needs to be resolved"
+        # TODO: fix out why this can't be cached, and cache it
         ignores = self.config.ignore + ignore
         for param_name, param in self.dependencies.filter_ignore(ignore=ignores):
             param_type: type[T] = param.param_type
-            # e.gP a: str = 5
             if is_provided(param.default) and is_unsolvable_type(param_type):
                 continue
             param_pair = (param_name, param_type)
@@ -570,8 +500,7 @@ class DependentNode(Generic[T]):
         factory: INodeFactory[P, T],
         config: NodeConfig,
     ) -> "DependentNode[T]":
-        # if config.lazy:
-        #     raise NotSupportedError("Lazy dependency is not supported for factories")
+
         f = factory
         factory_type: FactoryType
         if isasyncgenfunction(factory):

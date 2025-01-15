@@ -210,6 +210,4 @@ For more detailed information, check out [Documentation](https://raceychan.githu
 
 - Circular Dependency Detection
 
-- Lazy Dependency(Beta)
-
 - Error context

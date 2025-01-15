@@ -676,3 +676,31 @@ def test_resolve():
 woud raise `UnsolvableDependencyError`, because `name` is a str without default values, 
 when when we resolve it, we will first static_resolve it, which would raise error,
 now if dependencies that are provided with overrides won't be statically resolved. 
+
+
+## version 1.2.5
+
+- remove `LazyDependent`, since `DependencyGraph` can inject itself to any dependencies it resolve, 
+`LazyDependent` can be easily achieved by injecting `DependencyGraph` and lazy resolve
+
+```py
+from ididi import ignore
+
+class UserRepo:
+    def __init__(self, graph: DependencyGraph, db: Ignore[DataBase]=None):
+        self._graph = graph
+        self._db = db
+
+    @property
+    def db(self):
+        return self._graph.resolve(DataBase)
+```
+
+
+- performance boost
+
+25% performance increase to `DependencyGraph.resolve` compare to 1.2.4
+
+Current implementation of dg.resolve is 17.356008 times slower than a hard-coded dependency construction.
+given how much extra work ididi does resolving dependency, 
+our ultimate goal would be make dg.resolve < 10 times slower than a hard-coded solution.

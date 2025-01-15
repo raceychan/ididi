@@ -107,6 +107,7 @@ def test_get_dependent_types(dg: DependencyGraph):
     assert AuthService in database_dependents
 
 
+@pytest.mark.debug
 def test_node_signature_change_after_factory(dg: DependencyGraph):
     class UserService:
         def __init__(self, repo: UserRepository, auth: AuthService, name: str = "user"):
@@ -115,6 +116,9 @@ def test_node_signature_change_after_factory(dg: DependencyGraph):
 
     dg.static_resolve(UserService)
     node = dg.nodes[UserService]
+    print(node.dependencies)
+    print(node.dependencies["name"])
+
     assert len(node.dependencies) == 3
 
     @dg.node

@@ -111,7 +111,7 @@ class Visitor:
     def __init__(self, nodes: GraphNodes[Any]):
         self._nodes = nodes
 
-    def _dfs(
+    def _visit(
         self,
         start_types: Union[list[type], type],
         pre_visit: Union[Callable[[type], None], None] = None,
@@ -162,7 +162,7 @@ class Visitor:
             if any(p.param_type is dependency for _, p in node.dependencies):
                 dependents.append(node_type)
 
-        self._dfs(list(self._nodes), pre_visit=collect_dependent)
+        self._visit(list(self._nodes), pre_visit=collect_dependent)
         return dependents
 
     def get_dependencies(self, dependent: type, recursive: bool = False) -> list[type]:
@@ -174,7 +174,7 @@ class Visitor:
                 dependencies.append(t)
 
         dependencies: list[type] = []
-        self._dfs(
+        self._visit(
             dependent,
             post_visit=collect_dependencies,
         )
@@ -183,5 +183,5 @@ class Visitor:
     def top_sorted_dependencies(self) -> list[type]:
         "Sort the whole graph, from lowest dependencies to toppest dependents"
         order: list[type] = []
-        self._dfs(list(self._nodes), post_visit=order.append)
+        self._visit(list(self._nodes), post_visit=order.append)
         return order

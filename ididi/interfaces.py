@@ -99,10 +99,6 @@ class INodeConfig(TypedDict, total=False):
     ---
     whether the resolved instance should be reused if it already exists in the graph.
 
-    lazy: bool
-    ---
-    whether the resolved instance should be a `lazy` dependent, meaning that its dependencies would not be resolved untill the attribute is accessed.
-
     partial
     ---
     whether to ignore bulitin types when statically resolve
@@ -112,7 +108,6 @@ class INodeConfig(TypedDict, total=False):
     types or names to ignore
     """
 
-    lazy: bool
     ignore: NodeIgnoreConfig
     reuse: bool
 
