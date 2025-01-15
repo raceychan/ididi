@@ -197,6 +197,67 @@ async with dg.scope(app_name) as app_scope:
 For any functions called within the request_scope, you can get the most recent scope with `dg.use_scope()`,
 or its parent scopes, i.e. `dg.use_scope(app_name)` to get app_scope.
 
+## Testing
+
+### Override class dependency resolution
+
+You can control how ididi resolve a dependency during testing,
+by register the test double of the dependency using `dg.node`
+
+Example:
+For the following dependent
+
+```py
+class UserRepository:
+    def __init__(self, db: DataBase):
+        self.db=db
+
+dg = DependencyGraph()
+assert isinstance(dg.resolve(UserRepository).db, DataBase)
+```
+
+in you test file,
+
+```py
+class FakeDB(DataBase): ...
+
+def db_factory() -> DataBase:
+    return FakeDB()
+
+
+def test_resolve():
+    dg = DependencyGraph()
+    dg.node(reuse=False)(UserRepository)
+    assert isinstance(dg.resolve(UserRepository).db, DataBase)
+
+    dg.node(db_factory)
+    assert isinstance(dg.resolve(UserRepository).db, FakeDB)
+```
+
+use `dg.node` to replace `DataBase` with its test double.
+
+### Override entry dependency resolution
+
+```py
+async def test_entry_replace():
+    dg = DependencyGraph()
+
+    async def create_user(
+        user_name: str, user_email: str, service: UserService
+    ) -> UserService:
+        return service
+
+    class FakeUserService(UserService): ...
+
+    create_user = dg.entry(reuse=False)(create_user)
+    create_user.replace(UserService, FakeUserService)
+
+    res = await create_user("user", "user@email.com")
+    assert isinstance(res, FakeUserService)
+```
+
+use `entryfunc.replace` to replace a dependency with its test double.
+you can also use `replace(service=FakeUserService)` to override
 
 ### More
 
