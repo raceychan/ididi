@@ -48,6 +48,7 @@ from .errors import (
     UnsolvableNodeError,
 )
 from .interfaces import (
+    EntryFunc,
     GraphIgnore,
     GraphIgnoreConfig,
     IAnyFactory,
@@ -452,7 +453,6 @@ class DependencyGraph:
         concrete_node = self._nodes[concrete_type]
         concrete_node.check_for_implementations()
         return concrete_node
-
 
     def _remove_node(self, node: DependentNode[Any]) -> None:
         """
@@ -931,13 +931,13 @@ class DependencyGraph:
     @overload
     def entry(
         self, func: IFactory[P, T], **iconfig: Unpack[INodeConfig]
-    ) -> Callable[..., T]: ...
+    ) -> EntryFunc[P, T]: ...
 
     def entry(
         self,
         func: Union[IFactory[P, T], IAsyncFactory[P, T], None] = None,
         **iconfig: Unpack[INodeConfig],
-    ) -> Union[Callable[..., Union[T, Awaitable[T]]], TEntryDecor]:
+    ) -> Union[EntryFunc[P, T], TEntryDecor]:
         """
         statically resolve dependencies of the decorated function \
             then replace it with a new function, \
@@ -978,16 +978,28 @@ class DependencyGraph:
         config = NodeConfig(**iconfig)
         require_scope, unresolved = self._static_resolve_entry(config, func)
 
-        # def reset_deps():
-        #     nonlocal unresolved
+        def replace(
+            before: Maybe[type[T]] = MISSING,
+            after: Maybe[type[T]] = MISSING,
+            **kwargs: type[Any],
+        ):
+            nonlocal unresolved
 
-        #     _, unresolved = self._static_resolve_entry(config, func)
+            for i, (pname, ptype) in enumerate(unresolved):
+                if ptype is before:
+                    after = cast(type[T], after)
+                    unresolved[i] = (pname, after)
+
+                if pname in kwargs:
+                    unresolved[i] = (pname, kwargs[pname])
+
+            # _, unresolved = self._static_resolve_entry(config, func)
 
         if iscoroutinefunction(func):
-            async_func = cast(Callable[..., Awaitable[T]], func)
+            # async_func = cast(Callable[..., Awaitable[T]], func)
             if require_scope:
 
-                @wraps(async_func)
+                @wraps(func)
                 async def _async_scoped_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
                     context_scope = self.use_scope(create_on_miss=True, as_async=True)
                     async with context_scope as scope:
@@ -997,25 +1009,25 @@ class DependencyGraph:
                             resolved = await self.aresolve(param_type, scope)
                             kwargs[param_name] = resolved
 
-                        r = await async_func(*args, **kwargs)
+                        r = await func(*args, **kwargs)
                         return r
 
                 # _async_scoped_wrapper.reset_deps = reset_deps
-                return _async_scoped_wrapper
+                f = _async_scoped_wrapper
+            else:
 
-            @wraps(async_func)
-            async def _async_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-                for param_name, param_type in unresolved:
-                    if param_name in kwargs:
-                        continue
-                    resolved = await self.aresolve(param_type)
-                    kwargs[param_name] = resolved
+                @wraps(func)
+                async def _async_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+                    for param_name, param_type in unresolved:
+                        if param_name in kwargs:
+                            continue
+                        resolved = await self.aresolve(param_type)
+                        kwargs[param_name] = resolved
 
-                r = await async_func(*args, **kwargs)
-                return r
+                    r = await func(*args, **kwargs)
+                    return r
 
-            # _async_wrapper.reset_deps = reset_deps
-            return _async_wrapper
+                f = _async_wrapper
         else:
             sync_func = cast(Callable[..., T], func)
             if require_scope:
@@ -1034,21 +1046,26 @@ class DependencyGraph:
                         return r
 
                 # _sync_scoped_wrapper.reset_deps = reset_deps
-                return _sync_scoped_wrapper
+                f = _sync_scoped_wrapper
+            else:
 
-            @wraps(sync_func)
-            def _sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-                for param_name, param_type in unresolved:
-                    if param_name in kwargs:
-                        continue
-                    resolved = self.resolve(param_type)
-                    kwargs[param_name] = resolved
+                @wraps(sync_func)
+                def _sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+                    for param_name, param_type in unresolved:
+                        if param_name in kwargs:
+                            continue
+                        resolved = self.resolve(param_type)
+                        kwargs[param_name] = resolved
 
-                r = sync_func(*args, **kwargs)
-                return r
+                    r = sync_func(*args, **kwargs)
+                    return r
 
-            # _sync_wrapper.reset_deps = reset_deps
-            return _sync_wrapper
+                # _sync_wrapper.reset_deps = reset_deps
+                f = _sync_wrapper
+
+        setattr(f, "replace", replace)
+
+        return cast(EntryFunc[P, T], f)
 
     @overload
     def node(self, factory_or_class: type[T]) -> type[T]: ...

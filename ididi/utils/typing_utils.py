@@ -17,6 +17,7 @@ from typing_extensions import ParamSpec, TypeGuard
 T = TypeVar("T")
 R = TypeVar("R")
 P = ParamSpec("P")
+C = TypeVar("C", covariant=True)
 
 Resource = Generator[T, None, None]
 AsyncResource = AsyncGenerator[T, None]

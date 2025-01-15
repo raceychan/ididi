@@ -15,7 +15,8 @@ from typing import (
 
 from typing_extensions import TypeAliasType
 
-from .utils.typing_utils import P, R, T
+from .utils.param_utils import MISSING, Maybe
+from .utils.typing_utils import C, P, R, T
 
 EMPTY_SIGNATURE = Signature()
 INSPECT_EMPTY = Signature.empty
@@ -89,9 +90,6 @@ class TDecor(Protocol):
 
 #     def __call__(self)->T:...
 
-class TEntryDecor(Protocol):
-    def __call__(self, func: Callable[P, T]) -> Callable[..., T]: ...
-
 
 class INodeConfig(TypedDict, total=False):
     """
@@ -120,3 +118,35 @@ class Closable(Protocol):
 @runtime_checkable
 class AsyncClosable(Protocol):
     async def close(self) -> Coroutine[Any, Any, None]: ...
+
+
+class EntryFunc(Protocol[P, C]):
+
+    def __call__(self, *args: Any, **kwargs: Any) -> C: ...
+
+    @overload
+    def replace(
+        self,
+        before: type[T],
+        after: type[T],
+        **params: type[Any],
+    ) -> None: ...
+
+    @overload
+    def replace(
+        self,
+        before: Maybe[type[T]] = MISSING,
+        after: Maybe[type[T]] = MISSING,
+        **params: type[Any],
+    ) -> None: ...
+
+    def replace(
+        self,
+        before: Maybe[type[T]] = MISSING,
+        after: Maybe[type[T]] = MISSING,
+        **params: type[Any],
+    ) -> None: ...
+
+
+class TEntryDecor(Protocol):
+    def __call__(self, func: Callable[P, T]) -> EntryFunc[P, T]: ...

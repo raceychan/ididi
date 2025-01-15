@@ -704,3 +704,51 @@ class UserRepo:
 Current implementation of dg.resolve is 17.356008 times slower than a hard-coded dependency construction.
 given how much extra work ididi does resolving dependency, 
 our ultimate goal would be make dg.resolve < 10 times slower than a hard-coded solution.
+
+
+## version 1.2.6
+
+- override class dependencies, entry dependencies
+
+```py
+class Repo:
+    db: DataBase = use(db_factory)
+
+
+def fake_db_factory()->DataBase:
+    return FakeDB()
+
+dg.node(fake_db_factory)
+```
+
+### override entry
+
+```py
+def test_entry_replace():
+    dg = DependencyGraph()
+
+    def create_user(
+        user_name: str, user_email: str, service: UserService
+    ) -> UserService:
+        return service
+
+    class FakeUserService(UserService): ...
+
+    create_user = dg.entry(reuse=False)(create_user)
+    create_user.replace(UserService, FakeUserService)
+
+    res = create_user("user", "user@email.com")
+    assert isinstance(res, FakeUserService)
+
+
+    class EvenFaker(UserService):
+        ...
+
+    create_user.replace(service=EvenFaker)
+    create_user.replace(UserService, service=EvenFaker)
+
+    res = create_user("user", "user@email.com")
+    assert isinstance(res, EvenFaker)
+```
+
+

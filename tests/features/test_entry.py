@@ -196,9 +196,32 @@ def test_entry_reuse():
     dg.reset(clear_nodes=True)
     dg.node(UserService)
 
-    create_user = dg.entry(create_user)
-
     for _ in range(rounds):
         SERVICES.add(create_user("test", "email"))
 
     assert len(SERVICES) == 1
+
+
+async def test_entry_replace():
+    dg = DependencyGraph()
+
+    async def create_user(
+        user_name: str, user_email: str, service: UserService
+    ) -> UserService:
+        return service
+
+    class FakeUserService(UserService): ...
+
+    create_user = dg.entry(reuse=False)(create_user)
+    create_user.replace(UserService, FakeUserService)
+
+    res = await create_user("user", "user@email.com")
+    assert isinstance(res, FakeUserService)
+
+    class EvenFaker(UserService): ...
+
+    create_user.replace(service=EvenFaker)
+    create_user.replace(UserService, service=EvenFaker)
+
+    res = await create_user("user", "user@email.com")
+    assert isinstance(res, EvenFaker)
