@@ -33,8 +33,8 @@ pip install ididi[graphviz]
 ```
 
 ## Features
-- **Extremely performant**: on part with nodejs and go, one of the fastest dependency injection framework available.
-- **Easy to use**: No / minial changes to your existing code
+- **Performant**: almost as fast as hard-coded factories, one of the fastest dependency injection framework available.
+- **Noninvasive**: No / minial changes to your existing code
 - **Smart**: inject dependency based on type hints, with strong support to `typing` module.
 - **Powerful**: advanced scope support.
 - **Correct**, strictly typed, well-organized exceptions, well-formatted and detail-rich error messages
