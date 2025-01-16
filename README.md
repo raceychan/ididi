@@ -33,12 +33,11 @@ pip install ididi[graphviz]
 ```
 
 ## Features
-
-- No / minial changes to your existing code
-- Smart injection based on type hints with strong support to `typing` module.
-- Advanced scope support
-- Formated and detail-rich error messages
-- Highly performant, on part with nodejs and go
+- **Extremely performant**: on part with nodejs and go, one of the fastest dependency injection framework available.
+- **Easy to use**: No / minial changes to your existing code
+- **Smart**: inject dependency based on type hints, with strong support to `typing` module.
+- **Powerful**: advanced scope support.
+- **Correct**, strictly typed, well-organized exceptions, well-formatted and detail-rich error messages
 
 
 ## Usage
@@ -240,8 +239,7 @@ use `dg.node` to replace `DataBase` with its test double.
 
 ```py
 async def test_entry_replace():
-    dg = DependencyGraph()
-
+    @ididi.entry
     async def create_user(
         user_name: str, user_email: str, service: UserService
     ) -> UserService:
@@ -249,7 +247,6 @@ async def test_entry_replace():
 
     class FakeUserService(UserService): ...
 
-    create_user = dg.entry(reuse=False)(create_user)
     create_user.replace(UserService, FakeUserService)
 
     res = await create_user("user", "user@email.com")
