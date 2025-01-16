@@ -85,12 +85,6 @@ class TDecor(Protocol):
     def __call__(self, factory: INode[P, T]) -> INode[P, T]: ...
 
 
-# class EntryWrapper(Protocol):
-#     def reset_deps(self)->None: ...
-
-#     def __call__(self)->T:...
-
-
 class INodeConfig(TypedDict, total=False):
     """
     reuse: bool
@@ -121,6 +115,8 @@ class AsyncClosable(Protocol):
 
 
 class EntryFunc(Protocol[P, C]):
+    __name__: str
+
 
     def __call__(self, *args: Any, **kwargs: Any) -> C: ...
 
@@ -150,3 +146,7 @@ class EntryFunc(Protocol[P, C]):
 
 class TEntryDecor(Protocol):
     def __call__(self, func: Callable[P, T]) -> EntryFunc[P, T]: ...
+
+
+
+

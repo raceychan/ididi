@@ -48,7 +48,7 @@ class A:
 
 def test_visitor():
     dg = DependencyGraph()
-    dg.static_resolve(A)
+    dg.analyze(A)
 
     assert len(dg.visitor.get_dependencies(A, recursive=False)) == 3
     assert len(dg.visitor.get_dependencies(A, recursive=True)) == 12
@@ -73,7 +73,7 @@ class ServiceB:
 def test_initialization_order():
     dg = DependencyGraph()
 
-    dg.static_resolve(ServiceA)
+    dg.analyze(ServiceA)
     order: list[type] = dg.visitor.top_sorted_dependencies()
 
     assert order.index(ServiceC) < order.index(ServiceB)

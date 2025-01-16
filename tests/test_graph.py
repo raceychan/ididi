@@ -19,7 +19,6 @@ from ididi.errors import (
     TopLevelBulitinTypeError,
     UnsolvableDependencyError,
 )
-from ididi.graph import DependencyGraph
 
 T = ty.TypeVar("T")
 
@@ -114,9 +113,10 @@ def test_node_signature_change_after_factory(dg: DependencyGraph):
             self.repo = repo
             self.auth = auth
 
-    dg.static_resolve(UserService)
+    dg.analyze(UserService)
     node = dg.nodes[UserService]
     print(node.dependencies)
+    print(node.dependencies.signature)
     print(node.dependencies["name"])
 
     assert len(node.dependencies) == 3
@@ -229,7 +229,7 @@ def test_static_resolve_factory(dg: DependencyGraph):
 
     assert Repository in dg.nodes
 
-    repo = dg.static_resolve(repo_factory)
+    repo = dg.analyze(repo_factory)
     assert Repository in dg.type_registry[Repository]
 
 
@@ -603,7 +603,7 @@ def test_node_config_non_transitive(dg: DependencyGraph):
         def __init__(self, b: Base): ...
 
     dg.node(reuse=False)(Sub)
-    dg.static_resolve(Sub)
+    dg.analyze(Sub)
 
     assert dg.nodes[Base].config.reuse == True
 
@@ -619,12 +619,12 @@ def test_partial_node(dg: DependencyGraph):
 
     with pytest.raises(UnsolvableDependencyError):
         dg.node(reuse=False)(Sub)
-        dg.static_resolve(Sub)
+        dg.analyze(Sub)
 
     dg.reset(clear_nodes=True)
 
     dg.node(ignore=int)(Sub)
-    dg.static_resolve(Sub)
+    dg.analyze(Sub)
     # assert dg.resolve(Sub, age=15).age == 15
     dg.resolve(Sub, age=15)
 
@@ -659,10 +659,10 @@ def test_graph_static_resolved_should_override():
     dg = DependencyGraph()
     dg2 = DependencyGraph()
 
-    dg.static_resolve(ComplianceChecker)
+    dg.analyze(ComplianceChecker)
     c = dg.resolve(ComplianceChecker)
 
-    dg2.static_resolve(DatabaseConfig)
+    dg2.analyze(DatabaseConfig)
     d = dg2.resolve(DatabaseConfig)
     repr(dg.nodes[ComplianceChecker].config)
 
@@ -685,8 +685,8 @@ def test_graph_static_resolved_should_not_override():
 
     dg.node(checker_factory)
 
-    dg2.static_resolve(ComplianceChecker)
-    dg2.static_resolve(DatabaseConfig)
+    dg2.analyze(ComplianceChecker)
+    dg2.analyze(DatabaseConfig)
 
     dg.merge(dg2)
     assert dg.nodes[ComplianceChecker].factory_type == "function"

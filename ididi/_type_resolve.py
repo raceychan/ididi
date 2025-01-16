@@ -4,8 +4,9 @@ This module separates the type resolution logic between utils.typing_utils and t
 
 import sys
 from collections.abc import AsyncGenerator, Generator
-from contextlib import AbstractAsyncContextManager, AbstractContextManager
-from inspect import Signature, isasyncgenfunction, isgeneratorfunction
+from inspect import Signature
+from inspect import isasyncgenfunction as isasyncgenfunction
+from inspect import isgeneratorfunction as isgeneratorfunction
 from types import GenericAlias, MethodType
 from typing import (
     Annotated,
@@ -24,7 +25,7 @@ from typing import (
     get_origin,
 )
 
-from typing_extensions import ParamSpec, TypeGuard
+from typing_extensions import ParamSpec, TypeGuard, Unpack
 
 from .errors import (
     ForwardReferenceNotFoundError,
@@ -60,6 +61,11 @@ ResolveOrder: dict[FactoryType, int] = {
 }
 # when merge graphs we need to make sure a node with default constructor
 # does not override a node with resource
+
+ExtraUnsolvableTypes = {
+    Any,
+    Literal,
+}
 
 
 P = ParamSpec("P")
@@ -121,7 +127,7 @@ def is_unsolvable_type(t: Any) -> bool:
     Examples:
     - builtin types
     """
-    return is_builtin_type(t) or t is Signature.empty or t is Any
+    return is_builtin_type(t) or t is Signature.empty or t in ExtraUnsolvableTypes
 
 
 # def is_context_manager(t: T) -> TypeGuard[ContextManager[T]]:
@@ -200,13 +206,14 @@ def first_solvable_type(types: tuple[Any, ...]) -> type:
 
 def resolve_annotation(annotation: Any) -> type:
     origin = get_origin(annotation) or annotation
-    if origin is Annotated:  # perserve __metadata__
+    if origin is Annotated:  # we need to perserve __metadata__
         return annotation
+
+    if origin in (Unpack, Literal):
+        return cast(type, origin)
 
     if isinstance(annotation, TypeVar):
         raise GenericDependencyNotSupportedError(annotation)
-
-    # === Solvable dependency, NOTE: order matters!===
 
     if origin in UNION_META:
         union_types = get_args(annotation)

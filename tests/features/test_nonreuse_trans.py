@@ -28,7 +28,7 @@ def test_singleton_uses_transilient():
     dg = DependencyGraph()
     dg.node(reuse=False)(Database)
     with pytest.raises(ReusabilityConflictError):
-        dg.static_resolve(AuthService)
+        dg.analyze(AuthService)
 
 
 def test_nonreuse_before_nonreuse():
@@ -36,10 +36,10 @@ def test_nonreuse_before_nonreuse():
     dg.node(reuse=False)(Database)
     dg.node(reuse=False)(Repository)
     dg.node(reuse=False)(AuthService)
-    dg.static_resolve(AuthService)
+    dg.analyze(AuthService)
 
 
 def test_nonreuse_before_reuse():
     dg = DependencyGraph()
     dg.node(reuse=False)(AuthService)
-    dg.static_resolve(AuthService)
+    dg.analyze(AuthService)

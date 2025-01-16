@@ -54,7 +54,7 @@ async def test_user_defined_acm():
         yield acm
 
     dg = DependencyGraph()
-    dg.static_resolve(acm_factory)
+    dg.analyze(acm_factory)
     acm_node = dg.nodes[ACM]
     assert acm_node.factory is acm_factory
     assert acm_node.factory_type == "aresource"

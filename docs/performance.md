@@ -41,7 +41,7 @@ def redis_factory(settings: Settings) -> Redis:
     return redis
 ```
 
-- use dg.static_resolve_all when your app starts, which will statically resolve all your classes decorated with @dg.node.
+- use dg.analyze_nodes when your app starts, which will statically resolve all your classes decorated with @dg.node.
 
 
 However, ididi is so performant so most of time there is no reason to apply these tips.

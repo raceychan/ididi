@@ -18,17 +18,18 @@ VERSION = "1.2.6"
 
 __version__ = VERSION
 
-from .api import entry as entry
-from .api import resolve as resolve
-from .graph import AsyncScope as AsyncScope
-from .graph import DependencyGraph as DependencyGraph
-from .graph import SyncScope as SyncScope
-from .interfaces import INode as INode
-from .interfaces import INodeConfig as INodeConfig
 from ._node import DependentNode as DependentNode
 from ._node import Ignore as Ignore
 from ._node import NodeConfig as NodeConfig
 from ._node import use as use
+from .api import entry as entry
+from .api import resolve as resolve
+from .graph import AsyncScope as AsyncScope
+from .graph import Graph as Graph
+from .graph import SyncScope as SyncScope
+from .graph import DependencyGraph as DependencyGraph
+from .interfaces import INode as INode
+from .interfaces import INodeConfig as INodeConfig
 from .utils.typing_utils import AsyncResource as AsyncResource
 from .utils.typing_utils import Resource as Resource
 

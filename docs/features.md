@@ -200,11 +200,11 @@ def test_advanced_cycle_detection():
     dag = DependencyGraph()
 
     with pytest.raises(CircularDependencyDetectedError) as exc_info:
-        dag.static_resolve(A)
+        dag.analyze(A)
     assert exc_info.value.cycle_path == [A, B, C, D, A]
 ```
 
-You can call `DependencyGraph.static_resolve_all` on app start to statically resolve all
+You can call `DependencyGraph.analyze_all` on app start to statically resolve all
 your noded classes, and let ididi get ready for resolve them at upcoming calls.
 
 ### Runtime override
@@ -277,7 +277,7 @@ class EmailService:
         self.notification = notification
         self.user = user
 
-dg.static_resolve(EmailService)
+dg.analyze(EmailService)
 vs = Visualizer(dg)
 vs.view # use vs.view in jupyter notebook, or use vs.save(path, format) otherwise
 vs.save(path, format)

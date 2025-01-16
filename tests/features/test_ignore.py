@@ -10,7 +10,7 @@ def test_ignore_param():
 
     dg = DependencyGraph()
 
-    dg.static_resolve(User)
+    dg.analyze(User)
     node = dg.nodes[User]
     assert node.config.ignore
 

@@ -68,7 +68,7 @@ Stack = TypeVar("Stack", ExitStack, AsyncExitStack)
 
 class AbstractScope(Generic[Stack]):
     _stack: Stack
-    _graph: "DependencyGraph"
+    _graph: "Graph"
     _name: Hashable
     _pre: Maybe[Union["SyncScope", "AsyncScope"]]
     _resolution_registry: ResolutionRegistry
@@ -124,7 +124,7 @@ class SyncScope(AbstractScope[ExitStack]):
 
     def __init__(
         self,
-        graph: "DependencyGraph",
+        graph: "Graph",
         *,
         name: Maybe[Hashable] = MISSING,
         pre: Maybe[Union["SyncScope", "AsyncScope"]] = MISSING,
@@ -188,7 +188,7 @@ class AsyncScope(AbstractScope[AsyncExitStack]):
 
     def __init__(
         self,
-        graph: "DependencyGraph",
+        graph: "Graph",
         *,
         name: Maybe[Hashable] = MISSING,
         pre: Maybe["SyncScope"] = MISSING,
@@ -247,7 +247,7 @@ class ScopeProxy:
 
     __slots__ = ("_graph", "_scope", "_token", "_name")
 
-    def __init__(self, graph: "DependencyGraph", name: Maybe[Hashable] = MISSING):
+    def __init__(self, graph: "Graph", name: Maybe[Hashable] = MISSING):
         self._graph = graph
         self._scope = MISSING
         self._name = name
@@ -305,7 +305,7 @@ class GraphConfig:
 
 
 @final
-class DependencyGraph:
+class Graph:
     """
     ### Description:
     A Directed Acyclic Graph where each dependent is a node.
@@ -428,7 +428,7 @@ class DependencyGraph:
     def visitor(self) -> Visitor:
         return Visitor(self._nodes)
 
-    def _merge_nodes(self, other: "DependencyGraph"):
+    def _merge_nodes(self, other: "Graph"):
         for dep_type, other_node in other.nodes.items():
             current_node = self._nodes.get(dep_type)
             current_resolved = self._resolved_nodes.get(dep_type)
@@ -540,7 +540,7 @@ class DependencyGraph:
 
     # ==========================  Public ==========================
 
-    def merge(self, other: Union["DependencyGraph", Sequence["DependencyGraph"]]):
+    def merge(self, other: Union["Graph", Sequence["Graph"]]):
         """
         Merge the other graphs into this graph, update the current graph.
 
@@ -555,7 +555,7 @@ class DependencyGraph:
         2. node with a plain factory > node with default constructor.
         """
 
-        if isinstance(other, DependencyGraph):
+        if isinstance(other, Graph):
             others = (other,)
         else:
             others = other
@@ -623,7 +623,7 @@ class DependencyGraph:
             if any(self._nodes[p].config.reuse for p in current_path):
                 raise ReusabilityConflictError(current_path, param_type)
 
-    def static_resolve(
+    def analyze(
         self,
         dependent: INode[P, T],
         *,
@@ -699,10 +699,13 @@ class DependencyGraph:
 
         return dfs(dependent, ignore or ())
 
-    def static_resolve_all(self) -> None:
+    def analyze_nodes(self) -> None:
         unsolved_nodes: set[type] = self._nodes.keys() - self._resolved_nodes.keys()
         for node_type in unsolved_nodes:
-            self.static_resolve(node_type)
+            self.analyze(node_type)
+
+    static_resolve = analyze
+    static_resolve_all = analyze_nodes
 
     def scope(self, name: Maybe[Hashable] = MISSING) -> ScopeProxy:
         """
@@ -719,7 +722,7 @@ class DependencyGraph:
         "Recursively check if a dependent type contains any resource dependency"
 
         if not (resolved_node := self._resolved_nodes.get(dep_type)):
-            resolved_node = self.static_resolve(dep_type)
+            resolved_node = self.analyze(dep_type)
 
         if self.is_registered_singleton(resolved_node.dependent_type):
             return False
@@ -844,7 +847,7 @@ class DependencyGraph:
             return resolution
 
         provided_params = tuple(overrides)
-        node: DependentNode[T] = self.static_resolve(dependent, ignore=provided_params)
+        node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
 
         if node.factory_type == "aresource":
             raise AsyncResourceInSyncError(node.dependent_type)
@@ -884,7 +887,7 @@ class DependencyGraph:
             return resolution
 
         provided_params = tuple(overrides)
-        node: DependentNode[T] = self.static_resolve(dependent, ignore=provided_params)
+        node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
 
         unsolved_params = node.unsolved_params(self._config.ignore + provided_params)
 
@@ -900,7 +903,7 @@ class DependencyGraph:
             scope=scope,
         )
 
-    def _static_resolve_entry(self, config: NodeConfig, func: IFactory[P, T]):
+    def _analyze_entry(self, config: NodeConfig, func: IFactory[P, T]):
         ignores = self._config.ignore + config.ignore
         func_params = get_typed_signature(func).parameters.items()
         depends_on_resource: bool = False
@@ -917,7 +920,7 @@ class DependencyGraph:
                 self._resolved_nodes[param_type] = inject_node
                 param_type = inject_node.dependent_type
 
-            self.static_resolve(param_type, config=config)
+            self.analyze(param_type, config=config)
             depends_on_resource = depends_on_resource or self.should_be_scoped(
                 param_type
             )
@@ -976,7 +979,7 @@ class DependencyGraph:
             return configured
 
         config = NodeConfig(**iconfig)
-        require_scope, unresolved = self._static_resolve_entry(config, func)
+        require_scope, unresolved = self._analyze_entry(config, func)
 
         def replace(
             before: Maybe[type[T]] = MISSING,
@@ -993,10 +996,7 @@ class DependencyGraph:
                 if pname in kwargs:
                     unresolved[i] = (pname, kwargs[pname])
 
-            # _, unresolved = self._static_resolve_entry(config, func)
-
         if iscoroutinefunction(func):
-            # async_func = cast(Callable[..., Awaitable[T]], func)
             if require_scope:
 
                 @wraps(func)
@@ -1012,7 +1012,6 @@ class DependencyGraph:
                         r = await func(*args, **kwargs)
                         return r
 
-                # _async_scoped_wrapper.reset_deps = reset_deps
                 f = _async_scoped_wrapper
             else:
 
@@ -1045,7 +1044,6 @@ class DependencyGraph:
                         r = sync_func(*args, **kwargs)
                         return r
 
-                # _sync_scoped_wrapper.reset_deps = reset_deps
                 f = _sync_scoped_wrapper
             else:
 
@@ -1060,25 +1058,23 @@ class DependencyGraph:
                     r = sync_func(*args, **kwargs)
                     return r
 
-                # _sync_wrapper.reset_deps = reset_deps
                 f = _sync_wrapper
 
-        setattr(f, "replace", replace)
-
+        setattr(f, replace.__name__, replace)
         return cast(EntryFunc[P, T], f)
 
     @overload
-    def node(self, factory_or_class: type[T]) -> type[T]: ...
+    def node(self, dependent: type[T]) -> type[T]: ...
 
     @overload
-    def node(self, factory_or_class: IFactory[P, T]) -> IFactory[P, T]: ...
+    def node(self, dependent: IFactory[P, T]) -> IFactory[P, T]: ...
 
     @overload
     def node(self, **config: Unpack[INodeConfig]) -> TDecor: ...
 
     def node(
         self,
-        factory_or_class: Union[INode[P, T], None] = None,
+        dependent: Union[INode[P, T], None] = None,
         **config: Unpack[INodeConfig],
     ) -> Union[INode[P, T], TDecor]:
         """
@@ -1109,12 +1105,15 @@ class DependencyGraph:
         ```
         """
 
-        if not factory_or_class:
+        if not dependent:
             configured = cast(TDecor, partial(self.node, **config))
             return configured
 
-        if is_unsolvable_type(factory_or_class):
-            raise TopLevelBulitinTypeError(factory_or_class)
+        if is_unsolvable_type(dependent):
+            raise TopLevelBulitinTypeError(dependent)
 
-        self._node(factory_or_class, config=NodeConfig(**config))
-        return factory_or_class
+        self._node(dependent, config=NodeConfig(**config))
+        return dependent
+
+
+DependencyGraph = Graph

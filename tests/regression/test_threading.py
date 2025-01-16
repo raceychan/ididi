@@ -44,7 +44,7 @@ def test_repeat_resolve(dg: DependencyGraph):
     instances: list[object] = []
 
     dg.node(reuse=False)(AuthService)
-    dg.static_resolve(AuthService)
+    dg.analyze(AuthService)
 
     def resolve(dg: DependencyGraph):
         obj = dg.resolve(AuthService)
@@ -64,7 +64,7 @@ def test_threading_resolve_non_reuse(
     results: list[object] = []
 
     dg.node(reuse=False)(AuthService)
-    dg.static_resolve(AuthService)
+    dg.analyze(AuthService)
 
     def resolve(dg: DependencyGraph):
         obj = dg.resolve(AuthService)

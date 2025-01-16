@@ -17,7 +17,7 @@ def test_graph_resolve_factory():
 
     dg = DependencyGraph()
 
-    dg.static_resolve(user_factory)
+    dg.analyze(user_factory)
     with dg.scope() as scope:
         u = scope.resolve(user_factory)
 

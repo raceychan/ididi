@@ -81,7 +81,7 @@ def test_complex_graph(tmp_path: Path):
             self.notification = notification
             self.user = user
 
-    dg.static_resolve(EmailService)
+    dg.analyze(EmailService)
     vs.dot
     vs.view
 

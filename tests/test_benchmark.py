@@ -26,23 +26,23 @@ def dg() -> DependencyGraph:
     return DependencyGraph()
 
 
-@pytest.mark.benchmark
-def test_register(dg: DependencyGraph, dependents: ty.Sequence[type]):
-    pre = perf_counter()
-    for dep in dependents:
-        dg.node(dep)
-    aft = perf_counter()
-    cost = round(aft - pre, 6)
-    print(f"\n{cost} seoncds to register {len(dependents)} classes")
+# @pytest.mark.benchmark
+# def test_register(dg: DependencyGraph, dependents: ty.Sequence[type]):
+#     pre = perf_counter()
+#     for dep in dependents:
+#         dg.node(dep)
+#     aft = perf_counter()
+#     cost = round(aft - pre, 6)
+#     print(f"\n{cost} seoncds to register {len(dependents)} classes")
 
 
-@pytest.mark.benchmark
-def test_static_resolve(dg: DependencyGraph):
-    pre = perf_counter()
-    dg.static_resolve_all()
-    aft = perf_counter()
-    cost = round(aft - pre, 6)
-    print(f"\n{cost} seoncds to statically resolve {len(dg.nodes)} classes")
+# @pytest.mark.benchmark
+# def test_static_resolve(dg: DependencyGraph):
+#     pre = perf_counter()
+#     dg.analyze_nodes()
+#     aft = perf_counter()
+#     cost = round(aft - pre, 6)
+#     print(f"\n{cost} seoncds to statically resolve {len(dg.nodes)} classes")
 
 
 @pytest.mark.benchmark
@@ -71,7 +71,7 @@ def test_entry(dg: DependencyGraph, dependents: list[type]):
 
     SERVICE_REGISTRY: set[UserService] = set()
 
-    def create_user(user_name: str, user_email: str, service: UserService):
+    def create_user(user_name: str, user_email: str, service: UserService) -> str:
         SERVICE_REGISTRY.add(service)
         return "ok"
 

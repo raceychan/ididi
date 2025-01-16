@@ -53,7 +53,7 @@ def test_resolve_timer():
 
     dg = DependencyGraph()
 
-    dg.static_resolve(Timer)
+    dg.analyze(Timer)
     assert dg.nodes[datetime].factory is utc_factory
     tmer = dg.resolve(Timer)
     assert tmer.time.tzinfo == timezone.utc
@@ -66,7 +66,7 @@ def test_plain_annotated():
             self._time = time
 
     dg = DependencyGraph()
-    dg.static_resolve(Clock)
+    dg.analyze(Clock)
 
 
 class A:

@@ -3,8 +3,8 @@ from typing import Any, Awaitable, Callable, Union, cast, overload
 
 from typing_extensions import Unpack
 
+from .graph import Graph as Graph
 from .interfaces import IAsyncFactory, IFactory, INodeConfig, TEntryDecor
-from .graph import DependencyGraph as DependencyGraph
 from .utils.typing_utils import P, T
 
 
@@ -22,7 +22,7 @@ def entry(
 ) -> Union[Callable[..., Union[T, Awaitable[T]]], TEntryDecor]:
     if not func:
         return cast(TEntryDecor, partial(entry, **iconfig))
-    return DependencyGraph().entry(func, **iconfig)
+    return Graph().entry(func, **iconfig)
 
 
 @overload
@@ -34,4 +34,4 @@ def resolve(dep: Callable[P, T], /, *args: P.args, **overrides: P.kwargs) -> T: 
 
 
 def resolve(dep: Callable[P, T], /, **overrides: Any) -> T:
-    return DependencyGraph().resolve(dep, **overrides)
+    return Graph().resolve(dep, **overrides)

@@ -66,7 +66,7 @@ def user_service_factory() -> "UserService": ...
 
 def test_forward_factory():
     dg.node(user_service_factory)
-    dg.static_resolve(user_service_factory)
+    dg.analyze(user_service_factory)
 
 
 # Factory class with generic return type
@@ -79,6 +79,6 @@ def test_direct_resolve_with_override():
     # this should not raise ididi.errors.UnsolvableDependencyError
     # since animal_type is provided, we should not care about resolvability
     with pytest.raises(UnsolvableDependencyError):
-        dg.static_resolve(animal_factory)
+        dg.analyze(animal_factory)
 
     dg.resolve(animal_factory, animal_type="cat")

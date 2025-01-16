@@ -55,13 +55,13 @@ def dg() -> DependencyGraph:
 
 
 def test_static_resolve(dg: DependencyGraph):
-    _ = dg.static_resolve(EmailService)
+    _ = dg.analyze(EmailService)
     assert len(dg.nodes) == 7
     assert len(dg.resolved_nodes) == 7
 
 
 def test_static_resolve_equal_resolve(dg: DependencyGraph):
-    _ = dg.static_resolve(EmailService)
+    _ = dg.analyze(EmailService)
     assert len(dg.nodes) == 7
     assert len(dg.resolved_nodes) == 7
 
@@ -88,7 +88,7 @@ class ForwardConfig:
 
 
 def test_forward_dependency(dg: DependencyGraph):
-    _ = dg.static_resolve(ForwardService)
+    _ = dg.analyze(ForwardService)
     assert len(dg.nodes) == 3
     assert len(dg.resolved_nodes) == 3
 
@@ -118,7 +118,7 @@ def test_forward_ref_in_local_scope():
             self.a = a
 
     with pytest.raises(ForwardReferenceNotFoundError):
-        dag.static_resolve(ServiceA)
+        dag.analyze(ServiceA)
 
 
 def test_static_resolve_would_raise_error(dg: DependencyGraph):
@@ -135,7 +135,7 @@ def test_static_resolve_would_raise_error(dg: DependencyGraph):
             self.repository = repository
 
     with pytest.raises(UnsolvableDependencyError):
-        dg.static_resolve(UserService)
+        dg.analyze(UserService)
 
 
 async def test_static_resolve_a_factory(dg: DependencyGraph):
@@ -171,7 +171,7 @@ def test_sr_false():
         return DataBase("test")
 
     dg.node(db_factory)
-    dg.static_resolve_all()
+    dg.analyze_nodes()
 
 
 def test_sr_pre_resolved():
@@ -188,9 +188,9 @@ def test_sr_pre_resolved():
     def db_factory() -> DataBase:
         return DataBase("test")
 
-    dg.static_resolve(db_factory)
+    dg.analyze(db_factory)
 
-    dg.static_resolve_all()
+    dg.analyze_nodes()
 
 
 def test_ignore():

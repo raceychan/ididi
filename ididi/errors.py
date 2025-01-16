@@ -158,7 +158,7 @@ class UnsolvableReturnTypeError(UnsolvableParameterError):
 
     def __init__(self, factory: Callable[..., Any], target: type):
         self.factory = factory
-        msg = f"Factory {factory} must have a solvable return type, instead of {target}"
+        msg = f"Factory {factory} must have a solvable return type, found {target}"
         super().__init__(msg)
 
 

@@ -14,7 +14,7 @@ def test_direct_resolve_fail():
     dg = DependencyGraph()
     dg.node(IgnoreNode)
     with pytest.raises(UnsolvableDependencyError):
-        dg.static_resolve(IgnoreNode)
+        dg.analyze(IgnoreNode)
 
 
 def test_resolve_fail_with_partial_ignore():
@@ -22,13 +22,13 @@ def test_resolve_fail_with_partial_ignore():
 
     dg.node(ignore=("name",))(IgnoreNode)
     with pytest.raises(UnsolvableDependencyError):
-        dg.static_resolve(IgnoreNode)
+        dg.analyze(IgnoreNode)
 
 
 def test_resolve_with_ignore():
     dg = DependencyGraph()
     dg.node(ignore=("name", int))(IgnoreNode)
-    dg.static_resolve(IgnoreNode)
+    dg.analyze(IgnoreNode)
 
 
 def test_resolve_without_ignore():

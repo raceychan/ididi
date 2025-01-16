@@ -3,14 +3,14 @@ from typing import Union
 from graphviz import Digraph
 
 from ._node import DependentNode as DependentNode
-from .graph import DependencyGraph
+from .graph import Graph
 from .utils.typing_utils import T
 
 
 class Visualizer:
     def __init__(
         self,
-        graph: DependencyGraph,
+        graph: Graph,
         dot: "Digraph | None" = None,
         graph_attrs: Union[dict[str, str], None] = None,
     ):

@@ -6,6 +6,12 @@ test:
 debug:
 	pixi run -e test pytest -vx  -m debug  tests/
 
+.PHONY: profile
+profile:
+	pixi run -e test pyinstrument -m pytest tests/test_benchmark.py
+#pixi run -e test pyinstrument -m profile
+
+
 .PHONY: feat
 feat:
 	pixi run -e test pytest -vx  tests/test_feat.py

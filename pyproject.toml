@@ -81,11 +81,11 @@ pytest = ">=8.3.3"
 pytest-asyncio = ">=0.24.0,<0.25"
 pytest-cov = ">=4.1.0"
 python-graphviz = ">=0.20.3,<0.21"
+pyinstrument = ">=5.0.0,<6"
 
 [tool.pixi.feature.publish.dependencies]
 hatch = ">=1.13.0,<2"
 twine = ">=5.1.1,<6"
-
 
 [tool.pixi.feature.publish.tasks]
 # Build into a wheel using hatch

@@ -170,7 +170,7 @@ class Dependency(Generic[T]):
     default: Maybe[T]
 
     def __repr__(self) -> str:
-        return f"Dependency({self.name}: {self.type_repr}={self.default})"
+        return f"Dependency({self.name}: {self.type_repr}={self.default!r})"
 
     @property
     def type_repr(self):
@@ -211,7 +211,7 @@ class Dependencies(Generic[T]):
     __slots__ = ("_deps", "_sig")
 
     def __init__(self, deps: dict[str, Dependency[Any]]):
-        self._deps = deps or {}
+        self._deps = deps
         self._sig: Union[Signature, None] = None
 
     """
@@ -234,7 +234,7 @@ class Dependencies(Generic[T]):
 
     def __repr__(self):
         deps_repr = ", ".join(
-            f"{name}: {dep.type_repr}={dep.default}" for name, dep in self
+            f"{name}: {dep.type_repr}={dep.default!r}" for name, dep in self
         )
         return f"Depenencies({deps_repr})"
 
@@ -242,7 +242,6 @@ class Dependencies(Generic[T]):
     def signature(self) -> Signature:
         """
         dynamically generate signature based on current params,
-        as we might need to actualize forwardref params when bind params
         """
 
         if self._sig is None:
@@ -259,11 +258,6 @@ class Dependencies(Generic[T]):
                 __validate_parameters__=False,
             )
         return self._sig
-
-    def bind_arguments(self, resolved_args: dict[str, Any]) -> BoundArguments:
-        """Bind resolved arguments to the signature."""
-        bound_args = self.signature.bind_partial(**resolved_args)
-        return bound_args
 
     @classmethod
     def from_signature(
@@ -291,6 +285,19 @@ class Dependencies(Generic[T]):
                 raise e
 
             param_type = resolve_annotation(param_annotation)
+
+            if param_type is Unpack:
+                unpack: type = get_args(param_annotation)[0]
+                fields = unpack.__annotations__
+                for name, ftype in fields.items():
+                    dep_param = Dependency[Any](
+                        name=name,
+                        param_kind=_ParameterKind.KEYWORD_ONLY,
+                        param_type=resolve_annotation(ftype),
+                        default=MISSING,
+                    )
+                    dependencies[name] = dep_param
+                continue
 
             if param.default == INSPECT_EMPTY:
                 default = MISSING
@@ -448,8 +455,10 @@ class DependentNode(Generic[T]):
         "Inject dependencies to the dependent accordidng to its signature, return an instance of the dependent type"
         if not params:
             return self.factory()
-        arguments = self.dependencies.bind_arguments(params).arguments
-        return self.factory(**arguments)
+
+        # TODO: optimize this, Signature._bind is slow
+        # arguments = self.dependencies.bind_arguments(params).arguments
+        return self.factory(**params)
 
     def check_for_implementations(self) -> None:
         if isinstance(self.factory, type):

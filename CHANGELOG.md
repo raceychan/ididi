@@ -223,7 +223,7 @@ Improvements:
 
 Improvements
 
-- performance boost on dg.static_resolve
+- performance boost on dg.analyze
 
 ## version 1.0.2
 
@@ -317,7 +317,7 @@ def create_user() -> str:
 def user_factory() -> ty.Generator[User, None, None]:
     u = User(1, "test")
     yield u
-dg.static_resolve(user_factory)
+dg.analyze(user_factory)
 with dg.scope() as scope:
     # this would fail before 1.0.10
     u = scope.resolve(user_factory)
@@ -560,7 +560,7 @@ def test_graph_partial_resolve_with_dep():
 
     dg.node(Data)
 
-    dg.static_resolve(Data)
+    dg.analyze(Data)
 
     with pytest.raises(UnsolvableDependencyError):
         data = dg.resolve(Data)
@@ -752,3 +752,61 @@ def test_entry_replace():
 ```
 
 
+## version 1.2.7
+
+### renaming
+
+- rename `DependencyGraph` to `Graph`
+- rename `DependencyGraph.static_resolve` to `Graph.analyze`
+- rename `DependencyGraph.static_resolve_all` to `Graph.analyze_nodes`
+
+Original names are kept as alias to new names to avoid breaking changes
+
+
+### typing support
+
+- support Unpack
+```py
+class DataBase: ...
+class Cache: ...
+class Config: ...
+
+class KWARGS(TypedDict):
+    db: DataBase
+    cache: Cache
+
+class Extra(KWARGS):
+    config: Config
+
+class Repo:
+    def __init__(self, **kwargs: Unpack[KWARGS]) -> None:
+        self.db = kwargs["db"]
+        self.cache = kwargs["cache"]
+
+class SubRepo(Repo):
+    def __init__(self, **kwargs: Unpack[Extra]):
+        super().__init__(db=kwargs["db"], cache=kwargs["cache"])
+        self.config = kwargs["config"]
+
+def test_resolve_unpack():
+    dg = Graph()
+    repo = dg.resolve(Repo)
+    assert isinstance(repo.db, DataBase)
+    assert isinstance(repo.cache, Cache)
+    subrepo = dg.resolve(SubRepo)
+    assert isinstance(subrepo.config, Config)
+```
+
+- support Literal
+
+```py
+def test_resolve_literal():
+    dg = Graph()
+
+    class User:
+        def __init__(self, name: Literal["user"] = "user"):
+            self.name = name
+
+    u = dg.resolve(User)
+    assert u.name == "user"
+```
