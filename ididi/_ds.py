@@ -4,7 +4,6 @@ from typing import Any, Callable, Union
 
 from ._node import DependentNode
 from ._type_resolve import get_bases
-from .utils.param_utils import MISSING, Maybe
 from .utils.typing_utils import T
 
 GraphNodes = dict[type[T], DependentNode[T]]
@@ -67,42 +66,6 @@ class TypeRegistry(BaseRegistry):
             self._mappings[base].remove(dependent_type)
 
         del self._mappings[dependent_type]
-
-
-class ResolutionRegistry(BaseRegistry):
-    __slots__ = ("_mappings",)
-
-    def __init__(self):
-        # should use weakref dict
-        self._mappings: ResolvedInstances[Any] = dict()
-
-    def __getitem__(self, dependent_type: Union[type[T], Callable[..., T]]) -> T:
-        return self._mappings[dependent_type]
-
-    def remove(self, dependent_type: type) -> None:
-        self._mappings.pop(dependent_type, None)
-
-    def update(self, other: "ResolutionRegistry"):
-        self._mappings.update(other._mappings)
-
-    def register(
-        self, dependent_type: Union[type[T], Callable[..., T]], instance: T
-    ) -> None:
-        if isinstance(dependent_type, type):
-            instance_type: type[T] = type(instance)
-            for base in get_bases(instance_type):
-                if base in self._mappings:
-                    continue
-                self._mappings[base] = instance
-        self._mappings[dependent_type] = instance
-
-    def get(
-        self,
-        dependent_type: Union[type[T], Callable[..., T]],
-        /,
-        default: Maybe[T] = MISSING,
-    ) -> Maybe[T]:
-        return self._mappings.get(dependent_type, default)
 
 
 class Visitor:

@@ -3,6 +3,7 @@ This module separates the type resolution logic between utils.typing_utils and t
 """
 
 import sys
+from functools import lru_cache
 from collections.abc import AsyncGenerator, Generator
 from inspect import Signature
 from inspect import isasyncgenfunction as isasyncgenfunction
@@ -234,6 +235,7 @@ def flatten_annotated(typ: Annotated[Any, Any]) -> list[Any]:
     return flattened_metadata
 
 
+@lru_cache(1024)
 def get_bases(dependent: type) -> tuple[type, ...]:
     if issubclass(dependent, Protocol):
         # -3 excludes Protocol, Gener, object

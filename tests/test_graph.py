@@ -728,3 +728,10 @@ def test_graph_ignore():
     dg = DependencyGraph(ignore=datetime)
     with pytest.raises(TypeError):
         dg.resolve(Timer)
+
+def test_remove_dependent():
+    class Database: ...
+
+    dg = DependencyGraph()
+
+    dg.remove_dependent(Database)

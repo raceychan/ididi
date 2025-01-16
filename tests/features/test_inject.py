@@ -101,3 +101,15 @@ def test_nested_inject():
     assert cream.berry.age == 5
     assert cream.berry.alice.name == "test"
     assert cream.berry.alice.time
+
+
+def test_self_inject():
+    dg = DependencyGraph()
+
+    def user_factory(dg: DependencyGraph) -> DependencyGraph:
+        return dg
+
+    g = dg.resolve(user_factory)
+    assert g is dg
+
+    dg.remove_singleton(DependencyGraph)

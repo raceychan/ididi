@@ -752,7 +752,19 @@ def test_entry_replace():
 ```
 
 
-## version 1.2.7
+## version 1.3.0
+
+### performance boost
+
+**400%** performance improvements on `Graph.resolve`, by apply cache whever possible,
+
+In previous benchmark, 
+0.000558 seoncds to resolve 100 instances
+0.000139 seoncds to resolve 100 instances
+
+1.2.7
+
+
 
 ### renaming
 
@@ -809,4 +821,15 @@ def test_resolve_literal():
 
     u = dg.resolve(User)
     assert u.name == "user"
+```
+
+
+### Features
+
+```py
+Graph.remove_singleton(self, dependent_type: type) -> None:
+"Remove the registered singleton from current graph, return if not found"
+
+Graph.remove_dependent(self, dependent_type: type) -> None
+"Remove the dependent from current graph, return if not found"
 ```

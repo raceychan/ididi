@@ -12,11 +12,6 @@ ROUNDS = 1000
 
 @pytest.fixture
 def dependents() -> ty.Sequence[type]:
-    # interesting
-    # deps = CLASSES.values() would let dg
-    # be substantially (3times) faster than [d for d in  ClASSES.values()]
-    # return CLASSES.values()
-
     deps = [d for d in CLASSES.values()][:100]
     return deps
 
@@ -26,23 +21,23 @@ def dg() -> DependencyGraph:
     return DependencyGraph()
 
 
-# @pytest.mark.benchmark
-# def test_register(dg: DependencyGraph, dependents: ty.Sequence[type]):
-#     pre = perf_counter()
-#     for dep in dependents:
-#         dg.node(dep)
-#     aft = perf_counter()
-#     cost = round(aft - pre, 6)
-#     print(f"\n{cost} seoncds to register {len(dependents)} classes")
+@pytest.mark.benchmark
+def test_register(dg: DependencyGraph, dependents: ty.Sequence[type]):
+    pre = perf_counter()
+    for dep in dependents:
+        dg.node(dep)
+    aft = perf_counter()
+    cost = round(aft - pre, 6)
+    print(f"\n{cost} seoncds to register {len(dependents)} classes")
 
 
-# @pytest.mark.benchmark
-# def test_static_resolve(dg: DependencyGraph):
-#     pre = perf_counter()
-#     dg.analyze_nodes()
-#     aft = perf_counter()
-#     cost = round(aft - pre, 6)
-#     print(f"\n{cost} seoncds to statically resolve {len(dg.nodes)} classes")
+@pytest.mark.benchmark
+def test_static_resolve(dg: DependencyGraph):
+    pre = perf_counter()
+    dg.analyze_nodes()
+    aft = perf_counter()
+    cost = round(aft - pre, 6)
+    print(f"\n{cost} seoncds to statically resolve {len(dg.nodes)} classes")
 
 
 @pytest.mark.benchmark
@@ -148,4 +143,24 @@ def test_entry(dg: DependencyGraph, dependents: list[type]):
 0.033853 seoncds to call entry version of create_user 1000 times
 
 current implementation is 22.920108 times slower
+"""
+
+"""
+1.2.7
+0.015122 seoncds to register 100 classes
+0.002498 seoncds to statically resolve 100 classes
+0.000256 seoncds to resolve 100 instances
+0.00165 seoncds to call regular function create_user 1000 times
+0.021057 seoncds to call entry version of create_user 1000 times
+current implementation is 12.761818 times slower
+"""
+
+"""
+1.2.7
+0.014272 seoncds to register 100 classes
+0.002628 seoncds to statically resolve 100 classes
+0.000139 seoncds to resolve 100 instances
+0.001647 seoncds to call regular function create_user 1000 times
+0.011167 seoncds to call entry version of create_user 1000 times
+current implementation is 6.780206 times slower
 """

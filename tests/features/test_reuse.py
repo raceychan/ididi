@@ -8,6 +8,18 @@ class Config:
         self.value = value
 
 
+def test_config_eq():
+    ng = DependencyGraph()
+    ng.node(Config)
+    c1 = ng.nodes[Config].config
+    ng.remove_dependent(Config)
+
+    ng.node(Config, reuse=False)
+    c2 = ng.nodes[Config].config
+    assert c1 != 1
+    assert c1 != c2
+
+
 class Engine:
     def __init__(self, config: Config):
         self.config = config

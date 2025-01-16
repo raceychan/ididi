@@ -3,13 +3,7 @@ from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from functools import lru_cache
 from inspect import _ParameterKind  # type: ignore
-from inspect import (
-    BoundArguments,
-    Parameter,
-    Signature,
-    isasyncgenfunction,
-    isgeneratorfunction,
-)
+from inspect import Parameter, Signature, isasyncgenfunction, isgeneratorfunction
 from typing import (
     Annotated,
     Any,
@@ -18,7 +12,6 @@ from typing import (
     ForwardRef,
     Generator,
     Generic,
-    Iterable,
     Iterator,
     Union,
     cast,
@@ -134,6 +127,11 @@ class NodeConfig:
 
         self.ignore = ignore
         self.reuse = reuse
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, NodeConfig):
+            return False
+        return (self.ignore == other.ignore) and (self.reuse == other.reuse)
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.reuse=}, {self.ignore=})"
@@ -365,7 +363,7 @@ class DependentNode(Generic[T]):
         "factory_type",
         "dependencies",
         "config",
-        # "_unsolved_params",
+        "_unsolved_params",
     )
 
     def __init__(
@@ -387,7 +385,7 @@ class DependentNode(Generic[T]):
         self.factory_type: FactoryType = factory_type
         self.dependencies = dependencies
         self.config = config
-        # self._unsolved_params: Union[tuple[tuple[str, type], ...], None] = None
+        self._unsolved_params: list[tuple[str, type]] = []
 
     def __repr__(self) -> str:
         str_repr = f"{self.__class__.__name__}(type: {self.dependent_type}"
@@ -400,7 +398,7 @@ class DependentNode(Generic[T]):
     def is_resource(self) -> bool:
         return self.factory_type in ("resource", "aresource")
 
-    def static_unsolved_params(
+    def analyze_unsolved_params(
         self, ignore: NodeIgnore
     ) -> Generator[Dependency[T], None, None]:
         "params that needs to be statically resolved"
@@ -438,16 +436,18 @@ class DependentNode(Generic[T]):
             if param.param_type != param_type:
                 self.dependencies.update(param_name, param)
 
-    def unsolved_params(self, ignore: NodeIgnore) -> Iterable[tuple[str, type]]:
+    @lru_cache(1024)
+    def unsolved_params(self, ignore: NodeIgnore) -> list[tuple[str, type]]:
         "yield dependencies that needs to be resolved"
-        # TODO: fix out why this can't be cached, and cache it
-        ignores = self.config.ignore + ignore
-        for param_name, param in self.dependencies.filter_ignore(ignore=ignores):
-            param_type: type[T] = param.param_type
-            if is_provided(param.default) and is_unsolvable_type(param_type):
-                continue
-            param_pair = (param_name, param_type)
-            yield param_pair
+        if not self._unsolved_params:
+            ignores = self.config.ignore + ignore
+            for param_name, param in self.dependencies.filter_ignore(ignore=ignores):
+                param_type: type[T] = param.param_type
+                if is_provided(param.default) and is_unsolvable_type(param_type):
+                    continue
+                param_pair = (param_name, param_type)
+                self._unsolved_params.append(param_pair)
+        return self._unsolved_params
 
     def inject_params(
         self, params: Union[dict[str, Any], None] = None
@@ -455,9 +455,6 @@ class DependentNode(Generic[T]):
         "Inject dependencies to the dependent accordidng to its signature, return an instance of the dependent type"
         if not params:
             return self.factory()
-
-        # TODO: optimize this, Signature._bind is slow
-        # arguments = self.dependencies.bind_arguments(params).arguments
         return self.factory(**params)
 
     def check_for_implementations(self) -> None:
@@ -562,7 +559,7 @@ class DependentNode(Generic[T]):
         )
 
     @classmethod
-    @lru_cache(maxsize=1000)
+    # @lru_cache(1024)
     def from_node(
         cls,
         factory_or_class: INode[P, T],
