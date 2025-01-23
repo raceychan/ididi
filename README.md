@@ -90,6 +90,22 @@ assert tmer.time.tzinfo == timezone.utc
 > [!TIP]
 > **`DependencyGraph.node` accepts a wide arrange of types, such as dependent class, sync/async facotry, sync/async resource factory, with typing support.**
 
+### TypingSupport
+
+ididi has strong support to `typing` module, includes:
+
+- Optional
+- Union
+- Annotated
+- Literal
+- NewType
+- TypedDict
+
+...and more.
+
+Check out `tests/features/test_typing_support.py` for examples.
+
+
 ### Scope
 
 Using Scope to manage resources
