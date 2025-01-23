@@ -32,9 +32,11 @@ from ._type_resolve import (
     get_bases,
     get_typed_signature,
     is_class,
+    is_new_type,
     is_unsolvable_type,
     resolve_annotation,
     resolve_factory,
+    resolve_new_type,
 )
 from .errors import (
     AsyncResourceInSyncError,
@@ -71,14 +73,13 @@ def register_dependent(
     mapping: dict[Union[IEmptyFactory[T], type[T]], T],
     dependent_type: IEmptyFactory[T],
     instance: T,
-):
+) -> None:
     if isinstance(dependent_type, type):
         instance_type: type[T] = type(instance)
         for base in get_bases(instance_type):
             if base in mapping:
                 continue
             mapping[base] = instance
-
     mapping[dependent_type] = instance
 
 
@@ -465,6 +466,10 @@ class Graph:
         if (node := self._nodes.get(dependent)) and node.factory_type != "default":
             return node
 
+        if is_new_type(dependent):
+            ntype: type[Any] = resolve_new_type(dependent)
+            return self._nodes[ntype]
+
         concrete_type = self._type_registry[dependent][-1]
         concrete_node = self._nodes[concrete_type]
         concrete_node.check_for_implementations()
@@ -491,6 +496,7 @@ class Graph:
         dependent_type: type = get_origin(dep_type) or dep_type
         if dependent_type in self._nodes:
             return
+
         self._nodes[dependent_type] = node
         self._type_registry.register(dependent_type)
 
@@ -678,6 +684,8 @@ class Graph:
                 # when we register a concrete node we also register its bases to type_registry
                 if dependent_type not in self._type_registry:
                     self._node(dependent_type, config)
+            elif is_new_type(dependent_factory):
+                dependent_type = resolve_annotation(dependent_factory)
             else:
                 dependent_type = resolve_factory(dependent_factory)
                 if dependent_type not in self._nodes:
@@ -884,7 +892,6 @@ class Graph:
         unsolved_params = node.unsolved_params(self._config.ignore + provided_params)
 
         params = overrides
-
         for param_name, param_type in unsolved_params:
             params[param_name] = self.resolve(param_type, scope)
 

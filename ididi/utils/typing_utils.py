@@ -1,14 +1,4 @@
-from inspect import Parameter, Signature
-from typing import (
-    Any,
-    AsyncGenerator,
-    Callable,
-    ForwardRef,
-    Generator,
-    Mapping,
-    TypeVar,
-    Union,
-)
+from typing import Any, AsyncGenerator, ForwardRef, Generator, Mapping, TypeVar, Union
 from typing import _eval_type as ty_eval_type  # type: ignore
 from typing import cast
 
@@ -84,48 +74,8 @@ def eval_type(
         return value
 
 
-def get_typed_annotation(annotation: Any, globalns: dict[str, Any]) -> Any:
+def get_typed_annotation(annotation: Any, gvars: dict[str, Any]) -> Any:
     if isinstance(annotation, str):
         annotation = ForwardRef(annotation, is_argument=False)
-        annotation = eval_type(annotation, globalns, globalns, lenient=True)
+        annotation = eval_type(annotation, gvars, gvars, lenient=True)
     return annotation
-
-
-def get_typed_params(call: Callable[..., T]) -> list[Parameter]:
-    signature = Signature.from_callable(call)
-    globalns = getattr(call, "__globals__", {})
-    typed_params = [
-        Parameter(
-            name=param.name,
-            kind=param.kind,
-            default=param.default,
-            annotation=get_typed_annotation(param.annotation, globalns),
-        )
-        for param in signature.parameters.values()
-    ]
-    return typed_params
-
-
-def get_full_typed_signature(call: Callable[..., T]) -> Signature:
-    """
-    Get a full typed signature from a callable.
-    check_return: bool
-
-    if check_return is True, raise MissingReturnTypeError if the return type is Signature.emp
-    """
-    signature = Signature.from_callable(call)
-
-    globalns = getattr(call, "__globals__", {})
-    return Signature(
-        parameters=get_typed_params(call),
-        return_annotation=get_typed_annotation(signature.return_annotation, globalns),
-    )
-
-
-def get_factory_sig_from_cls(cls: type[T]) -> Signature:
-    """
-    Generate a signature from a class via its __init__ method.
-    annotate the return type with the class itself.
-    """
-    params = get_typed_params(cls.__init__)
-    return Signature(parameters=params, return_annotation=cls)
