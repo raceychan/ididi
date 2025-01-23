@@ -760,9 +760,10 @@ def test_entry_replace():
 
 In previous benchmark, 
 0.000558 seoncds to resolve 100 instances
+
+ididi v1.3.0
 0.000139 seoncds to resolve 100 instances
 
-1.2.7
 
 
 
@@ -832,4 +833,48 @@ Graph.remove_singleton(self, dependent_type: type) -> None:
 
 Graph.remove_dependent(self, dependent_type: type) -> None
 "Remove the dependent from current graph, return if not found"
+```
+
+
+
+## version 1.3.1
+
+### Features
+
+Resolve NewType
+
+
+
+```py
+from uuid import uuid4
+
+UUID = NewType("UUID", str)
+
+
+def uuid_factory() -> UUID:
+    return str(uuid4())
+
+def user_factory(user_id: UUID) -> User:
+    return User(user_id=user_id)
+```
+
+Why not TypeAlias as well?
+
+1. It does not make sense, since TypeAlias is literally an alias
+
+A = str 
+
+means A is the same as str, and it make no sense to resolve a str.
+
+
+2. Resolving TypeAlias is not possible in python 3.9
+
+```py
+UUID = str
+
+def uuid_factory() -> UUID:
+    return uuid4()
+
+when we try to resolve uuid_factory, the return is a type `str`,
+not a `TypeAlias`.
 ```

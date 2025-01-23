@@ -111,7 +111,7 @@ def test_entry(dg: DependencyGraph, dependents: list[type]):
 
     ratio = round(entry_total / normal_total, 6)
 
-    print(f"current implementation is {ratio} times slower")
+    print(f"current implementation of entry is {ratio} times slower")
 
 
 """

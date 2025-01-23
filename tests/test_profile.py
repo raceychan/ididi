@@ -215,7 +215,7 @@ def test_create_root():
 
     print(f"ididi resolve {res}")
 
-    print(f"current implementation is {round(res / menual, 6)} times slower")
+    print(f"current implementation(without reuse) is {round(res / menual, 6)} times slower")
 
 
 @pytest.mark.benchmark
@@ -250,4 +250,4 @@ def test_create_root_reuse():
     res = round(end - start, 6)
     print(f"ididi resolve {res}")
 
-    print(f"current implementation is {round(res / menual, 6)} times slower")
+    print(f"current implementation(reuse dependencies) is {round(res / menual, 6)} times slower")

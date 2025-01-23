@@ -27,6 +27,7 @@ from ._type_resolve import (
     ResolveOrder,
     flatten_annotated,
     get_args,
+    get_factory_sig_from_cls,
     get_typed_signature,
     is_actxmgr_cls,
     is_class,
@@ -56,7 +57,7 @@ from .interfaces import (
     NodeIgnoreConfig,
 )
 from .utils.param_utils import MISSING, Maybe, is_provided
-from .utils.typing_utils import P, T, get_factory_sig_from_cls
+from .utils.typing_utils import P, T
 
 Ignore = Annotated[T, IDIDI_IGNORE_PARAM_MARK]
 
@@ -491,7 +492,7 @@ class DependentNode(Generic[T]):
                     deps.update(name, param.replace_type(param_type))
 
         node = DependentNode(
-            dependent_type=dependent_type,
+            dependent_type=resolve_annotation(dependent_type),
             factory=factory,
             factory_type=factory_type,
             dependencies=deps,

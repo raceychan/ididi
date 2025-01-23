@@ -3,9 +3,9 @@ This module separates the type resolution logic between utils.typing_utils and t
 """
 
 import sys
-from functools import lru_cache
 from collections.abc import AsyncGenerator, Generator
-from inspect import Signature
+from functools import lru_cache
+from inspect import Parameter, Signature
 from inspect import isasyncgenfunction as isasyncgenfunction
 from inspect import isgeneratorfunction as isgeneratorfunction
 from types import GenericAlias, MethodType
@@ -18,6 +18,7 @@ from typing import (
     ContextManager,
     ForwardRef,
     Literal,
+    NewType,
     Protocol,
     TypeVar,
     Union,
@@ -34,7 +35,7 @@ from .errors import (
     UnsolvableReturnTypeError,
 )
 from .interfaces import AsyncClosable, Closable
-from .utils.typing_utils import T, eval_type, get_full_typed_signature, is_builtin_type
+from .utils.typing_utils import T, eval_type, get_typed_annotation, is_builtin_type
 
 if sys.version_info >= (3, 10):
     from types import UnionType
@@ -75,6 +76,31 @@ P = ParamSpec("P")
 class EmptyInitProtocol(Protocol): ...
 
 
+def get_typed_params(sig: Signature, gvars: dict[str, Any]) -> list[Parameter]:
+    params = sig.parameters.values()
+    typed_params = [
+        Parameter(
+            name=param.name,
+            kind=param.kind,
+            default=param.default,
+            annotation=get_typed_annotation(param.annotation, gvars),
+        )
+        for param in params
+    ]
+    return typed_params
+
+
+def get_factory_sig_from_cls(cls: type[T]) -> Signature:
+    """
+    Generate a signature from a class via its __init__ method.
+    annotate the return type with the class itself.
+    """
+    gvars = getattr(cls, "__globals__", {})
+    sig = Signature.from_callable(cls.__init__)
+    params = get_typed_params(sig, gvars)
+    return sig.replace(parameters=params, return_annotation=cls)
+
+
 def get_typed_signature(
     call: Callable[..., T],
     check_return: bool = False,
@@ -82,13 +108,21 @@ def get_typed_signature(
     """
     Get a typed signature from a factory.
     """
-    sig = get_full_typed_signature(call)
-    sig_return: Union[type[T], ForwardRef] = sig.return_annotation
+    gvars = getattr(call, "__globals__", {})
+    raw_sig = Signature.from_callable(call)
+
+    typed_params = get_typed_params(raw_sig, gvars)
+    sig_return = get_typed_annotation(raw_sig.return_annotation, gvars)
+
     if isinstance(sig_return, ForwardRef):
         raise ForwardReferenceNotFoundError(sig_return)
     if check_return and is_unsolvable_type(sig_return):
         raise UnsolvableReturnTypeError(call, sig_return)
-    return sig
+
+    return raw_sig.replace(
+        parameters=typed_params,
+        return_annotation=sig_return,
+    )
 
 
 def resolve_factory_return(sig_return: type[T]) -> type[T]:
@@ -205,8 +239,34 @@ def first_solvable_type(types: tuple[Any, ...]) -> type:
     return types[0]
 
 
+"""
+check TypeAlias:
+
+type C = str
+
+type(C) is TypeAliasType
+
+"""
+
+
+@lru_cache(None)
+def resolve_new_type(annotation: Any) -> type:
+    name, stype = getattr(annotation, "__name__"), annotation.__supertype__
+    ntype = type(f"ididi.NewTypeCompat({name!r}: str)", (object,), {"stype": stype})
+    return ntype
+
+
+def is_new_type(annotation: Any) -> bool:
+    return hasattr(annotation, "__supertype__")
+
+
 def resolve_annotation(annotation: Any) -> type:
     origin = get_origin(annotation) or annotation
+
+    if is_new_type(annotation):
+        ntype = resolve_new_type(annotation)
+        return ntype
+
     if origin is Annotated:  # we need to perserve __metadata__
         return annotation
 
@@ -219,6 +279,7 @@ def resolve_annotation(annotation: Any) -> type:
     if origin in UNION_META:
         union_types = get_args(annotation)
         return first_solvable_type(union_types)
+
     return origin
 
 
@@ -243,3 +304,6 @@ def get_bases(dependent: type) -> tuple[type, ...]:
     else:
         bases = dependent.__mro__[1:-1]
     return bases
+
+
+class NewTypeCompat: ...
