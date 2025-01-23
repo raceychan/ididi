@@ -18,7 +18,6 @@ from typing import (
     ContextManager,
     ForwardRef,
     Literal,
-    NewType,
     Protocol,
     TypeVar,
     Union,
@@ -251,8 +250,9 @@ type(C) is TypeAliasType
 
 @lru_cache(None)
 def resolve_new_type(annotation: Any) -> type:
-    name, stype = getattr(annotation, "__name__"), annotation.__supertype__
-    ntype = type(f"ididi.NewTypeCompat({name!r}: str)", (object,), {"stype": stype})
+    name = getattr(annotation, "__name__")
+    tyep_repr = getattr(annotation.__supertype__, "__name__")
+    ntype = type(f"NewType({name!r}: {tyep_repr})", (object,), {})
     return ntype
 
 
@@ -304,6 +304,3 @@ def get_bases(dependent: type) -> tuple[type, ...]:
     else:
         bases = dependent.__mro__[1:-1]
     return bases
-
-
-class NewTypeCompat: ...
