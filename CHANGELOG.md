@@ -844,7 +844,6 @@ Graph.remove_dependent(self, dependent_type: type) -> None
 Resolve NewType
 
 
-
 ```py
 from uuid import uuid4
 
