@@ -1,6 +1,6 @@
 from abc import ABC
 from contextlib import asynccontextmanager, contextmanager
-from dataclasses import dataclass
+from dataclasses import FrozenInstanceError, dataclass
 from functools import lru_cache
 from inspect import _ParameterKind  # type: ignore
 from inspect import Parameter, Signature, isasyncgenfunction, isgeneratorfunction
@@ -38,10 +38,9 @@ from ._type_resolve import (
     isasyncgenfunction,
     isgeneratorfunction,
     resolve_annotation,
-    resolve_factory_return,
     resolve_forwardref,
 )
-from .errors import (  # NotSupportedError,
+from .errors import (
     ABCNotImplementedError,
     MissingAnnotationError,
     ProtocolFacotryNotProvidedError,
@@ -59,6 +58,7 @@ from .interfaces import (
 from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import P, T
 
+# ============== Ididi special hooks ===========
 Ignore = Annotated[T, IDIDI_IGNORE_PARAM_MARK]
 
 
@@ -79,6 +79,37 @@ def use(
     node = DependentNode[T].from_node(factory, config=NodeConfig(**iconfig))
     annt = Annotated[node.dependent_type, node, IDIDI_USE_FACTORY_MARK]
     return cast(T, annt)
+
+
+def newtype(
+    name: str,
+    origin: type[T],
+    factory: INodeFactory[P, T],
+    **iconfig: Unpack[INodeConfig],
+):
+    """
+    from ididi import TypeMaker
+    from datetime import datetime, timezone
+
+    def utc_factory() -> datetime:
+        return datetime.now(timezone.utc)
+
+    UtcDatetime = TypeMaker("UtcDatetime", datetime, utc_factory)
+
+    class Clock:
+        def __init__(self, now: UtcDatetime):
+            ...
+
+    Here, UtcDatetime should be resolved as
+
+    Annotated[NewType("UtcDatetime", datetime), use(utc_factory)]
+    """
+
+    # from typing import NewType
+    # return Annotated[NewType(name, origin), use(factory, **iconfig)]
+
+
+# ============== Ididi special hooks ===========
 
 
 def search_meta(meta: list[Any]) -> Union["DependentNode[Any]", None]:
@@ -113,6 +144,7 @@ class NodeConfig:
     __slots__ = ("reuse", "ignore")
 
     ignore: NodeIgnore
+    reuse: bool
 
     def __init__(
         self,
@@ -126,8 +158,8 @@ class NodeConfig:
         elif not isinstance(ignore, tuple):
             ignore = (ignore,)
 
-        self.ignore = ignore
-        self.reuse = reuse
+        object.__setattr__(self, "ignore", ignore)
+        object.__setattr__(self, "reuse", reuse)
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, NodeConfig):
@@ -136,6 +168,12 @@ class NodeConfig:
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.reuse=}, {self.ignore=})"
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise FrozenInstanceError("can't set attribute")
+
+    def __hash__(self) -> int:
+        return hash((self.reuse, self.ignore))
 
 
 # ======================= Signature =====================================
@@ -486,7 +524,9 @@ class DependentNode(Generic[T]):
             if get_origin(param_type) is Annotated:
                 annotate_meta = flatten_annotated(param_type)
                 if IDIDI_IGNORE_PARAM_MARK in annotate_meta:
-                    config.ignore = config.ignore + (name,)
+                    config = NodeConfig(
+                        reuse=config.reuse, ignore=config.ignore + (name,)
+                    )
                 elif IDIDI_USE_FACTORY_MARK not in annotate_meta:
                     param_type, *_ = get_args(param_type)
                     deps.update(name, param.replace_type(param_type))
@@ -522,7 +562,7 @@ class DependentNode(Generic[T]):
             factory_type = "function"
 
         signature = get_typed_signature(f, check_return=True)
-        dependent: type[T] = resolve_factory_return(signature.return_annotation)
+        dependent: type[T] = resolve_annotation(signature.return_annotation)
         node = cls.create(
             dependent_type=dependent,
             factory=cast(INodeFactory[P, T], f),
@@ -560,7 +600,7 @@ class DependentNode(Generic[T]):
         )
 
     @classmethod
-    # @lru_cache(1024)
+    @lru_cache(1024)
     def from_node(
         cls,
         factory_or_class: INode[P, T],

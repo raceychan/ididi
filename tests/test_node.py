@@ -1,3 +1,7 @@
+from dataclasses import FrozenInstanceError
+
+import pytest
+
 from ididi import DependentNode
 
 
@@ -65,3 +69,15 @@ def test_varidc_keyword_args():
     node = DependentNode.from_node(Service)
     assert node.dependencies["kwargs"].unresolvable
     repr(node)
+
+
+def test_node_config_frozen():
+    ...
+
+    class Service:
+        def __init__(self, **kwargs: int):
+            self.kwargs = kwargs
+
+    node = DependentNode.from_node(Service)
+    with pytest.raises(FrozenInstanceError):
+        node.config.reuse = False

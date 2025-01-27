@@ -49,11 +49,27 @@ def test_resolve_age():
 CommandContext = NewType("CommandContext", dict[str, str])
 
 
-@dg.node
 def command_context_factory() -> CommandContext:
     return CommandContext({"name": "test"})
 
 
 def test_command_context():
-    ctx = dg.resolve(CommandContext)
+    ctx = dg.resolve(command_context_factory)
     assert ctx == {"name": "test"}
+
+
+def test_direct_resolve_nt():
+    from datetime import datetime, timezone
+
+    UTCDatetime = NewType("UTCDatetime", datetime)
+
+    def utc_factory() -> UTCDatetime:
+        return UTCDatetime(datetime.now(timezone.utc))
+
+    dt = dg.resolve(utc_factory)
+    assert isinstance(dt, datetime)
+    assert dt.tzinfo == timezone.utc
+
+    dt2 = dg.resolve(UTCDatetime)
+    assert isinstance(dt2, datetime)
+    assert dt != dt2

@@ -29,6 +29,7 @@ from typing_extensions import Self, Unpack
 from ._ds import GraphNodes, GraphNodesView, ResolvedInstances, TypeRegistry, Visitor
 from ._node import DependentNode, NodeConfig, resolve_use, should_override
 from ._type_resolve import (
+    FactoryType,
     get_bases,
     get_typed_signature,
     is_class,
@@ -36,7 +37,6 @@ from ._type_resolve import (
     is_unsolvable_type,
     resolve_annotation,
     resolve_factory,
-    resolve_new_type,
 )
 from .errors import (
     AsyncResourceInSyncError,
@@ -466,10 +466,6 @@ class Graph:
         if (node := self._nodes.get(dependent)) and node.factory_type != "default":
             return node
 
-        if is_new_type(dependent):
-            ntype: type[Any] = resolve_new_type(dependent)
-            return self._nodes[ntype]
-
         concrete_type = self._type_registry[dependent][-1]
         concrete_node = self._nodes[concrete_type]
         concrete_node.check_for_implementations()
@@ -516,18 +512,20 @@ class Graph:
         self,
         resolved: T,
         dependent_type: type[T],
-        factory_type: str,
+        factory_type: FactoryType,
         is_reuse: bool,
         scope: Maybe[SyncScope],
     ):
         if factory_type in ("default", "function"):
-            instance = resolved
             if is_reuse:
                 register_dependent(self._resolution_registry, dependent_type, resolved)
-            return instance
+            return resolved
 
         if not scope:
             raise ResourceOutsideScopeError(dependent_type)
+
+        if factory_type == "aresource":
+            raise AsyncResourceInSyncError(dependent_type)
 
         instance = scope.enter_context(cast(ContextManager[T], resolved))
         if is_reuse:
@@ -538,7 +536,7 @@ class Graph:
         self,
         resolved: Union[T, Awaitable[T]],
         dependent_type: type[T],
-        factory_type: str,
+        factory_type: FactoryType,
         is_reuse: bool,
         scope: Maybe[AsyncScope],
     ):
@@ -546,20 +544,21 @@ class Graph:
             instance = await resolved if isawaitable(resolved) else resolved
             if is_reuse:
                 register_dependent(self._resolution_registry, dependent_type, instance)
+            return cast(T, instance)
+
+        if not scope:
+            raise ResourceOutsideScopeError(dependent_type)
+
+        if factory_type == "resource":
+            instance = scope.enter_context(cast(ContextManager[T], resolved))
         else:
-            if not scope:
-                raise ResourceOutsideScopeError(dependent_type)
+            instance = await scope.enter_async_context(
+                cast(AsyncContextManager[T], resolved)
+            )
 
-            if factory_type == "resource":
-                instance = scope.enter_context(cast(ContextManager[T], resolved))
-            else:
-                instance = await scope.enter_async_context(
-                    cast(AsyncContextManager[T], resolved)
-                )
-            if is_reuse:
-                scope.cache_result(dependent_type, instance)
-
-        return cast(T, instance)
+        if is_reuse:
+            scope.cache_result(dependent_type, instance)
+        return instance
 
     # ==========================  Public ==========================
 
@@ -686,6 +685,7 @@ class Graph:
                     self._node(dependent_type, config)
             elif is_new_type(dependent_factory):
                 dependent_type = resolve_annotation(dependent_factory)
+                self._node(dependent_type, config)
             else:
                 dependent_type = resolve_factory(dependent_factory)
                 if dependent_type not in self._nodes:
@@ -886,9 +886,6 @@ class Graph:
         provided_params = tuple(overrides)
         node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
 
-        if node.factory_type == "aresource":
-            raise AsyncResourceInSyncError(node.dependent_type)
-
         unsolved_params = node.unsolved_params(self._config.ignore + provided_params)
 
         params = overrides
@@ -940,7 +937,9 @@ class Graph:
             scope=scope,
         )
 
-    def _analyze_entry(self, config: NodeConfig, func: IFactory[P, T]):
+    def _analyze_params(
+        self, func: Callable[P, T], config: NodeConfig = NodeConfig()
+    ) -> tuple[bool, list[tuple[str, type]]]:
         ignores = self._config.ignore + config.ignore
         func_params = get_typed_signature(func).parameters.items()
         depends_on_resource: bool = False
@@ -970,12 +969,12 @@ class Graph:
 
     @overload
     def entry(
-        self, func: IFactory[P, T], **iconfig: Unpack[INodeConfig]
+        self, func: Callable[P, T], **iconfig: Unpack[INodeConfig]
     ) -> EntryFunc[P, T]: ...
 
     def entry(
         self,
-        func: Union[IFactory[P, T], IAsyncFactory[P, T], None] = None,
+        func: Union[Callable[P, T], IAsyncFactory[P, T], None] = None,
         **iconfig: Unpack[INodeConfig],
     ) -> Union[EntryFunc[P, T], TEntryDecor]:
         """
@@ -985,9 +984,6 @@ class Graph:
 
         ### Dependency overrides must be passed as kwarg arguments
 
-        it is recommended to put data first then dependencies in func signature
-        such as:
-        
         ```py
         @entry
         async def create_user(user_name: str, user_email: str, repo: Repository):
@@ -1016,7 +1012,7 @@ class Graph:
             return configured
 
         config = NodeConfig(**iconfig)
-        require_scope, unresolved = self._analyze_entry(config, func)
+        require_scope, unresolved = self._analyze_params(func, config)
 
         def replace(
             before: Maybe[type[T]] = MISSING,
@@ -1043,8 +1039,7 @@ class Graph:
                         for param_name, param_type in unresolved:
                             if param_name in kwargs:
                                 continue
-                            resolved = await self.aresolve(param_type, scope)
-                            kwargs[param_name] = resolved
+                            kwargs[param_name] = await self.aresolve(param_type, scope)
 
                         r = await func(*args, **kwargs)
                         return r
@@ -1057,9 +1052,7 @@ class Graph:
                     for param_name, param_type in unresolved:
                         if param_name in kwargs:
                             continue
-                        resolved = await self.aresolve(param_type)
-                        kwargs[param_name] = resolved
-
+                        kwargs[param_name] = await self.aresolve(param_type)
                     r = await func(*args, **kwargs)
                     return r
 
@@ -1075,8 +1068,7 @@ class Graph:
                         for param_name, param_type in unresolved:
                             if param_name in kwargs:
                                 continue
-                            resolved = self.resolve(param_type, scope)
-                            kwargs[param_name] = resolved
+                            kwargs[param_name] = self.resolve(param_type, scope)
 
                         r = sync_func(*args, **kwargs)
                         return r
@@ -1089,9 +1081,7 @@ class Graph:
                     for param_name, param_type in unresolved:
                         if param_name in kwargs:
                             continue
-                        resolved = self.resolve(param_type)
-                        kwargs[param_name] = resolved
-
+                        kwargs[param_name] = self.resolve(param_type)
                     r = sync_func(*args, **kwargs)
                     return r
 

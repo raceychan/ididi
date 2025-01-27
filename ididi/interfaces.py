@@ -117,7 +117,6 @@ class AsyncClosable(Protocol):
 class EntryFunc(Protocol[P, C]):
     __name__: str
 
-
     def __call__(self, *args: Any, **kwargs: Any) -> C: ...
 
     @overload
@@ -146,7 +145,3 @@ class EntryFunc(Protocol[P, C]):
 
 class TEntryDecor(Protocol):
     def __call__(self, func: Callable[P, T]) -> EntryFunc[P, T]: ...
-
-
-
-

@@ -36,7 +36,7 @@ pip install ididi[graphviz]
 - **Performant**: almost as fast as hard-coded factories, one of the fastest dependency injection framework available.
 - **Noninvasive**: No / minial changes to your existing code
 - **Smart**: inject dependency based on type hints, with strong support to `typing` module.
-- **Powerful**: Ididi does what others do, and also provides features that others don't, such as advanced scope support, strong typing support, circular dependency detection, and more.
+- **Powerful**: Ididi does what others do, and also provides features that others don't.
 - **Correct**, strictly typed, well-organized exceptions, well-formatted and detail-rich error messages
 
 

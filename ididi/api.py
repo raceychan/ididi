@@ -4,7 +4,7 @@ from typing import Any, Awaitable, Callable, Union, cast, overload
 from typing_extensions import Unpack
 
 from .graph import Graph as Graph
-from .interfaces import IAsyncFactory, IFactory, INodeConfig, TEntryDecor
+from .interfaces import INodeConfig, TEntryDecor
 from .utils.typing_utils import P, T
 
 
@@ -13,11 +13,11 @@ def entry(**iconfig: Unpack[INodeConfig]) -> TEntryDecor: ...
 
 
 @overload
-def entry(func: IFactory[P, T]) -> Callable[..., T]: ...
+def entry(func: Callable[P, T]) -> Callable[..., T]: ...
 
 
 def entry(
-    func: Union[IFactory[P, T], IAsyncFactory[P, T], None] = None,
+    func: Union[Callable[P, T], None] = None,
     **iconfig: Unpack[INodeConfig],
 ) -> Union[Callable[..., Union[T, Awaitable[T]]], TEntryDecor]:
     if not func:

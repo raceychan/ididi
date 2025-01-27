@@ -74,7 +74,18 @@ def eval_type(
         return value
 
 
-def get_typed_annotation(annotation: Any, gvars: dict[str, Any]) -> Any:
+def actualize_strforward(annotation: Any, gvars: dict[str, Any]) -> Any:
+    """
+    solve cases where user refer to a existing class using a string.
+    e.g.
+    ```py
+    class UserService: ...
+
+    def user_service_factory() -> "UserService": ...
+    ```
+    Here "UserService" is a string not `typing.ForwardRef`
+    """
+
     if isinstance(annotation, str):
         annotation = ForwardRef(annotation, is_argument=False)
         annotation = eval_type(annotation, gvars, gvars, lenient=True)

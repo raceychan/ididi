@@ -34,7 +34,7 @@ from .errors import (
     UnsolvableReturnTypeError,
 )
 from .interfaces import AsyncClosable, Closable
-from .utils.typing_utils import T, eval_type, get_typed_annotation, is_builtin_type
+from .utils.typing_utils import T, actualize_strforward, eval_type, is_builtin_type
 
 if sys.version_info >= (3, 10):
     from types import UnionType
@@ -61,7 +61,7 @@ ResolveOrder: dict[FactoryType, int] = {
     "aresource": 3,
 }
 # when merge graphs we need to make sure a node with default constructor
-# does not override a node with resource
+# does not override a node with resource / function factory
 
 ExtraUnsolvableTypes = {
     Any,
@@ -82,7 +82,7 @@ def get_typed_params(sig: Signature, gvars: dict[str, Any]) -> list[Parameter]:
             name=param.name,
             kind=param.kind,
             default=param.default,
-            annotation=get_typed_annotation(param.annotation, gvars),
+            annotation=actualize_strforward(param.annotation, gvars),
         )
         for param in params
     ]
@@ -111,32 +111,44 @@ def get_typed_signature(
     raw_sig = Signature.from_callable(call)
 
     typed_params = get_typed_params(raw_sig, gvars)
-    sig_return = get_typed_annotation(raw_sig.return_annotation, gvars)
+    typed_return = actualize_strforward(raw_sig.return_annotation, gvars)
 
-    if isinstance(sig_return, ForwardRef):
-        raise ForwardReferenceNotFoundError(sig_return)
-    if check_return and is_unsolvable_type(sig_return):
-        raise UnsolvableReturnTypeError(call, sig_return)
+    if isinstance(typed_return, ForwardRef):
+        raise ForwardReferenceNotFoundError(typed_return)
+    if check_return and is_unsolvable_type(typed_return):
+        raise UnsolvableReturnTypeError(call, typed_return)
 
     return raw_sig.replace(
         parameters=typed_params,
-        return_annotation=sig_return,
+        return_annotation=typed_return,
     )
 
 
-def resolve_factory_return(sig_return: type[T]) -> type[T]:
-    """
-    Get dependent type from a factory return
-    """
-    origin_return = get_origin(sig_return)
+def resolve_annotation(annotation: Any) -> type:
+    origin = get_origin(annotation) or annotation
 
-    if origin_return in (AsyncGenerator, Generator):
-        dependent, *_ = get_args(sig_return)
+    if is_new_type(annotation):
+        ntype = resolve_new_type(annotation)
+        return ntype
+
+    if origin is Annotated:  # we need to perserve __metadata__
+        return annotation
+
+    if origin in (Unpack, Literal):
+        return cast(type, origin)
+
+    if origin in (AsyncGenerator, Generator):
+        dependent, *_ = get_args(annotation)
         return dependent
 
-    if isinstance(origin_return, type) and get_args(sig_return):
-        return origin_return
-    return sig_return
+    if isinstance(annotation, TypeVar):
+        raise GenericDependencyNotSupportedError(annotation)
+
+    if origin in UNION_META:
+        union_types = get_args(annotation)
+        return first_solvable_type(union_types)
+
+    return origin
 
 
 def resolve_factory(factory: Callable[..., T]) -> type[T]:
@@ -146,7 +158,7 @@ def resolve_factory(factory: Callable[..., T]) -> type[T]:
     should handle Annotate, Generator function, etc.
     """
     sig = get_typed_signature(factory, check_return=True)
-    dependent: type[T] = resolve_factory_return(sig.return_annotation)
+    dependent: type[T] = resolve_annotation(sig.return_annotation)
     return dependent
 
 
@@ -162,17 +174,6 @@ def is_unsolvable_type(t: Any) -> bool:
     - builtin types
     """
     return is_builtin_type(t) or t is Signature.empty or t in ExtraUnsolvableTypes
-
-
-# def is_context_manager(t: T) -> TypeGuard[ContextManager[T]]:
-#     return isinstance(t, AbstractContextManager)
-
-
-# def is_async_context_manager(t: T) -> TypeGuard[AsyncContextManager[T]]:
-#     return isinstance(t, AbstractAsyncContextManager)
-
-# def is_any_generator(func: Union[Callable[..., T], None]):
-#     return isgeneratorfunction(func) or isasyncgenfunction(func)
 
 
 def is_actxmgr_cls(
@@ -201,10 +202,6 @@ def is_class(
     is_type = isinstance(origin, type)
     is_generic_alias = isinstance(obj, GenericAlias)
     return is_type or is_generic_alias
-
-
-# def is_function(obj: Union[type[T], Callable[P, T]]) -> TypeGuard[Callable[P, T]]:
-#     return isinstance(obj, FunctionType)
 
 
 def is_class_with_empty_init(cls: type) -> bool:
@@ -248,7 +245,7 @@ type(C) is TypeAliasType
 """
 
 
-@lru_cache(None)
+@lru_cache(1024)
 def resolve_new_type(annotation: Any) -> type:
     name = getattr(annotation, "__name__")
     tyep_repr = getattr(annotation.__supertype__, "__name__")
@@ -258,29 +255,6 @@ def resolve_new_type(annotation: Any) -> type:
 
 def is_new_type(annotation: Any) -> bool:
     return hasattr(annotation, "__supertype__")
-
-
-def resolve_annotation(annotation: Any) -> type:
-    origin = get_origin(annotation) or annotation
-
-    if is_new_type(annotation):
-        ntype = resolve_new_type(annotation)
-        return ntype
-
-    if origin is Annotated:  # we need to perserve __metadata__
-        return annotation
-
-    if origin in (Unpack, Literal):
-        return cast(type, origin)
-
-    if isinstance(annotation, TypeVar):
-        raise GenericDependencyNotSupportedError(annotation)
-
-    if origin in UNION_META:
-        union_types = get_args(annotation)
-        return first_solvable_type(union_types)
-
-    return origin
 
 
 def flatten_annotated(typ: Annotated[Any, Any]) -> list[Any]:
