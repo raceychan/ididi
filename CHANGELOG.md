@@ -877,3 +877,11 @@ def uuid_factory() -> UUID:
 when we try to resolve uuid_factory, the return is a type `str`,
 not a `TypeAlias`.
 ```
+
+
+## version 1.3.2
+
+- Now when override entry dependencies  with `entryfunc.replace`, ididi will automatically analyze the override dependency
+
+- `NodeConfig` is now immutable and hashable
+- rename `Graph._analyze_entry` to `Graph.analyze_params`, 

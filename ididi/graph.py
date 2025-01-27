@@ -60,6 +60,7 @@ from .interfaces import (
     IFactory,
     INode,
     INodeConfig,
+    NodeIgnore,
     TDecor,
     TEntryDecor,
 )
@@ -937,9 +938,10 @@ class Graph:
             scope=scope,
         )
 
-    def _analyze_params(
-        self, func: Callable[P, T], config: NodeConfig = NodeConfig()
+    def analyze_params(
+        self, func: Callable[P, T], **iconfig: Unpack[INodeConfig]
     ) -> tuple[bool, list[tuple[str, type]]]:
+        config = NodeConfig(**iconfig)
         ignores = self._config.ignore + config.ignore
         func_params = get_typed_signature(func).parameters.items()
         depends_on_resource: bool = False
@@ -1011,23 +1013,23 @@ class Graph:
             configured = cast(TEntryDecor, partial(self.entry, **iconfig))
             return configured
 
-        config = NodeConfig(**iconfig)
-        require_scope, unresolved = self._analyze_params(func, config)
+        require_scope, unresolved = self.analyze_params(func, **iconfig)
 
         def replace(
             before: Maybe[type[T]] = MISSING,
             after: Maybe[type[T]] = MISSING,
-            **kwargs: type[Any],
+            **kw_overrides: type[Any],
         ):
             nonlocal unresolved
 
             for i, (pname, ptype) in enumerate(unresolved):
-                if ptype is before:
-                    after = cast(type[T], after)
-                    unresolved[i] = (pname, after)
+                if ptype is before and is_provided(after):
+                    analyzed = self.analyze(after).dependent_type
+                    unresolved[i] = (pname, analyzed)
 
-                if pname in kwargs:
-                    unresolved[i] = (pname, kwargs[pname])
+                if pname in kw_overrides:
+                    analyzed = self.analyze(kw_overrides[pname]).dependent_type
+                    unresolved[i] = (pname, analyzed)
 
         if iscoroutinefunction(func):
             if require_scope:
