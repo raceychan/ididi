@@ -1,16 +1,14 @@
 .PHONY: test
 test:
-	pixi run -e test pytest -m "not benchmark" -vsx tests/
+	pixi run -e test pytest -m "not benchmark" -vx --capture=fd tests/
 
 .PHONY: debug
 debug:
-	pixi run -e test pytest -vx  -m debug  tests/
+	pixi run -e test pytest -vx  -m debug tests/
 
 .PHONY: profile
 profile:
 	pixi run -e test pyinstrument -m pytest tests/test_benchmark.py
-#pixi run -e test pyinstrument -m profile
-
 
 .PHONY: feat
 feat:
@@ -22,7 +20,7 @@ benchmark:
 
 .PHONY: debug-cov
 debug-cov:
-	pixi run -e test pytest -vx  -m debug --cov=ididi --cov-report term-missing tests/
+	pixi run -e test pytest -vx -m debug --cov=ididi --cov-report term-missing tests/
 
 .PHONY: cov
 cov:

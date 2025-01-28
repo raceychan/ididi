@@ -318,11 +318,10 @@ class ScopeProxy:
 class GraphConfig:
     __slots__ = ("self_inject", "ignore")
 
-    def __init__(self, *, self_inject: bool, ignore: Maybe[GraphIgnoreConfig]):
+    def __init__(self, *, self_inject: bool, ignore: GraphIgnoreConfig):
         self.self_inject = self_inject
-        if not is_provided(ignore):
-            ignore = tuple()
-        elif not isinstance(ignore, tuple):
+
+        if not isinstance(ignore, tuple):
             ignore = (ignore,)
 
         self.ignore = ignore
@@ -379,7 +378,7 @@ class Graph:
     )
 
     def __init__(
-        self, *, self_inject: bool = True, ignore: Maybe[GraphIgnoreConfig] = MISSING
+        self, *, self_inject: bool = True, ignore: GraphIgnoreConfig = tuple()
     ):
         """
         - self_inject:
@@ -963,6 +962,7 @@ class Graph:
         config = NodeConfig(**iconfig)
         ignores = self._config.ignore + config.ignore
         func_params = get_typed_signature(func).parameters.items()
+
         depends_on_resource: bool = False
         unresolved: list[tuple[str, type]] = []
 

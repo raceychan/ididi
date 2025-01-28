@@ -72,12 +72,8 @@ def test_varidc_keyword_args():
 
 
 def test_node_config_frozen():
-    ...
-
-    class Service:
-        def __init__(self, **kwargs: int):
-            self.kwargs = kwargs
 
     node = DependentNode.from_node(Service)
     with pytest.raises(FrozenInstanceError):
         node.config.reuse = False
+

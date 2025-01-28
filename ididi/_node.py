@@ -2,8 +2,9 @@ from abc import ABC
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import FrozenInstanceError, dataclass
 from functools import lru_cache
-from inspect import _ParameterKind  # type: ignore
-from inspect import Parameter, Signature, isasyncgenfunction, isgeneratorfunction
+from inspect import Parameter, Signature
+from inspect import _ParameterKind as ParameterKind  # type: ignore
+from inspect import isasyncgenfunction, isgeneratorfunction
 from typing import (
     Annotated,
     Any,
@@ -80,34 +81,6 @@ def use(
     node = DependentNode[T].from_node(factory, config=NodeConfig(**iconfig))
     annt = Annotated[node.dependent_type, node, IDIDI_USE_FACTORY_MARK]
     return cast(T, annt)
-
-
-def newtype(
-    name: str,
-    origin: type[T],
-    factory: INodeFactory[P, T],
-    **iconfig: Unpack[INodeConfig],
-):
-    """
-    from ididi import TypeMaker
-    from datetime import datetime, timezone
-
-    def utc_factory() -> datetime:
-        return datetime.now(timezone.utc)
-
-    UtcDatetime = TypeMaker("UtcDatetime", datetime, utc_factory)
-
-    class Clock:
-        def __init__(self, now: UtcDatetime):
-            ...
-
-    Here, UtcDatetime should be resolved as
-
-    Annotated[NewType("UtcDatetime", datetime), use(utc_factory)]
-    """
-
-    # from typing import NewType
-    # return Annotated[NewType(name, origin), use(factory, **iconfig)]
 
 
 # ============== Ididi special hooks ===========
@@ -203,7 +176,7 @@ class Dependency(Generic[T]):
 
     name: str
     param_type: type[T]  # resolved_type
-    param_kind: _ParameterKind
+    param_kind: ParameterKind
     default: Maybe[T]
 
     def __repr__(self) -> str:
@@ -244,18 +217,12 @@ class Dependency(Generic[T]):
         )
 
 
-class Dependencies(Generic[T]):
+class Dependencies:
     __slots__ = ("_deps", "_sig")
 
     def __init__(self, deps: dict[str, Dependency[Any]]):
         self._deps = deps
         self._sig: Union[Signature, None] = None
-
-    """
-    # hash by dependent, and param names
-    def __hash__(self):
-        return hash((self.dependent, tuple(self.dprams.keys())))
-    """
 
     def __iter__(self) -> Iterator[tuple[str, Dependency[Any]]]:
         return iter(self._deps.items())
@@ -265,9 +232,6 @@ class Dependencies(Generic[T]):
 
     def __getitem__(self, param_name: str) -> Dependency[Any]:
         return self._deps[param_name]
-
-    def update(self, param_name: str, param_val: Dependency[Any]):
-        self._deps[param_name] = param_val
 
     def __repr__(self):
         deps_repr = ", ".join(
@@ -282,7 +246,6 @@ class Dependencies(Generic[T]):
         """
 
         if self._sig is None:
-
             self._sig = Signature(
                 parameters=[
                     Parameter(
@@ -296,13 +259,27 @@ class Dependencies(Generic[T]):
             )
         return self._sig
 
+    def update(self, param_name: str, param_val: Dependency[Any]):
+        self._deps[param_name] = param_val
+
+    def filter_ignore(
+        self, ignore: NodeIgnore
+    ) -> Generator[tuple[str, Dependency[Any]], None, None]:
+        for i, (param_name, param) in enumerate(self._deps.items()):
+            """
+            for param_name, param in ignore.filter(self._deps)
+            """
+            if (i in ignore) or (param_name in ignore) or (param.param_type in ignore):
+                continue
+            yield param_name, param
+
     @classmethod
     def from_signature(
         cls,
         dependent_type: type[T],
         factory: INodeFactory[P, T],
         signature: Signature,
-    ):
+    ) -> "Dependencies":
         params = tuple(signature.parameters.values())
 
         if is_class_or_method(factory):
@@ -329,7 +306,7 @@ class Dependencies(Generic[T]):
                 for name, ftype in fields.items():
                     dep_param = Dependency[Any](
                         name=name,
-                        param_kind=_ParameterKind.KEYWORD_ONLY,
+                        param_kind=ParameterKind.KEYWORD_ONLY,
                         param_type=resolve_annotation(ftype),
                         default=MISSING,
                     )
@@ -350,12 +327,6 @@ class Dependencies(Generic[T]):
             dependencies[param.name] = dep_param
 
         return cls(dependencies)
-
-    def filter_ignore(self, ignore: NodeIgnore):
-        for i, (param_name, param) in enumerate(self._deps.items()):
-            if (i in ignore) or (param_name in ignore) or (param.param_type in ignore):
-                continue
-            yield param_name, param
 
 
 # ======================= Node =====================================
@@ -411,7 +382,7 @@ class DependentNode(Generic[T]):
         dependent_type: type[T],
         factory: INodeAnyFactory[T],
         factory_type: FactoryType,
-        dependencies: Dependencies[T],
+        dependencies: Dependencies,
         config: NodeConfig,
     ):
         """
@@ -517,7 +488,7 @@ class DependentNode(Generic[T]):
         signature: Signature,
         config: NodeConfig,
     ) -> "DependentNode[T]":
-        deps = Dependencies[T].from_signature(dependent_type, factory, signature)
+        deps = Dependencies.from_signature(dependent_type, factory, signature)
 
         for name, param in deps.filter_ignore(config.ignore):
             param_type = param.param_type
