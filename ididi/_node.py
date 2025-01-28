@@ -1,6 +1,6 @@
 from abc import ABC
 from contextlib import asynccontextmanager, contextmanager
-from dataclasses import FrozenInstanceError, dataclass
+from dataclasses import dataclass
 from functools import lru_cache
 from inspect import Parameter, Signature
 from inspect import _ParameterKind as ParameterKind  # type: ignore
@@ -41,6 +41,7 @@ from ._type_resolve import (
     resolve_annotation,
     resolve_forwardref,
 )
+from .config import DefaultConfig, NodeConfig
 from .errors import (
     ABCNotImplementedError,
     MissingAnnotationError,
@@ -54,7 +55,6 @@ from .interfaces import (
     INodeConfig,
     INodeFactory,
     NodeIgnore,
-    NodeIgnoreConfig,
 )
 from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import P, T
@@ -114,41 +114,6 @@ def should_override(
     return ans
 
 
-class NodeConfig:
-    __slots__ = ("reuse", "ignore")
-
-    ignore: NodeIgnore
-    reuse: bool
-
-    def __init__(
-        self,
-        *,
-        reuse: bool = True,
-        ignore: NodeIgnoreConfig = (),
-    ):
-
-        if not isinstance(ignore, tuple):
-            ignore = (ignore,)
-
-        object.__setattr__(self, "ignore", ignore)
-        object.__setattr__(self, "reuse", reuse)
-
-    def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, NodeConfig):
-            return False
-        return (self.ignore == other.ignore) and (self.reuse == other.reuse)
-
-    def __repr__(self):
-        return f"{self.__class__.__name__}({self.reuse=}, {self.ignore=})"
-
-    def __setattr__(self, name: str, value: Any) -> None:
-        raise FrozenInstanceError("can't set attribute")
-
-    def __hash__(self) -> int:
-        return hash((self.reuse, self.ignore))
-
-
-DefaultConfig = NodeConfig()
 # ======================= Signature =====================================
 
 
@@ -276,7 +241,6 @@ class Dependencies:
     @classmethod
     def from_signature(
         cls,
-        dependent_type: type[T],
         factory: INodeFactory[P, T],
         signature: Signature,
     ) -> "Dependencies":
@@ -291,11 +255,11 @@ class Dependencies:
             param_annotation = param.annotation
             if param_annotation is INSPECT_EMPTY:
                 e = MissingAnnotationError(
-                    dependent_type=dependent_type,
+                    dependent_type=factory,
                     param_name=param.name,
                     param_type=param_annotation,
                 )
-                e.add_context(dependent_type, param.name, type(MISSING))
+                e.add_context(factory, param.name, type(MISSING))
                 raise e
 
             param_type = resolve_annotation(param_annotation)
@@ -412,7 +376,7 @@ class DependentNode(Generic[T]):
         self, ignore: NodeIgnore
     ) -> Generator[Dependency[T], None, None]:
         "params that needs to be statically resolved"
-        ignores = self.config.ignore + ignore
+        ignores = self.config.ignore | ignore
 
         for param_name, param in self.dependencies.filter_ignore(ignores):
             param_type = cast(Union[type, ForwardRef], param.param_type)
@@ -450,7 +414,7 @@ class DependentNode(Generic[T]):
     def unsolved_params(self, ignore: NodeIgnore) -> list[tuple[str, type]]:
         "yield dependencies that needs to be resolved"
         if not self._unsolved_params:
-            ignores = self.config.ignore + ignore
+            ignores = self.config.ignore | ignore
             for param_name, param in self.dependencies.filter_ignore(ignore=ignores):
                 param_type: type[T] = param.param_type
                 if is_provided(param.default) and is_unsolvable_type(param_type):
@@ -488,7 +452,7 @@ class DependentNode(Generic[T]):
         signature: Signature,
         config: NodeConfig,
     ) -> "DependentNode[T]":
-        deps = Dependencies.from_signature(dependent_type, factory, signature)
+        deps = Dependencies.from_signature(factory=factory, signature=signature)
 
         for name, param in deps.filter_ignore(config.ignore):
             param_type = param.param_type
@@ -496,7 +460,7 @@ class DependentNode(Generic[T]):
                 annotate_meta = flatten_annotated(param_type)
                 if IDIDI_IGNORE_PARAM_MARK in annotate_meta:
                     config = NodeConfig(
-                        reuse=config.reuse, ignore=config.ignore + (name,)
+                        reuse=config.reuse, ignore=config.ignore | {name}
                     )
                 elif IDIDI_USE_FACTORY_MARK not in annotate_meta:
                     param_type, *_ = get_args(param_type)

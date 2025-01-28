@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+import pytest
+
 from ididi import DependencyGraph, entry, resolve
 
 
@@ -95,9 +97,10 @@ class CreateUser:
     user_email: str
 
 
+@pytest.mark.debug
 async def test_entry_with_ignore():
 
-    @entry(ignore=(CreateUser,))
+    @entry(ignore=CreateUser)
     async def func4(service: NotificationService, cmd: CreateUser) -> str:
         return cmd.user_name
 
@@ -109,7 +112,7 @@ async def test_entry_with_ignore():
 async def test_dg_entry_with_override():
     dg = DependencyGraph()
 
-    @dg.entry(ignore=(CreateUser,))
+    @dg.entry(ignore=CreateUser)
     async def func4(
         service: NotificationService, cmd: CreateUser, *, config: Config
     ) -> str:
@@ -138,7 +141,7 @@ class Session:
 async def test_dg_entry_with_acm():
     dg = DependencyGraph()
 
-    @dg.entry(ignore=(CreateUser,))
+    @dg.entry(ignore=CreateUser)
     async def func4(
         service: NotificationService,
         cmd: CreateUser,
@@ -156,7 +159,7 @@ async def test_dg_entry_with_acm():
 def test_sync_entry_with_override():
     dg = DependencyGraph()
 
-    @dg.entry(ignore=(CreateUser,))
+    @dg.entry(ignore=CreateUser)
     def func4(
         service: NotificationService,
         cmd: CreateUser,

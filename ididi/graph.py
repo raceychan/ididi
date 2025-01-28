@@ -29,6 +29,7 @@ from typing_extensions import Self, Unpack
 from ._ds import GraphNodes, GraphNodesView, ResolvedInstances, TypeRegistry, Visitor
 from ._node import (
     DefaultConfig,
+    Dependencies,
     DependentNode,
     NodeConfig,
     resolve_use,
@@ -44,6 +45,7 @@ from ._type_resolve import (
     resolve_annotation,
     resolve_factory,
 )
+from .config import GraphConfig
 from .errors import (
     AsyncResourceInSyncError,
     CircularDependencyDetectedError,
@@ -315,16 +317,7 @@ class ScopeProxy:
         self._graph.reset_context_scope(self._token)
 
 
-class GraphConfig:
-    __slots__ = ("self_inject", "ignore")
 
-    def __init__(self, *, self_inject: bool, ignore: GraphIgnoreConfig):
-        self.self_inject = self_inject
-
-        if not isinstance(ignore, tuple):
-            ignore = (ignore,)
-
-        self.ignore = ignore
 
 
 @final
@@ -378,7 +371,7 @@ class Graph:
     )
 
     def __init__(
-        self, *, self_inject: bool = True, ignore: GraphIgnoreConfig = tuple()
+        self, *, self_inject: bool = True, ignore: GraphIgnoreConfig = frozenset()
     ):
         """
         - self_inject:
@@ -731,7 +724,7 @@ class Graph:
                     )
 
                 try:
-                    pnode = dfs(param_type, ())
+                    pnode = dfs(param_type, frozenset())
                 except UnsolvableNodeError as une:
                     une.add_context(node.dependent_type, param.name, param.param_type)
                     raise
@@ -752,7 +745,7 @@ class Graph:
 
         dependent_type = cast(type[T], dependent_type)
         current_path: list[type] = []
-        ignore = (ignore + self._config.ignore) if ignore else self._config.ignore
+        ignore = (ignore | self._config.ignore) if ignore else self._config.ignore
         return dfs(dependent_type, ignore)
 
     def analyze_nodes(self) -> None:
@@ -902,10 +895,10 @@ class Graph:
         if is_provided(resolution := self.get_resolve_cache(dependent, scope)):
             return resolution
 
-        provided_params = tuple(overrides)
+        provided_params = frozenset(overrides)
         node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
 
-        unsolved_params = node.unsolved_params(self._config.ignore + provided_params)
+        unsolved_params = node.unsolved_params(self._config.ignore | provided_params)
 
         params = overrides
         for param_name, param_type in unsolved_params:
@@ -939,10 +932,10 @@ class Graph:
         if is_provided(resolution := self.get_resolve_cache(dependent, scope)):
             return resolution
 
-        provided_params = tuple(overrides)
+        provided_params = frozenset(overrides)
         node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
 
-        unsolved_params = node.unsolved_params(self._config.ignore + provided_params)
+        unsolved_params = node.unsolved_params(self._config.ignore | provided_params)
 
         for param_name, param_type in unsolved_params:
             overrides[param_name] = await self.aresolve(param_type, scope)
@@ -960,19 +953,22 @@ class Graph:
         self, func: Callable[P, T], **iconfig: Unpack[INodeConfig]
     ) -> tuple[bool, list[tuple[str, type]]]:
         config = NodeConfig(**iconfig)
-        ignores = self._config.ignore + config.ignore
-        func_params = get_typed_signature(func).parameters.items()
+        ignores = self._config.ignore | config.ignore
+
+        deps = Dependencies.from_signature(
+            signature=get_typed_signature(func), factory=func
+        )
 
         depends_on_resource: bool = False
         unresolved: list[tuple[str, type]] = []
 
-        for i, (name, param) in enumerate(func_params):
-            param_type = resolve_annotation(param.annotation)
-            if i in ignores or name in ignores or param_type in ignores:
-                continue
+        for name, dep in deps.filter_ignore(ignores):
+            param_type = dep.param_type
+
             if is_unsolvable_type(param_type):
                 continue
-            if inject_node := (resolve_use(param_type) or resolve_use(param.default)):
+
+            if inject_node := (resolve_use(param_type) or resolve_use(dep.default)):
                 self._register_node(inject_node)
                 self._resolved_nodes[param_type] = inject_node
                 param_type = inject_node.dependent_type

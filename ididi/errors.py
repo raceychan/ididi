@@ -67,7 +67,9 @@ class UnsolvableNodeError(NodeResolveError):
     def add_note(self, note: str) -> None:
         self.__notes__.append(note)
 
-    def add_context(self, dependent: type, param_name: str, param_annotation: type):
+    def add_context(
+        self, dependent: Callable[..., Any], param_name: str, param_annotation: type
+    ):
         dep_repr = getattr(dependent, "__name__", str(dependent))
         param_repr = getattr(param_annotation, "__name__", str(param_annotation))
         msg = f"-> {dep_repr}({param_name}: {param_repr})"
@@ -138,7 +140,7 @@ class MissingAnnotationError(UnsolvableParameterError):
     def __init__(
         self,
         *,
-        dependent_type: type,
+        dependent_type: Union[type, Callable[..., Any]],
         param_name: str,
         param_type: type,
     ):

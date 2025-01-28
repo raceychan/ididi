@@ -106,7 +106,6 @@ def test_get_dependent_types(dg: DependencyGraph):
     assert AuthService in database_dependents
 
 
-@pytest.mark.debug
 def test_node_signature_change_after_factory(dg: DependencyGraph):
     class UserService:
         def __init__(self, repo: UserRepository, auth: AuthService, name: str = "user"):
@@ -233,7 +232,6 @@ def test_static_resolve_factory(dg: DependencyGraph):
     assert Repository in dg.type_registry[Repository]
 
 
-@pytest.mark.debug
 async def test_resource_cleanup(dg: DependencyGraph):
     closed_resources: set[str] = set()
 
@@ -421,7 +419,6 @@ def test_dependency_override(dg: DependencyGraph):
     assert instance.name == "overridden"
 
 
-@pytest.mark.debug
 def test_nested_dependency_override(dg: DependencyGraph):
     @dg.node
     class Inner:

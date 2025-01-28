@@ -19,17 +19,15 @@ def test_ignore_param():
     assert u.name == "test"
 
 
-def db_fact(dg: DependencyGraph) -> Database:
-    return Database(config=dg.resolve(DatabaseConfig))
-
-
-def service_factory(
-    *, db: Database = use(db_fact), auth: AuthenticationService, name: str
-) -> UserService:
-    return UserService(db=db, auth=auth)
-
-
 def test_resolve():
     dg = DependencyGraph()
+
+    def db_fact(dg: DependencyGraph) -> Database:
+        return Database(config=dg.resolve(DatabaseConfig))
+
+    def service_factory(
+        *, db: Database = use(db_fact), auth: AuthenticationService, name: str
+    ) -> UserService:
+        return UserService(db=db, auth=auth)
 
     dg.resolve(service_factory, name="aloha")

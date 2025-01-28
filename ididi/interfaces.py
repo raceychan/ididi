@@ -6,6 +6,7 @@ from typing import (
     Callable,
     Coroutine,
     Generator,
+    Iterable,
     Protocol,
     TypedDict,
     Union,
@@ -44,10 +45,14 @@ INodeFactory = Union[
 ]
 INode = Union[INodeFactory[P, R], type[R]]
 
-NodeIgnore = tuple[Union[str, int, type, TypeAliasType], ...]
-GraphIgnore = tuple[Union[str, type, TypeAliasType], ...]
-NodeIgnoreConfig = Union[Union[str, int, type, TypeAliasType], NodeIgnore]
-GraphIgnoreConfig = Union[Union[str, type, TypeAliasType], GraphIgnore]
+NodeIgnore = frozenset[Union[str, int, type, TypeAliasType]]
+GraphIgnore = frozenset[Union[str, type, TypeAliasType]]
+
+NodeConfigParam = Union[str, int, type, TypeAliasType]
+GraphConfigParam = Union[str, type, TypeAliasType]
+
+NodeIgnoreConfig = Union[NodeConfigParam, Iterable[NodeConfigParam]]
+GraphIgnoreConfig = Union[GraphConfigParam, Iterable[GraphConfigParam]]
 
 
 # P1 = TypeVar("P1")

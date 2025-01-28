@@ -900,3 +900,4 @@ dg.node(User)
 
 assert dg.search_node("User").dependent_type is User
 ```
+
