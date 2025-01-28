@@ -27,7 +27,13 @@ from typing import (
 from typing_extensions import Self, Unpack
 
 from ._ds import GraphNodes, GraphNodesView, ResolvedInstances, TypeRegistry, Visitor
-from ._node import DependentNode, NodeConfig, resolve_use, should_override
+from ._node import (
+    DefaultConfig,
+    DependentNode,
+    NodeConfig,
+    resolve_use,
+    should_override,
+)
 from ._type_resolve import (
     FactoryType,
     get_bases,
@@ -60,7 +66,7 @@ from .interfaces import (
     IFactory,
     INode,
     INodeConfig,
-    NodeIgnore,
+    INodeFactory,
     TDecor,
     TEntryDecor,
 )
@@ -498,7 +504,7 @@ class Graph:
         self._type_registry.register(dependent_type)
 
     def _node(
-        self, dependent: INode[P, T], config: Maybe[NodeConfig] = MISSING
+        self, dependent: INode[P, T], config: NodeConfig = DefaultConfig
     ) -> DependentNode[T]:
         node = DependentNode[T].from_node(dependent, config=config)
 
@@ -643,9 +649,12 @@ class Graph:
 
     def remove_dependent(self, dependent_type: type) -> None:
         "Remove the dependent from current graph, return if not found"
-        if not (node := self._nodes.get(dependent_type)):
-            return
-        self._remove_node(node)
+        if node := self._nodes.get(dependent_type):
+            self._remove_node(node)
+
+    def override(self, old_dep: type[T], new_dep: INode[P, T]) -> None:
+        self.remove_dependent(old_dep)
+        self._node(new_dep)
 
     def check_param_conflict(self, param_type: type, current_path: list[type]):
         if param_type in current_path:
@@ -661,8 +670,8 @@ class Graph:
         self,
         dependent: INode[P, T],
         *,
-        config: Maybe[NodeConfig] = MISSING,
-        ignore: Maybe[GraphIgnore] = MISSING,
+        config: NodeConfig = DefaultConfig,
+        ignore: Union[GraphIgnore, None] = None,
     ) -> DependentNode[T]:
         """
         Recursively analyze the type information of a dependency.
@@ -1097,8 +1106,8 @@ class Graph:
 
     @overload
     def node(
-        self, dependent: IFactory[P, T], **config: Unpack[INodeConfig]
-    ) -> IFactory[P, T]: ...
+        self, dependent: INodeFactory[P, T], **config: Unpack[INodeConfig]
+    ) -> INodeFactory[P, T]: ...
 
     @overload
     def node(self, **config: Unpack[INodeConfig]) -> TDecor: ...

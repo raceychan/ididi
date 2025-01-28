@@ -225,3 +225,29 @@ async def test_entry_replace():
 
     res = await create_user("user", "user@email.com")
     assert isinstance(res, EvenFaker)
+
+
+async def test_entry_override_with_factory():
+    dg = DependencyGraph()
+
+    @dg.entry
+    async def create_user(
+        user_name: str, user_email: str, service: UserService
+    ) -> UserService:
+        return service
+
+    class FakeUserService(UserService): ...
+
+    @dg.node
+    def user_service() -> UserService:
+        return FakeUserService("1", "2")
+
+
+    dg.override(UserService, int)
+
+    r = await create_user("1", "2")
+    assert isinstance(r, FakeUserService)
+
+
+
+

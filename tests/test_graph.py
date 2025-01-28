@@ -729,6 +729,7 @@ def test_graph_ignore():
     with pytest.raises(TypeError):
         dg.resolve(Timer)
 
+
 def test_remove_dependent():
     class Database: ...
 

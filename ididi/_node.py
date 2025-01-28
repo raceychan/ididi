@@ -59,6 +59,7 @@ from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import P, T
 
 # ============== Ididi special hooks ===========
+
 Ignore = Annotated[T, IDIDI_IGNORE_PARAM_MARK]
 
 
@@ -150,12 +151,10 @@ class NodeConfig:
         self,
         *,
         reuse: bool = True,
-        ignore: Maybe[NodeIgnoreConfig] = MISSING,
+        ignore: NodeIgnoreConfig = (),
     ):
 
-        if not is_provided(ignore):
-            ignore = tuple()
-        elif not isinstance(ignore, tuple):
+        if not isinstance(ignore, tuple):
             ignore = (ignore,)
 
         object.__setattr__(self, "ignore", ignore)
@@ -176,6 +175,7 @@ class NodeConfig:
         return hash((self.reuse, self.ignore))
 
 
+DefaultConfig = NodeConfig()
 # ======================= Signature =====================================
 
 
@@ -541,7 +541,7 @@ class DependentNode(Generic[T]):
         return node
 
     @classmethod
-    def from_factory(
+    def _from_factory(
         cls,
         *,
         factory: INodeFactory[P, T],
@@ -573,7 +573,7 @@ class DependentNode(Generic[T]):
         return node
 
     @classmethod
-    def from_class(
+    def _from_class(
         cls, *, dependent: type[T], config: NodeConfig
     ) -> "DependentNode[T]":
         if hasattr(dependent, "__origin__"):
@@ -605,7 +605,7 @@ class DependentNode(Generic[T]):
         cls,
         factory_or_class: INode[P, T],
         *,
-        config: Maybe[NodeConfig] = MISSING,
+        config: NodeConfig = DefaultConfig,
     ) -> "DependentNode[T]":
         """
         Build a node Nonrecursively
@@ -613,12 +613,10 @@ class DependentNode(Generic[T]):
             - class,
             - async / factory function of the class
         """
-        if not is_provided(config):
-            config = NodeConfig()
 
         if is_class(factory_or_class):
             dependent = cast(type[T], factory_or_class)
-            return cls.from_class(dependent=dependent, config=config)
+            return cls._from_class(dependent=dependent, config=config)
         else:
             factory = cast(INodeFactory[P, T], factory_or_class)
-            return cls.from_factory(factory=factory, config=config)
+            return cls._from_factory(factory=factory, config=config)
