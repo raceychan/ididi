@@ -250,6 +250,7 @@ def resolve_new_type(annotation: Any) -> type:
     name = getattr(annotation, "__name__")
     tyep_repr = getattr(annotation.__supertype__, "__name__")
     ntype = type(f"NewType({name!r}: {tyep_repr})", (object,), {})
+    ntype.__name__ = name
     return ntype
 
 

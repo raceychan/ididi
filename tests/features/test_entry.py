@@ -239,15 +239,29 @@ async def test_entry_override_with_factory():
     class FakeUserService(UserService): ...
 
     @dg.node
-    def user_service() -> UserService:
+    def _() -> UserService:
         return FakeUserService("1", "2")
 
-
-    dg.override(UserService, int)
-
-    r = await create_user("1", "2")
-    assert isinstance(r, FakeUserService)
+    service_res = await create_user("1", "2")
+    assert isinstance(service_res, FakeUserService)
 
 
+async def test_entry_override_with_override():
+    dg = DependencyGraph()
 
+    @dg.entry
+    async def create_user(
+        user_name: str, user_email: str, service: UserService
+    ) -> UserService:
+        return service
 
+    @dg.node
+    def user_factory() -> UserService:
+        return UserService("1", 2)
+
+    class FakeUserService(UserService): ...
+
+    dg.override(UserService, FakeUserService)
+
+    service_res = await create_user("1", "2")
+    assert isinstance(service_res, FakeUserService)

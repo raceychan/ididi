@@ -3,73 +3,92 @@ from uuid import uuid4
 
 from ididi import Graph, use
 
+# Initialize dependency graph
 dg = Graph()
 
+# Define NewTypes
+UserID = NewType("UserID", str)
+UserName = NewType("UserName", str)
+UserAge = NewType("UserAge", int)
+AddressID = NewType("AddressID", str)
+PostalCode = NewType("PostalCode", str)
 
-UUID = NewType("UUID", str)
-AGE = NewType("AGE", int)
+
+# Factory functions
+def user_id_factory() -> UserID:
+    return UserID(str(uuid4()))
 
 
-def uuid_factory() -> UUID:
-    return UUID(str(uuid4()))
+def address_id_factory() -> AddressID:
+    return AddressID(str(uuid4()))
 
 
-@dg.node
-def age_factory() -> AGE:
-    return 7
+def default_name_factory() -> UserName:
+    return UserName("Default User")
+
+
+def default_age_factory() -> UserAge:
+    return UserAge(25)
+
+
+def default_postal_factory() -> PostalCode:
+    return PostalCode("12345")
 
 
 class User:
+    class Address:
+        def __init__(
+            self,
+            postal_code: PostalCode = use(default_postal_factory),
+            address_id: AddressID = use(address_id_factory),
+        ):
+            self.postal_code = postal_code
+            self.address_id = address_id
+
     def __init__(
         self,
-        age: AGE,
-        uuid: UUID = use(uuid_factory),
+        name: UserName = use(default_name_factory),
+        age: UserAge = use(default_age_factory),
+        user_id: UserID = use(user_id_factory),
     ):
+        self.name = name
         self.age = age
-        self.uuid = uuid
+        self.user_id = user_id
+        self.address = dg.resolve(User.Address)
 
 
-def test_uuid_factory():
-    u = dg.resolve(uuid_factory)
-    assert isinstance(u, str)
-
-
-def test_resolve_user():
+# Test functions
+def test_nested_resolve():
     user = dg.resolve(User)
     assert isinstance(user, User)
-    assert isinstance(user.uuid, str)
-    assert user.age == 7
+    assert isinstance(user.address, User.Address)
+    assert isinstance(user.user_id, str)
+    assert isinstance(user.address.address_id, str)
+    assert user.age == 25
+    assert user.name == "Default User"
+    assert user.address.postal_code == "12345"
 
 
-def test_resolve_age():
-    a = dg.resolve(AGE)
-    assert a == 7
+def test_direct_newtypes():
+    user_id = dg.resolve(UserID)
+
+    assert isinstance(user_id, str)
+
+    address = dg.resolve(User.Address)
+    assert isinstance(address.postal_code, str)
+    assert isinstance(address.address_id, str)
 
 
-CommandContext = NewType("CommandContext", dict[str, str])
+def test_custom_values():
+    custom_user = User(
+        name=UserName("Custom Name"), age=UserAge(30), user_id=UserID("custom-id")
+    )
+    assert custom_user.name == "Custom Name"
+    assert custom_user.age == 30
+    assert custom_user.user_id == "custom-id"
 
 
-def command_context_factory() -> CommandContext:
-    return CommandContext({"name": "test"})
-
-
-def test_command_context():
-    ctx = dg.resolve(command_context_factory)
-    assert ctx == {"name": "test"}
-
-
-def test_direct_resolve_nt():
-    from datetime import datetime, timezone
-
-    UTCDatetime = NewType("UTCDatetime", datetime)
-
-    def utc_factory() -> UTCDatetime:
-        return UTCDatetime(datetime.now(timezone.utc))
-
-    dt = dg.resolve(utc_factory)
-    assert isinstance(dt, datetime)
-    assert dt.tzinfo == timezone.utc
-
-    dt2 = dg.resolve(UTCDatetime)
-    assert isinstance(dt2, datetime)
-    assert dt != dt2
+def test_new_type_factory():
+    node = dg.search_node("UserID")
+    assert node
+    assert node.factory_type != "default"

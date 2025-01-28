@@ -429,7 +429,7 @@ class DependentNode(Generic[T]):
     def __repr__(self) -> str:
         str_repr = f"{self.__class__.__name__}(type: {self.dependent_type}"
         if self.factory_type != "default":
-            str_repr += f", factory: {self.factory.__qualname__}"
+            str_repr += f", factory: {self.factory}"
         str_repr += ")"
         return str_repr
 
@@ -576,9 +576,6 @@ class DependentNode(Generic[T]):
     def _from_class(
         cls, *, dependent: type[T], config: NodeConfig
     ) -> "DependentNode[T]":
-        if hasattr(dependent, "__origin__"):
-            if res := get_origin(dependent):
-                dependent = res
         if is_class_with_empty_init(dependent):
             signature = EMPTY_SIGNATURE
         else:

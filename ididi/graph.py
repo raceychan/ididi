@@ -358,12 +358,16 @@ class Graph:
         "idid_scope_ctx"
     )
 
-    _nodes: GraphNodes[Any]
+    _nodes: GraphNodes
     "Map a type to a dependent node"
-    _resolved_nodes: GraphNodes[Any]
+    _resolved_nodes: dict[Hashable, DependentNode[Any]]
     "Nodes that have been recursively resolved and is validated to be resolvable."
     _type_registry: TypeRegistry
     "Map a type to its implementations"
+    _resolution_registry: ResolvedInstances[Any]
+    "Instances of reusable types"
+    _registered_singleton: set[type]
+    "Types that are menually added singletons "
 
     __slots__ = (
         "_config",
@@ -403,10 +407,10 @@ class Graph:
         """
         self._config = GraphConfig(self_inject=self_inject, ignore=ignore)
         self._nodes = dict()
-        self._resolved_nodes: GraphNodes[Any] = dict()
+        self._resolved_nodes = dict()
         self._type_registry = TypeRegistry()
-        self._resolution_registry: ResolvedInstances[Any] = {}
-        self._registered_singleton: set[type] = set()
+        self._resolution_registry = {}
+        self._registered_singleton = set()
 
         if self._config.self_inject:
             self.register_singleton(self)
@@ -649,12 +653,22 @@ class Graph:
 
     def remove_dependent(self, dependent_type: type) -> None:
         "Remove the dependent from current graph, return if not found"
+
         if node := self._nodes.get(dependent_type):
             self._remove_node(node)
 
-    def override(self, old_dep: type[T], new_dep: INode[P, T]) -> None:
+    def override(self, old_dep: type, new_dep: INode[P, T]) -> None:
+        """
+        override a dependency
+
+        """
         self.remove_dependent(old_dep)
         self._node(new_dep)
+
+    def search_node(self, dep_name: str) -> Union[DependentNode[Any], None]:
+        for dep, node in self._nodes.items():
+            if dep.__name__ == dep_name:
+                return node
 
     def check_param_conflict(self, param_type: type, current_path: list[type]):
         if param_type in current_path:
@@ -676,33 +690,20 @@ class Graph:
         """
         Recursively analyze the type information of a dependency.
         """
+
         if node := self._resolved_nodes.get(dependent):
             return node
 
         if is_unsolvable_type(dependent):
             raise TopLevelBulitinTypeError(dependent)
 
-        current_path: list[type] = []
-        ignore = (ignore + self._config.ignore) if ignore else self._config.ignore
-
-        def dfs(
-            dependent_factory: INode[P, T], dignore: GraphIgnore
-        ) -> DependentNode[T]:
-            if is_class(dependent_factory):
-                dependent_type = cast(type, dependent_factory)
-                # when we register a concrete node we also register its bases to type_registry
-                if dependent_type not in self._type_registry:
-                    self._node(dependent_type, config)
-            elif is_new_type(dependent_factory):
-                dependent_type = resolve_annotation(dependent_factory)
-                self._node(dependent_type, config)
-            else:
-                dependent_type = resolve_factory(dependent_factory)
-                if dependent_type not in self._nodes:
-                    self._node(dependent, config)
-
+        def dfs(dependent_type: type[T], dignore: GraphIgnore) -> DependentNode[T]:
+            # when we register a concrete node we also register its bases to type_registry
             if dependent_type in self._resolved_nodes:
                 return self._resolved_nodes[dependent_type]
+
+            if dependent_type not in self._type_registry:
+                self._node(dependent_type, config)
 
             node = self._resolve_concrete_node(dependent_type)
 
@@ -713,7 +714,6 @@ class Graph:
             for param in node.analyze_unsolved_params(dignore):
                 if (param_type := param.param_type) in self._resolved_nodes:
                     continue
-
                 self.check_param_conflict(param_type, current_path)
 
                 if inject_node := resolve_use(param_type):
@@ -744,7 +744,17 @@ class Graph:
             self._resolved_nodes[dependent_type] = node
             return node
 
-        return dfs(dependent, ignore)
+        if is_class(dependent) or is_new_type(dependent):
+            dependent_type = resolve_annotation(dependent)
+        else:
+            dependent_type = resolve_factory(dependent)
+            if dependent_type not in self._nodes:
+                self._node(dependent, config=config)
+
+        dependent_type = cast(type[T], dependent_type)
+        current_path: list[type] = []
+        ignore = (ignore + self._config.ignore) if ignore else self._config.ignore
+        return dfs(dependent_type, ignore)
 
     def analyze_nodes(self) -> None:
         unsolved_nodes: set[type] = self._nodes.keys() - self._resolved_nodes.keys()

@@ -6,7 +6,7 @@ from ._node import DependentNode
 from ._type_resolve import get_bases
 from .utils.typing_utils import T
 
-GraphNodes = dict[type[T], DependentNode[T]]
+GraphNodes = dict[type, DependentNode[Any]]
 """
 ### mapping a type to its corresponding node
 """
@@ -71,7 +71,7 @@ class TypeRegistry(BaseRegistry):
 class Visitor:
     __slots__ = ("_nodes",)
 
-    def __init__(self, nodes: GraphNodes[Any]):
+    def __init__(self, nodes: GraphNodes):
         self._nodes = nodes
 
     def _visit(
