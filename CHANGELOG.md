@@ -885,3 +885,18 @@ not a `TypeAlias`.
 
 - `NodeConfig` is now immutable and hashable
 - rename `Graph._analyze_entry` to `Graph.analyze_params`, 
+
+## version 1.3.3
+
+`Graph.search_node`, search node by name, O(n) complexity
+
+This is mainly for debugging purpose, sometimes you don't have access to the dependent type, but do know the name of it. example
+
+```python
+class User: ...
+
+dg = Graph()
+dg.node(User)
+
+assert dg.search_node("User").dependent_type is User
+```
