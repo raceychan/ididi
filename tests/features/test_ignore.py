@@ -31,3 +31,30 @@ def test_resolve():
         return UserService(db=db, auth=auth)
 
     dg.resolve(service_factory, name="aloha")
+
+
+def test_graph_ignore_name():
+    dg = DependencyGraph(ignore="name")
+
+    def create_db(name: str) -> Database:
+        return Database(1)
+
+    dg.analyze(create_db)
+    assert isinstance(dg.resolve(create_db, name=5), Database)
+
+
+def test_graph_ignore_many_names():
+    from datetime import datetime
+
+    dg = DependencyGraph(ignore=("name", "age", datetime))
+
+    def create_db(name: str, age: int, dt: datetime) -> Database:
+        return Database(1)
+
+    dg.analyze(create_db)
+
+
+def test_node_with_many_ignore():
+    dg = DependencyGraph()
+
+    dg.node(ignore="config")(Database)
