@@ -1,10 +1,40 @@
 from dataclasses import FrozenInstanceError
 from typing import Any, Iterable
 
-from .interfaces import GraphIgnoreConfig, NodeIgnore, NodeIgnoreConfig
+from .interfaces import GraphIgnore, GraphIgnoreConfig, NodeIgnore, NodeIgnoreConfig
 
 
-class NodeConfig:
+class FrozenSlot:
+    """
+    A Mixin class provides a hashable, frozen class with slots defined.
+    This is mainly due to the fact that dataclass does not support slots before python 3.10
+    """
+
+    __slots__: tuple[str, ...]
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, self.__class__):
+            return False
+
+        return all(
+            getattr(self, attr) == getattr(other, attr) for attr in self.__slots__
+        )
+
+    def __repr__(self):
+        attr_repr = "".join(
+            f"{attr}={getattr(self, attr)}, " for attr in self.__slots__
+        ).rstrip(", ")
+        return f"{self.__class__.__name__}({attr_repr})"
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise FrozenInstanceError("can't set attribute")
+
+    def __hash__(self) -> int:
+        attrs = tuple(getattr(self, attr) for attr in self.__slots__)
+        return hash(attrs)
+
+
+class NodeConfig(FrozenSlot):
     __slots__ = ("reuse", "ignore")
 
     ignore: NodeIgnore
@@ -29,30 +59,11 @@ class NodeConfig:
         object.__setattr__(self, "ignore", ignore)
         object.__setattr__(self, "reuse", reuse)
 
-    def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, NodeConfig):
-            return False
 
-        return all(
-            getattr(self, attr) == getattr(other, attr) for attr in self.__slots__
-        )
-
-    def __repr__(self):
-        attr_repr = "".join(
-            f"{attr}={getattr(self, attr)}, " for attr in self.__slots__
-        ).rstrip(", ")
-        return f"{self.__class__.__name__}({attr_repr})"
-
-    def __setattr__(self, name: str, value: Any) -> None:
-        raise FrozenInstanceError("can't set attribute")
-
-    def __hash__(self) -> int:
-        attrs = tuple(getattr(self, attr) for attr in self.__slots__)
-        return hash(attrs)
-
-
-class GraphConfig(NodeConfig):
+class GraphConfig(FrozenSlot):
     __slots__ = ("self_inject", "ignore")
+
+    ignore: GraphIgnore
 
     def __init__(self, *, self_inject: bool, ignore: GraphIgnoreConfig):
 

@@ -44,6 +44,7 @@ from ._type_resolve import (
     is_unsolvable_type,
     resolve_annotation,
     resolve_factory,
+    resolve_node_type,
 )
 from .config import GraphConfig
 from .errors import (
@@ -315,9 +316,6 @@ class ScopeProxy:
     ) -> None:
         await cast(AsyncScope, self._scope).__aexit__(exc_type, exc_value, traceback)
         self._graph.reset_context_scope(self._token)
-
-
-
 
 
 @final
@@ -643,17 +641,18 @@ class Graph:
         if dependent_type in self._registered_singleton:
             self._registered_singleton.remove(dependent_type)
 
-    def remove_dependent(self, dependent_type: type) -> None:
+    def remove_dependent(self, dependent: INode[P, T]) -> None:
         "Remove the dependent from current graph, return if not found"
+        dependent_type = resolve_node_type(dependent)
 
         if node := self._nodes.get(dependent_type):
             self._remove_node(node)
 
-    def override(self, old_dep: type, new_dep: INode[P, T]) -> None:
+    def override(self, old_dep: INode[P, T], new_dep: INode[P, T]) -> None:
         """
-        override a dependency
+        globally override a dependency
+        """
 
-        """
         self.remove_dependent(old_dep)
         self._node(new_dep)
 
@@ -745,6 +744,7 @@ class Graph:
 
         dependent_type = cast(type[T], dependent_type)
         current_path: list[type] = []
+
         ignore = (ignore | self._config.ignore) if ignore else self._config.ignore
         return dfs(dependent_type, ignore)
 

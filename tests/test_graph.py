@@ -733,3 +733,35 @@ def test_remove_dependent():
     dg = DependencyGraph()
 
     dg.remove_dependent(Database)
+
+
+def test_remove_dependent_with_factory():
+    dg = DependencyGraph()
+
+    class Service: ...
+
+    def sfactory() -> Service: ...
+
+    dg.node(sfactory)
+
+    dg.remove_dependent(sfactory)
+
+    assert Service not in dg
+
+
+def test_remove_new_type():
+    dg = DependencyGraph()
+
+    UserId = ty.NewType("UserId", str)
+
+    def user_id_factory() -> UserId:
+        return UserId("1")
+
+    dg.node(user_id_factory)
+
+    node = dg.search_node("UserId")
+
+    assert node
+
+    dg.remove_dependent(UserId)
+    assert dg.search_node("UserId") is None

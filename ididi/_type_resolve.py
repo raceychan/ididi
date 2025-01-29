@@ -26,14 +26,14 @@ from typing import (
     get_origin,
 )
 
-from typing_extensions import ParamSpec, TypeGuard, Unpack
+from typing_extensions import TypeGuard, Unpack
 
 from .errors import (
     ForwardReferenceNotFoundError,
     GenericDependencyNotSupportedError,
     UnsolvableReturnTypeError,
 )
-from .interfaces import AsyncClosable, Closable
+from .interfaces import AsyncClosable, Closable, INode, P, T
 from .utils.typing_utils import T, actualize_strforward, eval_type, is_builtin_type
 
 if sys.version_info >= (3, 10):
@@ -67,9 +67,6 @@ ExtraUnsolvableTypes = {
     Any,
     Literal,
 }
-
-
-P = ParamSpec("P")
 
 
 class EmptyInitProtocol(Protocol): ...
@@ -250,7 +247,11 @@ type(C) is TypeAliasType
 def resolve_new_type(annotation: Any) -> type:
     name = getattr(annotation, "__name__")
     tyep_repr = getattr(annotation.__supertype__, "__name__")
-    ntype = type(f"NewType({name!r}: {tyep_repr})", (object,), {})
+    ntype = type(
+        f"NewType({name!r}: {tyep_repr})",
+        (object,),
+        {"super_type": annotation.__supertype__},
+    )
     ntype.__name__ = name
     return ntype
 
@@ -280,3 +281,12 @@ def get_bases(dependent: type) -> tuple[type, ...]:
     else:
         bases = dependent.__mro__[1:-1]
     return bases
+
+
+def resolve_node_type(dependent: INode[P, T]) -> type[T]:
+    if is_class(dependent) or is_new_type(dependent):
+        dependent_type = resolve_annotation(dependent)
+    else:
+        dependent_type = resolve_factory(dependent)
+
+    return cast(type[T], dependent_type)

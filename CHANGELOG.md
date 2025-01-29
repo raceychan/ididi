@@ -888,7 +888,7 @@ not a `TypeAlias`.
 
 ## version 1.3.3
 
-`Graph.search_node`, search node by name, O(n) complexity
+- `Graph.search_node`, search node by name, O(n) complexity
 
 This is mainly for debugging purpose, sometimes you don't have access to the dependent type, but do know the name of it. example
 
@@ -901,3 +901,5 @@ dg.node(User)
 assert dg.search_node("User").dependent_type is User
 ```
 
+
+- `Graph.override` 
