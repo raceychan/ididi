@@ -1001,7 +1001,6 @@ class SyncScope(ScopeBase[ExitStack], Resolver):
         self._pre = pre
         self._stack = ExitStack()
         super().__init__(**args, resolution_registry=dict(), registered_singleton=set())
-        breakpoint()
 
     def __enter__(self) -> "SyncScope":
         return self
@@ -1061,7 +1060,6 @@ class AsyncScope(ScopeBase[AsyncExitStack], Resolver):
         self._pre = pre
         self._stack = AsyncExitStack()
         super().__init__(**args, resolution_registry=dict(), registered_singleton=set())
-        breakpoint()
 
     async def __aenter__(self) -> "AsyncScope":
         return self
