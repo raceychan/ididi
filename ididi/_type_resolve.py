@@ -28,6 +28,7 @@ from typing import (
 
 from typing_extensions import TypeGuard, Unpack
 
+from .config import CacheMax
 from .errors import (
     ForwardReferenceNotFoundError,
     GenericDependencyNotSupportedError,
@@ -243,7 +244,7 @@ type(C) is TypeAliasType
 """
 
 
-@lru_cache(1024)
+@lru_cache(CacheMax)
 def resolve_new_type(annotation: Any) -> type:
     name = getattr(annotation, "__name__")
     tyep_repr = getattr(annotation.__supertype__, "__name__")
@@ -273,7 +274,7 @@ def flatten_annotated(typ: Annotated[Any, Any]) -> list[Any]:
     return flattened_metadata
 
 
-@lru_cache(1024)
+@lru_cache(CacheMax)
 def get_bases(dependent: type) -> tuple[type, ...]:
     if issubclass(dependent, Protocol):
         # -3 excludes Protocol, Gener, object

@@ -108,7 +108,12 @@ def test_get_dependent_types(dg: DependencyGraph):
 
 def test_node_signature_change_after_factory(dg: DependencyGraph):
     class UserService:
-        def __init__(self, repo: UserRepository, auth: AuthService, name: str = "user"):
+        def __init__(
+            self,
+            repo: UserRepository,
+            auth: AuthService,
+            name: str = "user",
+        ):
             self.repo = repo
             self.auth = auth
 

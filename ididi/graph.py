@@ -16,6 +16,7 @@ from typing import (
     Hashable,
     Literal,
     Sequence,
+    TypedDict,
     TypeVar,
     Union,
     cast,
@@ -46,7 +47,7 @@ from ._type_resolve import (
     resolve_factory,
     resolve_node_type,
 )
-from .config import GraphConfig
+from .config import CacheMax, GraphConfig
 from .errors import (
     AsyncResourceInSyncError,
     CircularDependencyDetectedError,
@@ -93,384 +94,52 @@ def register_dependent(
     mapping[dependent_type] = instance
 
 
-class AbstractScope(Generic[Stack]):
-    _stack: Stack
-    _graph: "Graph"
-    _name: Hashable
-    _pre: Maybe[Union["SyncScope", "AsyncScope"]]
-    _resolution_registry: ResolvedInstances[Any]
-    _registered_singleton: set[type]
-
-    def __repr__(self):
-        return f"{self.__class__.__name__}(id={self._name})"
-
-    def cache_result(self, dependent: IEmptyFactory[T], result: T) -> None:
-        register_dependent(self._resolution_registry, dependent, result)
-
-    def get_cached(self, dependent: IEmptyFactory[T]) -> Maybe[T]:
-        return self._resolution_registry.get(dependent, MISSING)
-
-    def enter_context(self, context: ContextManager[T]) -> T:
-        return self._stack.enter_context(context)
-
-    def get_scope(self, name: Hashable) -> Self:
-        if name == self._name:
-            return self
-
-        ptr = self
-        while is_provided(ptr._pre):
-            if ptr._pre._name == name:
-                return cast(Self, ptr._pre)
-            ptr = ptr._pre
-        else:
-            raise OutOfScopeError(name)
-
-    def register_singleton(
-        self, dependent: T, dependent_type: Union[type[T], None] = None
-    ) -> None:
-        """
-        Register a dependent to be injected
-        This is particular useful for top level dependents
-        """
-
-        if dependent_type is None:
-            dependent_type = type(dependent)
-        register_dependent(self._resolution_registry, dependent_type, dependent)
-        self._registered_singleton.add(dependent_type)
+ScopeContext = ClassVar[ContextVar[Union["SyncScope", "AsyncScope"]]]
 
 
-class SyncScope(AbstractScope[ExitStack]):
-    __slots__ = (
-        "_graph",
-        "_stack",
-        "_name",
-        "_pre",
-        "_resolution_registry",
-        "_registered_singleton",
-    )
+class SharedData(TypedDict):
+    nodes: GraphNodes
+    resolved_nodes: dict[Hashable, DependentNode[Any]]
+    type_registry: TypeRegistry
+    ignore: GraphIgnore
 
+
+class Resolver:
     def __init__(
         self,
-        graph: "Graph",
-        *,
-        name: Maybe[Hashable] = MISSING,
-        pre: Maybe[Union["SyncScope", "AsyncScope"]] = MISSING,
+        resolution_registry: ResolvedInstances[Any],
+        registered_singleton: set[type],
+        **args: Unpack[SharedData],
     ):
-        self._graph = graph
-        self._name = name
-        self._pre = pre
-        self._stack = ExitStack()
-        self._resolution_registry = {}
-        self._registered_singleton = set()
+        self._nodes = args["nodes"]
+        self._resolved_nodes = args["resolved_nodes"]
+        self._type_registry = args["type_registry"]
+        self._ignore = args["ignore"]
 
-    def __enter__(self) -> "SyncScope":
-        return self
+        self._resolution_registry = resolution_registry
+        self._registered_singleton = registered_singleton
 
-    def __exit__(
-        self,
-        exc_type: Union[type[Exception], None],
-        exc_value: Union[Exception, None],
-        traceback: Union[TracebackType, None],
-    ) -> None:
-        self._stack.__exit__(exc_type, exc_value, traceback)
+    def is_registered_singleton(self, dependent_type: type) -> bool:
+        return dependent_type in self._registered_singleton
 
-    @overload
-    def resolve(self, dependent: IAnyFactory[T], /) -> T: ...
+    @lru_cache(CacheMax)
+    def should_be_scoped(self, dep_type: INode[P, T]) -> bool:
+        "Recursively check if a dependent type contains any resource dependency"
 
-    @overload
-    def resolve(
-        self,
-        dependent: IFactory[P, Generator[T, None, None]],
-        /,
-        *args: P.args,
-        **overrides: P.kwargs,
-    ) -> T: ...
+        if not (resolved_node := self._resolved_nodes.get(dep_type)):
+            resolved_node = self.analyze(dep_type)
 
-    @overload
-    def resolve(
-        self, dependent: IFactory[P, T], /, *args: P.args, **overrides: P.kwargs
-    ) -> T: ...
+        if self.is_registered_singleton(resolved_node.dependent_type):
+            return False
 
-    def resolve(
-        self,
-        dependent: IFactory[P, Union[T, Generator[T, None, None]]],
-        /,
-        *args: P.args,
-        **overrides: P.kwargs,
-    ) -> T:
-        # TODO: fix typing of _graph.resolve, get rid of cast
-        r = self._graph.resolve(dependent, self, *args, **overrides)
-        return cast(T, r)
+        if resolved_node.is_resource:
+            return True
 
-
-class AsyncScope(AbstractScope[AsyncExitStack]):
-    __slots__ = (
-        "_graph",
-        "_stack",
-        "_name",
-        "_pre",
-        "_resolution_registry",
-        "_registered_singleton",
-    )
-
-    def __init__(
-        self,
-        graph: "Graph",
-        *,
-        name: Maybe[Hashable] = MISSING,
-        pre: Maybe["SyncScope"] = MISSING,
-    ):
-        self._graph = graph
-        self._name = name
-        self._pre = pre
-        self._stack = AsyncExitStack()
-        self._resolution_registry = {}
-        self._registered_singleton = set()
-
-    async def __aenter__(self) -> "AsyncScope":
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: Union[type[Exception], None],
-        exc_value: Union[Exception, None],
-        traceback: Union[TracebackType, None],
-    ) -> None:
-        await self._stack.__aexit__(exc_type, exc_value, traceback)
-
-    @overload
-    async def resolve(self, dependent: IAnyFactory[T], /) -> T: ...
-
-    @overload
-    async def resolve(
-        self,
-        dependent: IFactory[P, AsyncGenerator[T, None]],
-        /,
-        *args: P.args,
-        **overrides: P.kwargs,
-    ) -> T: ...
-
-    @overload
-    async def resolve(
-        self, dependent: IFactory[P, T], /, *args: P.args, **overrides: P.kwargs
-    ) -> T: ...
-
-    async def resolve(
-        self,
-        dependent: IFactory[P, Union[T, AsyncGenerator[T, None]]],
-        /,
-        *args: P.args,
-        **overrides: P.kwargs,
-    ) -> T:
-        r = await self._graph.aresolve(dependent, self, *args, **overrides)
-        return cast(T, r)
-
-    async def enter_async_context(self, context: AsyncContextManager[T]) -> T:
-        return await self._stack.enter_async_context(context)
-
-
-class ScopeProxy:
-    _scope: Maybe[Union[SyncScope, AsyncScope]]
-
-    __slots__ = ("_graph", "_scope", "_token", "_name")
-
-    def __init__(self, graph: "Graph", name: Maybe[Hashable] = MISSING):
-        self._graph = graph
-        self._scope = MISSING
-        self._name = name
-
-    def __enter__(self) -> SyncScope:
-        try:
-            pre = self._graph.use_scope()
-        except OutOfScopeError:
-            pre = MISSING
-        self._scope = SyncScope(self._graph, name=self._name, pre=pre).__enter__()
-        self._token = self._graph.set_context_scope(self._scope)
-        return self._scope
-
-    async def __aenter__(self) -> AsyncScope:
-        try:
-            pre = self._graph.use_scope()
-        except OutOfScopeError:
-            pre = MISSING
-        self._scope = await AsyncScope(
-            self._graph, name=self._name, pre=pre
-        ).__aenter__()
-        self._token = self._graph.set_context_scope(self._scope)
-        return self._scope
-
-    def __exit__(
-        self,
-        exc_type: Union[type, None],
-        exc_value: Any,
-        traceback: Union[TracebackType, None],
-    ) -> None:
-        cast(SyncScope, self._scope).__exit__(exc_type, exc_value, traceback)
-        self._graph.reset_context_scope(self._token)
-
-    async def __aexit__(
-        self,
-        exc_type: Union[type, None],
-        exc_value: Any,
-        traceback: Union[TracebackType, None],
-    ) -> None:
-        await cast(AsyncScope, self._scope).__aexit__(exc_type, exc_value, traceback)
-        self._graph.reset_context_scope(self._token)
-
-
-@final
-class Graph:
-    """
-    ### Description:
-    A Directed Acyclic Graph where each dependent is a node.
-
-    Example
-    ---
-    ```python
-    from typing import AsyncGenerator
-    from ididi import DependencyGraph, use, entry, AsyncResource
-
-    async def conn_factory(engine: AsyncEngine) -> AsyncGenerator[Repository, None]:
-        async with engine.begin() as conn:
-            yield conn
-
-    class UnitOfWork:
-        def __init__(self, conn: AsyncConnection=use(conn_factory)):
-            self._conn = conn
-
-    @entry
-    async def main(command: CreateUser, uow: UnitOfWork):
-        await uow.execute(build_query(command))
-    ```
-    """
-
-    _scope_context: ClassVar[ContextVar[Union[SyncScope, AsyncScope]]] = ContextVar(
-        "idid_scope_ctx"
-    )
-
-    _nodes: GraphNodes
-    "Map a type to a dependent node"
-    _resolved_nodes: dict[Hashable, DependentNode[Any]]
-    "Nodes that have been recursively resolved and is validated to be resolvable."
-    _type_registry: TypeRegistry
-    "Map a type to its implementations"
-    _resolution_registry: ResolvedInstances[Any]
-    "Instances of reusable types"
-    _registered_singleton: set[type]
-    "Types that are menually added singletons "
-
-    __slots__ = (
-        "_config",
-        "_nodes",
-        "_resolved_nodes",
-        "_resolution_registry",
-        "_type_registry",
-        "_registered_singleton",
-    )
-
-    def __init__(
-        self, *, self_inject: bool = True, ignore: GraphIgnoreConfig = frozenset()
-    ):
-        """
-        - self_inject:
-
-          - If True, the current instance of the `DependencyGraph` will be injected into any dependency that requires it.
-
-        - ignore:
-
-          - A configuration that defines dependencies to be ignored during resolution.
-          - This can be a tuple of `(dependency_name, dependency_type)`.
-          - For example, `ignore=('name', str)` will ignore dependencies named `'name'` or those of type `str`.
-
-
-
-        ### Example:
-        - Creating a DependencyGraph with self-injection enabled, ignoring 'str' type dependencies, and allowing partial resolution.
-
-            ```python
-            graph = DependencyGraph(self_inject=False, ignore=('name', str))
-            ```
-
-        ### Notes:
-        - `self_inject` is useful when you have a dependency that requires current instance of `DependencyGraph` as its dependency.
-        - `ignore` is a flexible configuration to skip over specific dependencies during resolution.
-        """
-        self._config = GraphConfig(self_inject=self_inject, ignore=ignore)
-        self._nodes = dict()
-        self._resolved_nodes = dict()
-        self._type_registry = TypeRegistry()
-        self._resolution_registry = {}
-        self._registered_singleton = set()
-
-        if self._config.self_inject:
-            self.register_singleton(self)
-
-    def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}("
-            f"nodes={len(self._nodes)}, "
-            f"resolved={len(self._resolution_registry)})"
+        unsolved_params = resolved_node.unsolved_params(ignore=self._ignore)
+        contain_resource = any(
+            self.should_be_scoped(param_type) for _, param_type in unsolved_params
         )
-
-    def __contains__(self, item: type) -> bool:
-        return item in self._nodes
-
-    @property
-    def nodes(self) -> GraphNodesView[Any]:
-        return MappingProxyType(self._nodes)
-
-    @property
-    def resolution_registry(self) -> ResolvedInstances[Any]:
-        """
-        A mapping of dependent types to their resolved instances.
-        """
-        return self._resolution_registry
-
-    @property
-    def type_registry(self) -> TypeRegistry:
-        """
-        A mapping of abstract types to their implementations.
-        """
-        return self._type_registry
-
-    @property
-    def resolved_nodes(self) -> GraphNodesView[Any]:
-        """
-        A node is considered resolved if all its dependencies have been resolved.
-        Which means all its forward dependencies have been resolved.
-        This would also include builtin types.
-        """
-        return MappingProxyType(self._resolved_nodes)
-
-    @property
-    def visitor(self) -> Visitor:
-        return Visitor(self._nodes)
-
-    def _merge_nodes(self, other: "Graph"):
-        for dep_type, other_node in other.nodes.items():
-            current_node = self._nodes.get(dep_type)
-            current_resolved = self._resolved_nodes.get(dep_type)
-            other_resolved = other.resolved_nodes.get(dep_type)
-
-            if not current_node or (should_override(other_node, current_node)):
-                self._nodes[dep_type] = other_node
-                if other_resolved:
-                    self._resolved_nodes[dep_type] = other_resolved
-                continue
-
-            # the conflict case, we only update if current node is not resolved
-            if not current_resolved and other_resolved:
-                self._resolved_nodes[dep_type] = other_resolved
-
-    def _resolve_concrete_node(self, dependent: type[T]) -> DependentNode[Any]:
-        # user assign impl via factory
-        if (node := self._nodes.get(dependent)) and node.factory_type != "default":
-            return node
-
-        concrete_type = self._type_registry[dependent][-1]
-        concrete_node = self._nodes[concrete_type]
-        concrete_node.check_for_implementations()
-        return concrete_node
+        return contain_resource
 
     def _remove_node(self, node: DependentNode[Any]) -> None:
         """
@@ -497,169 +166,136 @@ class Graph:
         self._nodes[dependent_type] = node
         self._type_registry.register(dependent_type)
 
-    def _node(
-        self, dependent: INode[P, T], config: NodeConfig = DefaultConfig
-    ) -> DependentNode[T]:
-        node = DependentNode[T].from_node(dependent, config=config)
+    def _resolve_concrete_node(self, dependent: type[T]) -> DependentNode[Any]:
+        # user assign impl via factory
+        if (node := self._nodes.get(dependent)) and node.factory_type != "default":
+            return node
 
-        if ori_node := self._nodes.get(node.dependent_type):
-            if should_override(node, ori_node):
-                self._remove_node(ori_node)
+        concrete_type = self._type_registry[dependent][-1]
+        concrete_node = self._nodes[concrete_type]
+        concrete_node.check_for_implementations()
+        return concrete_node
 
-        self._register_node(node)
-        return node
+    def get_resolve_cache(self, dependent: IFactory[P, T]) -> Maybe[T]:
+        raise NotImplementedError
 
-    def _manage_resolved(
+    def resolve_callback(
         self,
         resolved: T,
         dependent_type: type[T],
         factory_type: FactoryType,
         is_reuse: bool,
-        scope: Maybe[SyncScope],
-    ):
-        if factory_type in ("default", "function"):
-            if is_reuse:
-                register_dependent(self._resolution_registry, dependent_type, resolved)
-            return resolved
+    ) -> T:
+        raise NotImplementedError
 
-        if not scope:
-            raise ResourceOutsideScopeError(dependent_type)
-
-        if factory_type == "aresource":
-            raise AsyncResourceInSyncError(dependent_type)
-
-        instance = scope.enter_context(cast(ContextManager[T], resolved))
-        if is_reuse:
-            scope.cache_result(dependent_type, instance)
-        return instance
-
-    async def _manage_aresolved(
+    async def aresolve_callback(
         self,
         resolved: Union[T, Awaitable[T]],
         dependent_type: type[T],
         factory_type: FactoryType,
         is_reuse: bool,
-        scope: Maybe[AsyncScope],
-    ):
-        if factory_type in ("default", "function"):
-            instance = await resolved if isawaitable(resolved) else resolved
-            if is_reuse:
-                register_dependent(self._resolution_registry, dependent_type, instance)
-            return cast(T, instance)
+    ) -> T:
+        raise NotImplementedError
 
-        if not scope:
-            raise ResourceOutsideScopeError(dependent_type)
+    @overload
+    def resolve(
+        self,
+        dependent: IAnyFactory[T],
+        /,
+    ) -> T: ...
 
-        if factory_type == "resource":
-            instance = scope.enter_context(cast(ContextManager[T], resolved))
-        else:
-            instance = await scope.enter_async_context(
-                cast(AsyncContextManager[T], resolved)
-            )
+    @overload
+    def resolve(
+        self,
+        dependent: IFactory[P, T],
+        /,
+        *args: P.args,
+        **overrides: P.kwargs,
+    ) -> T: ...
 
-        if is_reuse:
-            scope.cache_result(dependent_type, instance)
-        return instance
-
-    # ==========================  Public ==========================
-
-    def merge(self, other: Union["Graph", Sequence["Graph"]]):
+    def resolve(
+        self,
+        dependent: IFactory[P, T],
+        /,
+        *args: P.args,
+        **overrides: P.kwargs,
+    ) -> T:
         """
-        Merge the other graphs into this graph, update the current graph.
+        Resolves a dependent, builds all its dependencies, injects them into its factory, and returns the instance.
 
-        ## Logic
+        ### Resolve Priority:
+        1. Override: Any dependencies provided via keyword arguments will take priority.
+        2. Factory: If no override is provided, the factory's resolution will be used.
+        3. Default Value: If neither an override nor a factory is available, the default value is used.
+        4. __init__: build dependencies according to the `__init__` method of the dependent type
 
-        1. If a node not in current graph, it will be added,
-        2. otherwise, compare the `resolve order` of these two nodes, keep the one with higher order.
+        ### Example:
 
-        ### resolve order
+        Resolve a dependent with overrides and a specific scope
 
-        1. node with resource management factory > node with a plain factory.
-        2. node with a plain factory > node with default constructor.
-        """
+        ```python
+        instance = dependency_graph.resolve(my_factory, scope=my_scope, my_override=override_value)
+        ```
 
-        if isinstance(other, Graph):
-            others = (other,)
-        else:
-            others = other
-
-        for other in others:
-            try:
-                other._scope_context.get()
-            except LookupError:
-                pass
-            else:
-                raise MergeWithScopeStartedError()
-
-            self._merge_nodes(other)
-
-            self._type_registry.update(other._type_registry)
-            self._resolution_registry.update(other._resolution_registry)
-
-    def set_context_scope(
-        self, scope: Union[SyncScope, AsyncScope]
-    ) -> Token[Union[SyncScope, AsyncScope]]:
-        return self._scope_context.set(scope)
-
-    def reset_context_scope(self, token: Token[Union[SyncScope, AsyncScope]]):
-        self._scope_context.reset(token)
-
-    def reset(self, clear_nodes: bool = False) -> None:
-        """
-        Clear all resolved instances while maintaining registrations.
-
-        clear_nodes: bool
-        ---
-        whether to clear:
-        - the node registry
-        - the type registry
-        """
-        self._resolution_registry.clear()
-        self._registered_singleton.clear()
-
-        if clear_nodes:
-            self._type_registry.clear()
-            self._resolved_nodes.clear()
-            self._nodes.clear()
-
-    def is_registered_singleton(self, dependent_type: type) -> bool:
-        return dependent_type in self._registered_singleton
-
-    def register_singleton(
-        self, dependent: T, dependent_type: Union[type[T], None] = None
-    ) -> None:
-        """
-        Register a dependent instance to be injected, provide a dependent type if it's not the same as the instance type.
-        """
-        if dependent_type is None:
-            dependent_type = type(dependent)
-        register_dependent(self._resolution_registry, dependent_type, dependent)
-        self._registered_singleton.add(dependent_type)
-
-    def remove_singleton(self, dependent_type: type) -> None:
-        "Remove the registered singleton from current graph, return if not found"
-        if dependent_type in self._registered_singleton:
-            self._registered_singleton.remove(dependent_type)
-
-    def remove_dependent(self, dependent: INode[P, T]) -> None:
-        "Remove the dependent from current graph, return if not found"
-        dependent_type = resolve_node_type(dependent)
-
-        if node := self._nodes.get(dependent_type):
-            self._remove_node(node)
-
-    def override(self, old_dep: INode[P, T], new_dep: INode[P, T]) -> None:
-        """
-        globally override a dependency
+        ### Notes:
+        - Ensure that any overrides are passed as keyword arguments, not positional.
         """
 
-        self.remove_dependent(old_dep)
-        self._node(new_dep)
+        if args:
+            raise PositionalOverrideError(args)
 
-    def search_node(self, dep_name: str) -> Union[DependentNode[Any], None]:
-        for dep, node in self._nodes.items():
-            if dep.__name__ == dep_name:
-                return node
+        if is_provided(resolution := self.get_resolve_cache(dependent)):
+            return resolution
+
+        provided_params = frozenset(overrides)
+        node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
+
+        unsolved_params = node.unsolved_params(self._ignore | provided_params)
+
+        params = overrides
+        for param_name, param_type in unsolved_params:
+            params[param_name] = self.resolve(param_type)
+
+        resolved = cast(T, node.factory(**params))
+        return self.resolve_callback(
+            resolved=resolved,
+            dependent_type=node.dependent_type,
+            factory_type=node.factory_type,
+            is_reuse=node.config.reuse,
+        )
+
+    async def aresolve(
+        self,
+        dependent: IFactory[P, T],
+        /,
+        *args: P.args,
+        **overrides: P.kwargs,
+    ) -> Union[T, Awaitable[T]]:
+        """
+        Async version of resolve that handles async context managers and coroutines.
+        """
+
+        if args:
+            raise PositionalOverrideError(args)
+
+        if is_provided(resolution := self.get_resolve_cache(dependent)):
+            return resolution
+
+        provided_params = frozenset(overrides)
+        node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
+
+        unsolved_params = node.unsolved_params(self._ignore | provided_params)
+
+        for param_name, param_type in unsolved_params:
+            overrides[param_name] = await self.aresolve(param_type)
+
+        resolved = cast(Union[T, Awaitable[T]], node.inject_params(overrides))
+        return await self.aresolve_callback(
+            resolved=resolved,
+            dependent_type=node.dependent_type,
+            factory_type=node.factory_type,
+            is_reuse=node.config.reuse,
+        )
 
     def check_param_conflict(self, param_type: type, current_path: list[type]):
         if param_type in current_path:
@@ -745,7 +381,7 @@ class Graph:
         dependent_type = cast(type[T], dependent_type)
         current_path: list[type] = []
 
-        ignore = (ignore | self._config.ignore) if ignore else self._config.ignore
+        ignore = (ignore | self._ignore) if ignore else self._ignore
         return dfs(dependent_type, ignore)
 
     def analyze_nodes(self) -> None:
@@ -753,10 +389,320 @@ class Graph:
         for node_type in unsolved_nodes:
             self.analyze(node_type)
 
-    static_resolve = analyze
-    static_resolve_all = analyze_nodes
+    def _node(
+        self, dependent: INode[P, T], config: NodeConfig = DefaultConfig
+    ) -> DependentNode[T]:
+        node = DependentNode[T].from_node(dependent, config=config)
 
-    def scope(self, name: Maybe[Hashable] = MISSING) -> ScopeProxy:
+        if ori_node := self._nodes.get(node.dependent_type):
+            if should_override(node, ori_node):
+                self._remove_node(ori_node)
+
+        self._register_node(node)
+        return node
+
+    @overload
+    def node(self, dependent: type[T], **config: Unpack[INodeConfig]) -> type[T]: ...
+
+    @overload
+    def node(
+        self, dependent: INodeFactory[P, T], **config: Unpack[INodeConfig]
+    ) -> INodeFactory[P, T]: ...
+
+    @overload
+    def node(self, **config: Unpack[INodeConfig]) -> TDecor: ...
+
+    def node(
+        self,
+        dependent: Union[INode[P, T], None] = None,
+        **config: Unpack[INodeConfig],
+    ) -> Union[INode[P, T], TDecor]:
+        """
+        ### Decorator to register a node in the dependency graph.
+
+        This does NOT statically resolve the node
+
+        - Can be used with both factory functions and classes.
+        - If decorating a factory function that returns an existing type,
+        it will override the factory for that type.
+        ----
+        Examples:
+
+        #### Register a class:
+
+        ```python
+        dg = DependencyGraph()
+
+        @dg.node
+        class AuthService: ...
+        ```
+
+        #### Register a factory function:
+
+        ```python
+        @dg.node
+        def auth_service_factory() -> AuthService: ...
+        ```
+        """
+
+        if not dependent:
+            configured = cast(TDecor, partial(self.node, **config))
+            return configured
+
+        if is_unsolvable_type(dependent):
+            raise TopLevelBulitinTypeError(dependent)
+
+        self._node(dependent, config=NodeConfig.build(**config))
+        return dependent
+
+
+@final
+class Graph(Resolver):
+    """
+    ### Description:
+    A Directed Acyclic Graph where each dependent is a node.
+
+    Example
+    ---
+    ```python
+    from typing import AsyncGenerator
+    from ididi import DependencyGraph, use, entry, AsyncResource
+
+    async def conn_factory(engine: AsyncEngine) -> AsyncGenerator[Repository, None]:
+        async with engine.begin() as conn:
+            yield conn
+
+    class UnitOfWork:
+        def __init__(self, conn: AsyncConnection=use(conn_factory)):
+            self._conn = conn
+
+    @entry
+    async def main(command: CreateUser, uow: UnitOfWork):
+        await uow.execute(build_query(command))
+    ```
+    """
+
+    _scope_context: ScopeContext = ContextVar("idid_scope_ctx")
+
+    _nodes: GraphNodes
+    "Map a type to a dependent node"
+    _resolved_nodes: dict[Hashable, DependentNode[Any]]
+    "Nodes that have been recursively resolved and is validated to be resolvable."
+    _type_registry: TypeRegistry
+    "Map a type to its implementations"
+    _resolution_registry: ResolvedInstances[Any]
+    "Instances of reusable types"
+    _registered_singleton: set[type]
+    "Types that are menually added singletons "
+
+    # __slots__ = (
+    #     "_config",
+    #     "_nodes",
+    #     "_resolved_nodes",
+    #     "_resolution_registry",
+    #     "_type_registry",
+    #     "_registered_singleton",
+    # )
+
+    def __init__(
+        self, *, self_inject: bool = True, ignore: GraphIgnoreConfig = frozenset()
+    ):
+        """
+        - self_inject:
+
+          - If True, the current instance of the `DependencyGraph` will be injected into any dependency that requires it.
+
+        - ignore:
+
+          - A configuration that defines dependencies to be ignored during resolution.
+          - This can be a tuple of `(dependency_name, dependency_type)`.
+          - For example, `ignore=('name', str)` will ignore dependencies named `'name'` or those of type `str`.
+
+
+
+        ### Example:
+        - Creating a DependencyGraph with self-injection enabled, ignoring 'str' type dependencies, and allowing partial resolution.
+
+            ```python
+            graph = DependencyGraph(self_inject=False, ignore=('name', str))
+            ```
+
+        ### Notes:
+        - `self_inject` is useful when you have a dependency that requires current instance of `DependencyGraph` as its dependency.
+        - `ignore` is a flexible configuration to skip over specific dependencies during resolution.
+        """
+        config = GraphConfig.build(self_inject=self_inject, ignore=ignore)
+
+        super().__init__(
+            nodes=dict(),
+            resolved_nodes=dict(),
+            type_registry=TypeRegistry(),
+            resolution_registry=dict(),
+            registered_singleton=set(),
+            ignore=config.ignore,
+        )
+
+        if self_inject:
+            self.register_singleton(self)
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}("
+            f"nodes={len(self._nodes)}, "
+            f"resolved={len(self._resolution_registry)})"
+        )
+
+    def __contains__(self, item: type) -> bool:
+        return item in self._nodes
+
+    @property
+    def nodes(self) -> GraphNodesView[Any]:
+        return MappingProxyType(self._nodes)
+
+    @property
+    def resolution_registry(self) -> ResolvedInstances[Any]:
+        """
+        A mapping of dependent types to their resolved instances.
+        """
+        return self._resolution_registry
+
+    @property
+    def type_registry(self) -> TypeRegistry:
+        """
+        A mapping of abstract types to their implementations.
+        """
+        return self._type_registry
+
+    @property
+    def resolved_nodes(self) -> GraphNodesView[Any]:
+        """
+        A node is considered resolved if all its dependencies have been resolved.
+        Which means all its forward dependencies have been resolved.
+        This would also include builtin types.
+        """
+        return MappingProxyType(self._resolved_nodes)
+
+    @property
+    def visitor(self) -> Visitor:
+        return Visitor(self._nodes)
+
+    def _merge_nodes(self, other: "Graph"):
+        for dep_type, other_node in other.nodes.items():
+            current_node = self._nodes.get(dep_type)
+            current_resolved = self._resolved_nodes.get(dep_type)
+            other_resolved = other.resolved_nodes.get(dep_type)
+
+            if not current_node or (should_override(other_node, current_node)):
+                self._nodes[dep_type] = other_node
+                if other_resolved:
+                    self._resolved_nodes[dep_type] = other_resolved
+                continue
+
+            # the conflict case, we only update if current node is not resolved
+            if not current_resolved and other_resolved:
+                self._resolved_nodes[dep_type] = other_resolved
+
+    # ==========================  Public ==========================
+
+    def merge(self, other: Union["Graph", Sequence["Graph"]]):
+        """
+        Merge the other graphs into this graph, update the current graph.
+
+        ## Logic
+
+        1. If a node not in current graph, it will be added,
+        2. otherwise, compare the `resolve order` of these two nodes, keep the one with higher order.
+
+        ### resolve order
+
+        1. node with resource management factory > node with a plain factory.
+        2. node with a plain factory > node with default constructor.
+        """
+
+        if isinstance(other, Graph):
+            others = (other,)
+        else:
+            others = other
+
+        for other in others:
+            try:
+                other._scope_context.get()
+            except LookupError:
+                pass
+            else:
+                raise MergeWithScopeStartedError()
+
+            self._merge_nodes(other)
+
+            self._type_registry.update(other._type_registry)
+            self._resolution_registry.update(other._resolution_registry)
+
+    def set_context_scope(
+        self, scope: Union["SyncScope", "AsyncScope"]
+    ) -> Token[Union["SyncScope", "AsyncScope"]]:
+        return self._scope_context.set(scope)
+
+    def reset_context_scope(self, token: Token[Union["SyncScope", "AsyncScope"]]):
+        self._scope_context.reset(token)
+
+    def reset(self, clear_nodes: bool = False) -> None:
+        """
+        Clear all resolved instances while maintaining registrations.
+
+        clear_nodes: bool
+        ---
+        whether to clear:
+        - the node registry
+        - the type registry
+        """
+        self._resolution_registry.clear()
+        self._registered_singleton.clear()
+
+        if clear_nodes:
+            self._type_registry.clear()
+            self._resolved_nodes.clear()
+            self._nodes.clear()
+
+    def register_singleton(
+        self, dependent: T, dependent_type: Union[type[T], None] = None
+    ) -> None:
+        """
+        Register a dependent instance to be injected, provide a dependent type if it's not the same as the instance type.
+        """
+        if dependent_type is None:
+            dependent_type = type(dependent)
+        register_dependent(self._resolution_registry, dependent_type, dependent)
+        self._registered_singleton.add(dependent_type)
+
+    def remove_singleton(self, dependent_type: type) -> None:
+        "Remove the registered singleton from current graph, return if not found"
+        if dependent_type in self._registered_singleton:
+            self._registered_singleton.remove(dependent_type)
+
+    def remove_dependent(self, dependent: INode[P, T]) -> None:
+        "Remove the dependent from current graph, return if not found"
+        dependent_type = resolve_node_type(dependent)
+
+        if node := self._nodes.get(dependent_type):
+            self._remove_node(node)
+
+    def override(self, old_dep: INode[P, T], new_dep: INode[P, T]) -> None:
+        """
+        globally override a dependency
+        """
+
+        self.remove_dependent(old_dep)
+        self._node(new_dep)
+
+    def search_node(self, dep_name: str) -> Union[DependentNode[Any], None]:
+        for dep, node in self._nodes.items():
+            if dep.__name__ == dep_name:
+                return node
+
+    # static_resolve = analyze
+    # static_resolve_all = analyze_nodes
+
+    def scope(self, name: Maybe[Hashable] = MISSING) -> "ScopeManager":
         """
         create a scope for resource,
         resources resolved wihtin the scope would be
@@ -764,26 +710,52 @@ class Graph:
         scope_name: give a iditifier to the scope so that you can get it with
         dg.get_scope(scope_name)
         """
-        return ScopeProxy(self, name=name)
-
-    @lru_cache(1024)
-    def should_be_scoped(self, dep_type: INode[P, T]) -> bool:
-        "Recursively check if a dependent type contains any resource dependency"
-
-        if not (resolved_node := self._resolved_nodes.get(dep_type)):
-            resolved_node = self.analyze(dep_type)
-
-        if self.is_registered_singleton(resolved_node.dependent_type):
-            return False
-
-        if resolved_node.is_resource:
-            return True
-
-        unsolved_params = resolved_node.unsolved_params(ignore=self._config.ignore)
-        contain_resource = any(
-            self.should_be_scoped(param_type) for _, param_type in unsolved_params
+        return ScopeManager(
+            name=name,
+            scope_ctx=self._scope_context,
+            resolver_args=SharedData(
+                nodes=self._nodes,
+                resolved_nodes=self._resolved_nodes,
+                type_registry=self._type_registry,
+                ignore=self._ignore,
+            ),
         )
-        return contain_resource
+
+        # resolution_registry=self._resolution_registry,
+        # registered_singleton=self._registered_singleton,
+
+    def get_resolve_cache(self, dependent: IFactory[P, T]) -> Maybe[T]:
+        return self._resolution_registry.get(dependent, MISSING)
+
+    def resolve_callback(
+        self,
+        resolved: T,
+        dependent_type: type[T],
+        factory_type: FactoryType,
+        is_reuse: bool,
+    ) -> T:
+
+        if factory_type not in ("default", "function"):
+            raise ResourceOutsideScopeError(dependent_type)
+
+        if is_reuse:
+            register_dependent(self._resolution_registry, dependent_type, resolved)
+        return resolved
+
+    async def aresolve_callback(
+        self,
+        resolved: Union[T, Awaitable[T]],
+        dependent_type: type[T],
+        factory_type: FactoryType,
+        is_reuse: bool,
+    ):
+        if factory_type not in ("default", "function"):
+            raise ResourceOutsideScopeError(dependent_type)
+
+        instance = await resolved if isawaitable(resolved) else resolved
+        if is_reuse:
+            register_dependent(self._resolution_registry, dependent_type, instance)
+        return cast(T, instance)
 
     @overload
     def use_scope(
@@ -792,7 +764,7 @@ class Graph:
         *,
         create_on_miss: bool = False,
         as_async: Literal[False] = False,
-    ) -> SyncScope: ...
+    ) -> "SyncScope": ...
 
     @overload
     def use_scope(
@@ -801,7 +773,7 @@ class Graph:
         *,
         create_on_miss: bool = False,
         as_async: Literal[True],
-    ) -> AsyncScope: ...
+    ) -> "AsyncScope": ...
 
     def use_scope(
         self,
@@ -809,7 +781,7 @@ class Graph:
         *,
         create_on_miss: bool = False,
         as_async: bool = False,
-    ) -> Union[SyncScope, AsyncScope]:
+    ) -> Union["SyncScope", "AsyncScope"]:
         """
         Get most recently created scope
 
@@ -827,133 +799,11 @@ class Graph:
             return scope.get_scope(name)
         return scope
 
-    def get_resolve_cache(
-        self, dependent: IFactory[P, T], scope: Maybe[Any]
-    ) -> Maybe[T]:
-        if scope:
-            if not isinstance(scope, AbstractScope):
-                raise PositionalOverrideError(scope)
-
-            if is_provided(solution := scope.get_cached(dependent)):
-                return solution
-
-            if self.should_be_scoped(dependent):
-                return MISSING
-
-        return self._resolution_registry.get(dependent, MISSING)
-
-    @overload
-    def resolve(
-        self,
-        dependent: IAnyFactory[T],
-        scope: Maybe[SyncScope] = MISSING,
-        /,
-    ) -> T: ...
-
-    @overload
-    def resolve(
-        self,
-        dependent: IFactory[P, T],
-        scope: Maybe[SyncScope] = MISSING,
-        /,
-        *args: P.args,
-        **overrides: P.kwargs,
-    ) -> T: ...
-
-    def resolve(
-        self,
-        dependent: IFactory[P, T],
-        scope: Maybe[SyncScope] = MISSING,
-        /,
-        *args: P.args,
-        **overrides: P.kwargs,
-    ) -> T:
-        """
-        Resolves a dependent, builds all its dependencies, injects them into its factory, and returns the instance.
-
-        ### Resolve Priority:
-        1. Override: Any dependencies provided via keyword arguments will take priority.
-        2. Factory: If no override is provided, the factory's resolution will be used.
-        3. Default Value: If neither an override nor a factory is available, the default value is used.
-        4. __init__: build dependencies according to the `__init__` method of the dependent type
-
-        ### Example:
-
-        Resolve a dependent with overrides and a specific scope
-
-        ```python
-        instance = dependency_graph.resolve(my_factory, scope=my_scope, my_override=override_value)
-        ```
-
-        ### Notes:
-        - Ensure that any overrides are passed as keyword arguments, not positional.
-        """
-
-        if args:
-            raise PositionalOverrideError(args)
-
-        if is_provided(resolution := self.get_resolve_cache(dependent, scope)):
-            return resolution
-
-        provided_params = frozenset(overrides)
-        node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
-
-        unsolved_params = node.unsolved_params(self._config.ignore | provided_params)
-
-        params = overrides
-        for param_name, param_type in unsolved_params:
-            params[param_name] = self.resolve(param_type, scope)
-
-        resolved = cast(T, node.factory(**params))
-
-        return self._manage_resolved(
-            resolved=resolved,
-            dependent_type=node.dependent_type,
-            factory_type=node.factory_type,
-            is_reuse=node.config.reuse,
-            scope=scope,
-        )
-
-    async def aresolve(
-        self,
-        dependent: IFactory[P, T],
-        scope: Maybe[AsyncScope] = MISSING,
-        /,
-        *args: P.args,
-        **overrides: P.kwargs,
-    ) -> T:
-        """
-        Async version of resolve that handles async context managers and coroutines.
-        """
-
-        if args:
-            raise PositionalOverrideError(args)
-
-        if is_provided(resolution := self.get_resolve_cache(dependent, scope)):
-            return resolution
-
-        provided_params = frozenset(overrides)
-        node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
-
-        unsolved_params = node.unsolved_params(self._config.ignore | provided_params)
-
-        for param_name, param_type in unsolved_params:
-            overrides[param_name] = await self.aresolve(param_type, scope)
-
-        resolved = cast(Union[T, Awaitable[T]], node.inject_params(overrides))
-        return await self._manage_aresolved(
-            resolved=resolved,
-            dependent_type=node.dependent_type,
-            factory_type=node.factory_type,
-            is_reuse=node.config.reuse,
-            scope=scope,
-        )
-
     def analyze_params(
         self, func: Callable[P, T], **iconfig: Unpack[INodeConfig]
     ) -> tuple[bool, list[tuple[str, type]]]:
-        config = NodeConfig(**iconfig)
-        ignores = self._config.ignore | config.ignore
+        config = NodeConfig.build(**iconfig)
+        ignores = self._ignore | config.ignore
 
         deps = Dependencies.from_signature(
             signature=get_typed_signature(func), factory=func
@@ -1056,7 +906,7 @@ class Graph:
                         for param_name, param_type in unresolved:
                             if param_name in kwargs:
                                 continue
-                            kwargs[param_name] = await self.aresolve(param_type, scope)
+                            kwargs[param_name] = await scope.resolve(param_type)
 
                         r = await func(*args, **kwargs)
                         return r
@@ -1085,7 +935,7 @@ class Graph:
                         for param_name, param_type in unresolved:
                             if param_name in kwargs:
                                 continue
-                            kwargs[param_name] = self.resolve(param_type, scope)
+                            kwargs[param_name] = scope.resolve(param_type)
 
                         r = sync_func(*args, **kwargs)
                         return r
@@ -1107,59 +957,282 @@ class Graph:
         setattr(f, replace.__name__, replace)
         return cast(EntryFunc[P, T], f)
 
-    @overload
-    def node(self, dependent: type[T], **config: Unpack[INodeConfig]) -> type[T]: ...
 
-    @overload
-    def node(
-        self, dependent: INodeFactory[P, T], **config: Unpack[INodeConfig]
-    ) -> INodeFactory[P, T]: ...
+class ScopeBase(Generic[Stack]):
+    _stack: Stack
+    _name: Hashable
+    _pre: Maybe[Union["SyncScope", "AsyncScope"]]
+    _resolution_registry: ResolvedInstances[Any]
+    _registered_singleton: set[type]
 
-    @overload
-    def node(self, **config: Unpack[INodeConfig]) -> TDecor: ...
+    def __repr__(self):
+        return f"{self.__class__.__name__}(id={self._name})"
 
-    def node(
+    def cache_result(self, dependent: IEmptyFactory[T], result: T) -> None:
+        register_dependent(self._resolution_registry, dependent, result)
+
+    def enter_context(self, context: ContextManager[T]) -> T:
+        return self._stack.enter_context(context)
+
+    def get_scope(self, name: Hashable) -> Self:
+        if name == self._name:
+            return self
+
+        ptr = self
+        while is_provided(ptr._pre):
+            if ptr._pre._name == name:
+                return cast(Self, ptr._pre)
+            ptr = ptr._pre
+        else:
+            raise OutOfScopeError(name)
+
+    def register_singleton(
+        self, dependent: T, dependent_type: Union[type[T], None] = None
+    ) -> None:
+        """
+        Register a dependent to be injected
+        This is particular useful for top level dependents
+        """
+
+        if dependent_type is None:
+            dependent_type = type(dependent)
+        register_dependent(self._resolution_registry, dependent_type, dependent)
+        self._registered_singleton.add(dependent_type)
+
+
+class SyncScope(ScopeBase[ExitStack], Resolver):
+    # __slots__ = (
+    #     "_stack",
+    #     "_name",
+    #     "_pre",
+    #     "_resolution_registry",
+    #     "_registered_singleton",
+    # )
+
+    def __init__(
         self,
-        dependent: Union[INode[P, T], None] = None,
-        **config: Unpack[INodeConfig],
-    ) -> Union[INode[P, T], TDecor]:
-        """
-        ### Decorator to register a node in the dependency graph.
+        *,
+        name: Maybe[Hashable] = MISSING,
+        pre: Maybe[Union["SyncScope", "AsyncScope"]] = MISSING,
+        **args: Unpack[SharedData],
+    ):
+        super().__init__(**args, resolution_registry=dict(), registered_singleton=set())
 
-        This does NOT statically resolve the node
+        self._name = name
+        self._pre = pre
+        self._stack = ExitStack()
 
-        - Can be used with both factory functions and classes.
-        - If decorating a factory function that returns an existing type,
-        it will override the factory for that type.
-        ----
-        Examples:
+    def __enter__(self) -> "SyncScope":
+        return self
 
-        #### Register a class:
+    def __exit__(
+        self,
+        exc_type: Union[type[Exception], None],
+        exc_value: Union[Exception, None],
+        traceback: Union[TracebackType, None],
+    ) -> None:
+        self._stack.__exit__(exc_type, exc_value, traceback)
 
-        ```python
-        dg = DependencyGraph()
+    def resolve_callback(
+        self,
+        resolved: T,
+        dependent_type: type[T],
+        factory_type: FactoryType,
+        is_reuse: bool,
+    ):
+        if factory_type in ("default", "function"):
+            if is_reuse:
+                register_dependent(self._resolution_registry, dependent_type, resolved)
+            return resolved
 
-        @dg.node
-        class AuthService: ...
-        ```
+        if factory_type == "aresource":
+            raise AsyncResourceInSyncError(dependent_type)
 
-        #### Register a factory function:
+        instance = self.enter_context(cast(ContextManager[T], resolved))
+        if is_reuse:
+            self.cache_result(dependent_type, instance)
+        return instance
 
-        ```python
-        @dg.node
-        def auth_service_factory() -> AuthService: ...
-        ```
-        """
+    def get_resolve_cache(self, dependent: IFactory[P, T]) -> Maybe[T]:
+        if resolution := self._resolution_registry.get(dependent, MISSING):
+            return resolution
 
-        if not dependent:
-            configured = cast(TDecor, partial(self.node, **config))
-            return configured
+        if self.should_be_scoped(dependent):
+            return MISSING
 
-        if is_unsolvable_type(dependent):
-            raise TopLevelBulitinTypeError(dependent)
+        # return self._graph_resolutions.get(depndent, MISSING)
+        return MISSING
 
-        self._node(dependent, config=NodeConfig(**config))
-        return dependent
+
+class AsyncScope(ScopeBase[AsyncExitStack], Resolver):
+    # __slots__ = (
+    #     "_stack",
+    #     "_name",
+    #     "_pre",
+    #     "_resolution_registry",
+    #     "_registered_singleton",
+    # )
+
+    def __init__(
+        self,
+        *,
+        name: Maybe[Hashable] = MISSING,
+        pre: Maybe["SyncScope"] = MISSING,
+        **args: Unpack[SharedData],
+    ):
+        super().__init__(**args, resolution_registry=dict(), registered_singleton=set())
+        self._name = name
+        self._pre = pre
+        self._stack = AsyncExitStack()
+
+    async def __aenter__(self) -> "AsyncScope":
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: Union[type[Exception], None],
+        exc_value: Union[Exception, None],
+        traceback: Union[TracebackType, None],
+    ) -> None:
+        await self._stack.__aexit__(exc_type, exc_value, traceback)
+
+    def get_resolve_cache(self, dependent: IFactory[P, T]) -> Maybe[T]:
+        if resolution := self._resolution_registry.get(dependent, MISSING):
+            return resolution
+
+        if self.should_be_scoped(dependent):
+            return MISSING
+
+        # return self._graph_resolutions.get(depndent, MISSING)
+        return MISSING
+
+    @overload
+    async def resolve(self, dependent: IAnyFactory[T], /) -> T: ...
+
+    @overload
+    async def resolve(
+        self,
+        dependent: IFactory[P, AsyncGenerator[T, None]],
+        /,
+        *args: P.args,
+        **overrides: P.kwargs,
+    ) -> T: ...
+
+    @overload
+    async def resolve(
+        self, dependent: IFactory[P, T], /, *args: P.args, **overrides: P.kwargs
+    ) -> T: ...
+
+    async def resolve(
+        self,
+        dependent: IFactory[P, Union[T, AsyncGenerator[T, None]]],
+        /,
+        *args: P.args,
+        **overrides: P.kwargs,
+    ) -> T:
+        r = await super().aresolve(dependent, *args, **overrides)
+        return cast(T, r)
+
+    async def enter_async_context(self, context: AsyncContextManager[T]) -> T:
+        return await self._stack.enter_async_context(context)
+
+    async def aresolve_callback(
+        self,
+        resolved: Union[T, Awaitable[T]],
+        dependent_type: type[T],
+        factory_type: FactoryType,
+        is_reuse: bool,
+    ) -> T:
+        if factory_type in ("default", "function"):
+            instance = await resolved if isawaitable(resolved) else resolved
+            if is_reuse:
+                register_dependent(self._resolution_registry, dependent_type, instance)
+            return cast(T, instance)
+
+        if factory_type == "resource":
+            instance = self.enter_context(cast(ContextManager[T], resolved))
+        else:
+            instance = await self.enter_async_context(
+                cast(AsyncContextManager[T], resolved)
+            )
+
+        if is_reuse:
+            self.cache_result(dependent_type, instance)
+        return instance
+
+
+class ScopeManager:
+    _scope: Maybe[Union[SyncScope, AsyncScope]]
+
+    # __slots__ = ("_scope", "_token", "_name", "_scope_ctx")
+
+    def __init__(
+        self,
+        resolver_args: SharedData,
+        scope_ctx: ContextVar[Union[SyncScope, AsyncScope]],
+        name: Maybe[Hashable] = MISSING,
+    ):
+        self._resolver_args = resolver_args
+        self._scope = MISSING
+        self._name = name
+        self._scope_ctx = scope_ctx
+
+    @property
+    def scope(self):
+        return self._scope
+
+    # TODO: BUG
+    def use_scope(self, name: Maybe[Hashable] = MISSING):
+        try:
+            scope = self._scope_ctx.get()
+        except LookupError as le:
+            raise OutOfScopeError() from le
+
+        if is_provided(name):
+            return scope.get_scope(name)
+        return scope
+
+    def __enter__(self) -> SyncScope:
+        try:
+            pre = self.use_scope()
+        except OutOfScopeError:
+            pre = MISSING
+
+        self._scope = SyncScope(
+            name=self._name, pre=pre, **self._resolver_args
+        ).__enter__()
+        self._token = self._scope_ctx.set(self._scope)
+        return self._scope
+
+    async def __aenter__(self) -> AsyncScope:
+        try:
+            pre = self.use_scope()
+        except OutOfScopeError:
+            pre = MISSING
+
+        self._scope = await AsyncScope(
+            name=self._name, pre=pre, **self._resolver_args
+        ).__aenter__()
+        self._token = self._scope_ctx.set(self._scope)
+        return self._scope
+
+    def __exit__(
+        self,
+        exc_type: Union[type, None],
+        exc_value: Any,
+        traceback: Union[TracebackType, None],
+    ) -> None:
+        cast(SyncScope, self._scope).__exit__(exc_type, exc_value, traceback)
+        self._scope_ctx.reset(self._token)
+
+    async def __aexit__(
+        self,
+        exc_type: Union[type, None],
+        exc_value: Any,
+        traceback: Union[TracebackType, None],
+    ) -> None:
+        await cast(AsyncScope, self._scope).__aexit__(exc_type, exc_value, traceback)
+        self._scope_ctx.reset(self._token)
 
 
 DependencyGraph = Graph

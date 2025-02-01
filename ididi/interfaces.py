@@ -14,7 +14,8 @@ from typing import (
     runtime_checkable,
 )
 
-from typing_extensions import TypeAliasType
+from msgspec import Struct
+from typing_extensions import TypeAliasType, dataclass_transform
 
 from .utils.param_utils import MISSING, Maybe
 from .utils.typing_utils import C, P, R, T
@@ -150,3 +151,10 @@ class EntryFunc(Protocol[P, C]):
 
 class TEntryDecor(Protocol):
     def __call__(self, func: Callable[P, T]) -> EntryFunc[P, T]: ...
+
+
+@dataclass_transform(kw_only_default=True)
+class PlainData(Struct, kw_only=True, gc=False):
+    ...
+@dataclass_transform(frozen_default=True, kw_only_default=True)
+class FrozenData(Struct, kw_only=True, frozen=True, gc=False): ...

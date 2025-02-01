@@ -1,6 +1,5 @@
 from abc import ABC
 from contextlib import asynccontextmanager, contextmanager
-from dataclasses import dataclass
 from functools import lru_cache
 from inspect import Parameter, Signature
 from inspect import _ParameterKind as ParameterKind  # type: ignore
@@ -41,7 +40,7 @@ from ._type_resolve import (
     resolve_annotation,
     resolve_forwardref,
 )
-from .config import DefaultConfig, NodeConfig
+from .config import CacheMax, DefaultConfig, NodeConfig
 from .errors import (
     ABCNotImplementedError,
     MissingAnnotationError,
@@ -50,6 +49,7 @@ from .errors import (
 from .interfaces import (
     EMPTY_SIGNATURE,
     INSPECT_EMPTY,
+    FrozenData,
     INode,
     INodeAnyFactory,
     INodeConfig,
@@ -78,7 +78,7 @@ def use(
     def func(service: Annotated[UserService, use(factory)]): ...
     ```
     """
-    node = DependentNode[T].from_node(factory, config=NodeConfig(**iconfig))
+    node = DependentNode[T].from_node(factory, config=NodeConfig.build(**iconfig))
     annt = Annotated[node.dependent_type, node, IDIDI_USE_FACTORY_MARK]
     return cast(T, annt)
 
@@ -117,8 +117,7 @@ def should_override(
 # ======================= Signature =====================================
 
 
-@dataclass(frozen=True)
-class Dependency(Generic[T]):
+class Dependency(FrozenData, Generic[T]):
     """'dpram' for short
     Represents a parameter and its corresponding dependency node
 
@@ -136,8 +135,6 @@ class Dependency(Generic[T]):
     param_type: an ididi-friendly type resolved from annotation, int, in this case.
     default: the default value of the param, 5, in this case.
     """
-
-    __slots__ = ("name", "param_kind", "param_type", "default")
 
     name: str
     param_type: type[T]  # resolved_type
@@ -340,6 +337,12 @@ class DependentNode(Generic[T]):
         "_unsolved_params",
     )
 
+    dependent_type: type[T]
+    factory: INodeAnyFactory[T]
+    factory_type: FactoryType
+    dependencies: Dependencies
+    config: NodeConfig
+
     def __init__(
         self,
         *,
@@ -349,11 +352,7 @@ class DependentNode(Generic[T]):
         dependencies: Dependencies,
         config: NodeConfig,
     ):
-        """
-        TODO:
-        - cancel Dependent, use dependent_type directly
-        - refactor DependentSignature to Dependencies
-        """
+
         self.dependent_type = dependent_type
         self.factory = factory
         self.factory_type: FactoryType = factory_type
@@ -410,7 +409,7 @@ class DependentNode(Generic[T]):
             if param.param_type != param_type:
                 self.dependencies.update(param_name, param)
 
-    @lru_cache(1024)
+    @lru_cache(CacheMax)
     def unsolved_params(self, ignore: NodeIgnore) -> list[tuple[str, type]]:
         "yield dependencies that needs to be resolved"
         if not self._unsolved_params:
@@ -532,7 +531,7 @@ class DependentNode(Generic[T]):
         )
 
     @classmethod
-    @lru_cache(1024)
+    @lru_cache(CacheMax)
     def from_node(
         cls,
         factory_or_class: INode[P, T],

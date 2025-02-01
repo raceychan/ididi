@@ -74,6 +74,5 @@ def test_varidc_keyword_args():
 def test_node_config_frozen():
 
     node = DependentNode.from_node(Service)
-    with pytest.raises(FrozenInstanceError):
+    with pytest.raises(AttributeError):
         node.config.reuse = False
-

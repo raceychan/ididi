@@ -901,5 +901,43 @@ dg.node(User)
 assert dg.search_node("User").dependent_type is User
 ```
 
+This is particularly useful for type defined by NewType
+
+```python
+UserId = NewType("UserId", str)
+assert dg.search_node("UserId")
+```
+
 
 - `Graph.override` 
+
+a helper function to override dependent within the graph
+
+```python
+def override(self, old_dep: INode[P, T], new_dep: INode[P, T]) -> None:
+```
+
+```python
+    dg = DependencyGraph()
+
+    @dg.entry
+    async def create_user(
+        user_name: str, user_email: str, service: UserService
+    ) -> UserService:
+        return service
+
+    @dg.node
+    def user_factory() -> UserService:
+        return UserService("1", 2)
+
+    class FakeUserService(UserService): ...
+
+    dg.override(UserService, FakeUserService)
+
+    service_res = await create_user("1", "2")
+    assert isinstance(service_res, FakeUserService)
+```
+
+Note that, if you only want to override dependency for `create_user`
+you can still just use `create_user.replace(UserService, FakeUserService)`,
+and such override won't affect others.

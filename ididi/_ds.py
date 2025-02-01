@@ -27,6 +27,7 @@ TypeMappings = dict[type[T], list[type[T]]]
 """
 
 
+
 class BaseRegistry:
     """Base registry class with common functionali"""
 

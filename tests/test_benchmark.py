@@ -164,3 +164,19 @@ current implementation is 12.761818 times slower
 0.011167 seoncds to call entry version of create_user 1000 times
 current implementation is 6.780206 times slower
 """
+
+"""
+1.3.3
+
+tests/test_benchmark.py 
+0.015494 seoncds to register 100 classes
+.
+0.002466 seoncds to statically resolve 100 classes
+.
+0.000141 seoncds to resolve 100 instances
+
+0.001677 seoncds to call regular function create_user 1000 times
+0.011296 seoncds to call entry version of create_user 1000 times
+current implementation of entry is 6.735838 times slower
+current implementation(without reuse) is 8.631982 times slower
+"""
