@@ -6,7 +6,6 @@ from types import MappingProxyType, TracebackType
 from typing import (
     Any,
     AsyncContextManager,
-    AsyncGenerator,
     Awaitable,
     Callable,
     ClassVar,
@@ -77,6 +76,8 @@ from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import P, T
 
 Stack = TypeVar("Stack", ExitStack, AsyncExitStack)
+ScopeContext = ContextVar[Union["SyncScope", "AsyncScope"]]
+ScopeToken = Token[Union["SyncScope", "AsyncScope"]]
 
 
 def register_dependent(
@@ -91,9 +92,6 @@ def register_dependent(
                 continue
             mapping[base] = instance
     mapping[dependent_type] = instance
-
-
-ScopeContext = ClassVar[ContextVar[Union["SyncScope", "AsyncScope"]]]
 
 
 class SharedData(TypedDict):
@@ -166,7 +164,7 @@ class Resolver:
         self._type_registry.register(dependent_type)
 
     def _resolve_concrete_node(self, dependent: type[T]) -> DependentNode[Any]:
-        # user assign impl via factory
+        # when user assign impl via factory
         if (node := self._nodes.get(dependent)) and node.factory_type != "default":
             return node
 
@@ -180,7 +178,7 @@ class Resolver:
 
     def resolve_callback(
         self,
-        resolved: T,
+        resolved: Any,
         dependent_type: type[T],
         factory_type: FactoryType,
         is_reuse: bool,
@@ -195,7 +193,7 @@ class Resolver:
 
     async def aresolve_callback(
         self,
-        resolved: Union[T, Awaitable[T]],
+        resolved: Any,
         dependent_type: type[T],
         factory_type: FactoryType,
         is_reuse: bool,
@@ -267,7 +265,7 @@ class Resolver:
         for param_name, param_type in unsolved_params:
             params[param_name] = self.resolve(param_type)
 
-        resolved = cast(T, node.factory(**params))
+        resolved = node.factory(**params)
         return self.resolve_callback(
             resolved=resolved,
             dependent_type=node.dependent_type,
@@ -281,7 +279,7 @@ class Resolver:
         /,
         *args: P.args,
         **overrides: P.kwargs,
-    ) -> Union[T, Awaitable[T]]:
+    ) -> T:
         """
         Async version of resolve that handles async context managers and coroutines.
         """
@@ -300,7 +298,7 @@ class Resolver:
         for param_name, param_type in unsolved_params:
             overrides[param_name] = await self.aresolve(param_type)
 
-        resolved = cast(Union[T, Awaitable[T]], node.inject_params(overrides))
+        resolved = node.inject_params(overrides)
         return await self.aresolve_callback(
             resolved=resolved,
             dependent_type=node.dependent_type,
@@ -463,7 +461,7 @@ class Resolver:
         if is_unsolvable_type(dependent):
             raise TopLevelBulitinTypeError(dependent)
 
-        self._node(dependent, config=NodeConfig.build(**config))
+        self._node(dependent, config=NodeConfig(**config))
         return dependent
 
 
@@ -493,7 +491,7 @@ class Graph(Resolver):
     ```
     """
 
-    _scope_context: ScopeContext = ContextVar("idid_scope_ctx")
+    _scope_context: ClassVar[ScopeContext] = ContextVar("idid_scope_ctx")
 
     _nodes: GraphNodes
     "Map a type to a dependent node"
@@ -542,7 +540,7 @@ class Graph(Resolver):
         - `self_inject` is useful when you have a dependency that requires current instance of `DependencyGraph` as its dependency.
         - `ignore` is a flexible configuration to skip over specific dependencies during resolution.
         """
-        config = GraphConfig.build(self_inject=self_inject, ignore=ignore)
+        config = GraphConfig(self_inject=self_inject, ignore=ignore)
 
         super().__init__(
             nodes=dict(),
@@ -647,14 +645,6 @@ class Graph(Resolver):
 
             self._type_registry.update(other._type_registry)
             self._resolution_registry.update(other._resolution_registry)
-
-    def set_context_scope(
-        self, scope: Union["SyncScope", "AsyncScope"]
-    ) -> Token[Union["SyncScope", "AsyncScope"]]:
-        return self._scope_context.set(scope)
-
-    def reset_context_scope(self, token: Token[Union["SyncScope", "AsyncScope"]]):
-        self._scope_context.reset(token)
 
     def reset(self, clear_nodes: bool = False) -> None:
         """
@@ -778,7 +768,7 @@ class Graph(Resolver):
     def analyze_params(
         self, func: Callable[P, T], **iconfig: Unpack[INodeConfig]
     ) -> tuple[bool, list[tuple[str, type]]]:
-        config = NodeConfig.build(**iconfig)
+        config = NodeConfig(**iconfig)
         ignores = self._ignore | config.ignore
 
         deps = Dependencies.from_signature(
@@ -1055,7 +1045,7 @@ class AsyncScope(ScopeBase[AsyncExitStack], Resolver):
         self,
         *,
         name: Maybe[Hashable] = MISSING,
-        pre: Maybe["SyncScope"] = MISSING,
+        pre: Maybe[Union["SyncScope", "AsyncScope"]] = MISSING,
         **args: Unpack[SharedData],
     ):
         super().__init__(**args, resolution_registry=dict(), registered_singleton=set())
@@ -1088,7 +1078,10 @@ class AsyncScope(ScopeBase[AsyncExitStack], Resolver):
     async def enter_async_context(self, context: AsyncContextManager[T]) -> T:
         return await self._stack.enter_async_context(context)
 
-    resolve = Resolver.aresolve
+    async def resolve(
+        self, dependent: IFactory[P, T], *args: P.args, **kwargs: P.kwargs
+    ) -> T:
+        return await super().aresolve(dependent, *args, **kwargs)
 
     @override
     async def aresolve_callback(
@@ -1117,58 +1110,46 @@ class AsyncScope(ScopeBase[AsyncExitStack], Resolver):
 
 
 class ScopeManager:
-    _scope: Maybe[Union[SyncScope, AsyncScope]]
+    __slots__ = ("resolver_args", "scope_ctx", "name", "_scope", "_token")
 
-    # __slots__ = ("_scope", "_token", "_name", "_scope_ctx")
+    resolver_args: SharedData
+    scope_ctx: ScopeContext
 
     def __init__(
         self,
         resolver_args: SharedData,
-        scope_ctx: ContextVar[Union[SyncScope, AsyncScope]],
+        scope_ctx: ScopeContext,
         name: Maybe[Hashable] = MISSING,
     ):
-        self._resolver_args = resolver_args
-        self._scope = MISSING
-        self._name = name
-        self._scope_ctx = scope_ctx
+        self.resolver_args = resolver_args
+        self.scope_ctx = scope_ctx
+        self.name = name
 
-    @property
-    def scope(self):
-        return self._scope
-
-    # TODO: To be implemented
-    def use_scope(self, name: Maybe[Hashable] = MISSING):
-        try:
-            scope = self._scope_ctx.get()
-        except LookupError as le:
-            raise OutOfScopeError() from le
-
-        if is_provided(name):
-            return scope.get_scope(name)
-        return scope
+        self._scope: Maybe[Union[SyncScope, AsyncScope]] = MISSING
+        self._token: Maybe[ScopeToken] = MISSING
 
     def __enter__(self) -> SyncScope:
         try:
-            pre = self.use_scope()
-        except OutOfScopeError:
+            pre = self.scope_ctx.get()
+        except LookupError:
             pre = MISSING
 
         self._scope = SyncScope(
-            name=self._name, pre=pre, **self._resolver_args
+            name=self.name, pre=pre, **self.resolver_args
         ).__enter__()
-        self._token = self._scope_ctx.set(self._scope)
+        self._token = self.scope_ctx.set(self._scope)
         return self._scope
 
     async def __aenter__(self) -> AsyncScope:
         try:
-            pre = self.use_scope()
-        except OutOfScopeError:
+            pre = cast(AsyncScope, self.scope_ctx.get())
+        except LookupError:
             pre = MISSING
 
         self._scope = await AsyncScope(
-            name=self._name, pre=pre, **self._resolver_args
+            name=self.name, pre=pre, **self.resolver_args
         ).__aenter__()
-        self._token = self._scope_ctx.set(self._scope)
+        self._token = self.scope_ctx.set(self._scope)
         return self._scope
 
     def __exit__(
@@ -1178,7 +1159,8 @@ class ScopeManager:
         traceback: Union[TracebackType, None],
     ) -> None:
         cast(SyncScope, self._scope).__exit__(exc_type, exc_value, traceback)
-        self._scope_ctx.reset(self._token)
+        if is_provided(self._token):
+            self.scope_ctx.reset(self._token)
 
     async def __aexit__(
         self,
@@ -1187,7 +1169,9 @@ class ScopeManager:
         traceback: Union[TracebackType, None],
     ) -> None:
         await cast(AsyncScope, self._scope).__aexit__(exc_type, exc_value, traceback)
-        self._scope_ctx.reset(self._token)
+
+        if is_provided(self._token):
+            self.scope_ctx.reset(self._token)
 
 
 DependencyGraph = Graph

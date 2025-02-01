@@ -14,8 +14,7 @@ from typing import (
     runtime_checkable,
 )
 
-from msgspec import Struct
-from typing_extensions import TypeAliasType, dataclass_transform
+from typing_extensions import TypeAliasType
 
 from .utils.param_utils import MISSING, Maybe
 from .utils.typing_utils import C, P, R, T
@@ -156,5 +155,5 @@ class TEntryDecor(Protocol):
 # @dataclass_transform(kw_only_default=True)
 # class PlainData(Struct, kw_only=True):
 #     ...
-@dataclass_transform(frozen_default=True, kw_only_default=True)
-class FrozenData(Struct, kw_only=True, frozen=True, gc=False): ...
+# @dataclass_transform(frozen_default=True, kw_only_default=True)
+# class FrozenData(Struct, kw_only=True, frozen=True, gc=False): ...

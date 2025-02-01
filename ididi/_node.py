@@ -18,7 +18,6 @@ from typing import (
     get_origin,
 )
 
-from msgspec import Struct
 from typing_extensions import Unpack
 
 from ._type_resolve import (
@@ -41,7 +40,7 @@ from ._type_resolve import (
     resolve_annotation,
     resolve_forwardref,
 )
-from .config import CacheMax, DefaultConfig, NodeConfig
+from .config import CacheMax, DefaultConfig, FrozenSlot, NodeConfig
 from .errors import (
     ABCNotImplementedError,
     MissingAnnotationError,
@@ -50,7 +49,6 @@ from .errors import (
 from .interfaces import (
     EMPTY_SIGNATURE,
     INSPECT_EMPTY,
-    FrozenData,
     INode,
     INodeAnyFactory,
     INodeConfig,
@@ -79,7 +77,7 @@ def use(
     def func(service: Annotated[UserService, use(factory)]): ...
     ```
     """
-    node = DependentNode[T].from_node(factory, config=NodeConfig.build(**iconfig))
+    node = DependentNode[T].from_node(factory, config=NodeConfig(**iconfig))
     annt = Annotated[node.dependent_type, node, IDIDI_USE_FACTORY_MARK]
     return cast(T, annt)
 
@@ -118,7 +116,7 @@ def should_override(
 # ======================= Signature =====================================
 
 
-class Dependency(FrozenData, Generic[T]):
+class Dependency(FrozenSlot, Generic[T]):
     """'dpram' for short
     Represents a parameter and its corresponding dependency node
 
@@ -131,16 +129,29 @@ class Dependency(FrozenData, Generic[T]):
     Here 'n: str = 5' would be built into a DependencyParam
 
     name: the name of the param, here 'n' is the name
-    param: inspect.Parameter, checkout inspect for this
-    param_annotation: the original annotation of a by inspect, int, in this case.
     param_type: an ididi-friendly type resolved from annotation, int, in this case.
+    param_kind: inspect.ParameterKind
     default: the default value of the param, 5, in this case.
     """
+
+    __slots__ = ("name", "param_type", "param_kind", "default")
 
     name: str
     param_type: type[T]  # resolved_type
     param_kind: ParameterKind
     default: Maybe[T]
+
+    def __init__(
+        self,
+        name: str,
+        param_type: type[T],
+        param_kind: ParameterKind,
+        default: Maybe[T],
+    ) -> None:
+        object.__setattr__(self, "name", name)
+        object.__setattr__(self, "param_type", param_type)
+        object.__setattr__(self, "param_kind", param_kind)
+        object.__setattr__(self, "default", default)
 
     def __repr__(self) -> str:
         return f"Dependency({self.name}: {self.type_repr}={self.default!r})"
@@ -180,9 +191,14 @@ class Dependency(FrozenData, Generic[T]):
         )
 
 
-class Dependencies(Struct):
-    _deps: dict[str, Dependency[Any]]
-    _sig: Union[Signature, None] = None
+class Dependencies:
+    __slost__ = ("_deps", "_sig")
+
+    def __init__(
+        self, deps: dict[str, Dependency[Any]], sig: Union[Signature, None] = None
+    ):
+        self._deps = deps
+        self._sig = sig
 
     def __iter__(self) -> Iterator[tuple[str, Dependency[Any]]]:
         return iter(self._deps.items())
@@ -338,12 +354,6 @@ class DependentNode(Generic[T]):
         "dependencies",
         "config",
     )
-
-    dependent_type: type[T]
-    factory: INodeAnyFactory[T]
-    factory_type: FactoryType
-    dependencies: Dependencies
-    config: NodeConfig
 
     def __init__(
         self,
