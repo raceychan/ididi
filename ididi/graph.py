@@ -730,6 +730,7 @@ class Graph(Resolver):
         return ScopeManager(
             name=name,
             scope_ctx=self._scope_context,
+            graph_resolutions=self._resolution_registry,
             type_info=SharedData(
                 nodes=self._nodes,
                 resolved_nodes=self._resolved_nodes,
@@ -940,7 +941,7 @@ class Graph(Resolver):
         return cast(EntryFunc[P, T], f)
 
 
-ScopeSlots = ("_name", "_stack", "_pre")
+ScopeSlots = ("_name", "_stack", "_pre", "_graph_resolutions")
 
 
 class ScopeBase(Generic[Stack]):
@@ -993,13 +994,16 @@ class SyncScope(ScopeBase[ExitStack], Resolver):
     def __init__(
         self,
         *,
+        graph_resolutions: ResolvedInstances[Any],
         name: Maybe[Hashable] = MISSING,
         pre: Maybe[Union["SyncScope", "AsyncScope"]] = MISSING,
         **args: Unpack[SharedData],
     ):
+
         self._name = name
         self._pre = pre
         self._stack = ExitStack()
+        self._graph_resolutions = graph_resolutions
         super().__init__(**args, resolution_registry=dict(), registered_singleton=set())
 
     def __enter__(self) -> "SyncScope":
@@ -1042,8 +1046,7 @@ class SyncScope(ScopeBase[ExitStack], Resolver):
         if self.should_be_scoped(dependent):
             return MISSING
 
-        # return self._graph_resolutions.get(depndent, MISSING)
-        return MISSING
+        return self._graph_resolutions.get(dependent, MISSING)
 
 
 class AsyncScope(ScopeBase[AsyncExitStack], Resolver):
@@ -1052,6 +1055,7 @@ class AsyncScope(ScopeBase[AsyncExitStack], Resolver):
     def __init__(
         self,
         *,
+        graph_resolutions: ResolvedInstances[Any],
         name: Maybe[Hashable] = MISSING,
         pre: Maybe[Union["SyncScope", "AsyncScope"]] = MISSING,
         **args: Unpack[SharedData],
@@ -1059,6 +1063,7 @@ class AsyncScope(ScopeBase[AsyncExitStack], Resolver):
         self._name = name
         self._pre = pre
         self._stack = AsyncExitStack()
+        self._graph_resolutions = graph_resolutions
         super().__init__(**args, resolution_registry=dict(), registered_singleton=set())
 
     async def __aenter__(self) -> "AsyncScope":
@@ -1080,8 +1085,7 @@ class AsyncScope(ScopeBase[AsyncExitStack], Resolver):
         if self.should_be_scoped(dependent):
             return MISSING
 
-        # return self._graph_resolutions.get(depndent, MISSING)
-        return MISSING
+        return self._graph_resolutions.get(dependent, MISSING)
 
     async def enter_async_context(self, context: AsyncContextManager[T]) -> T:
         return await self._stack.enter_async_context(context)
@@ -1118,7 +1122,14 @@ class AsyncScope(ScopeBase[AsyncExitStack], Resolver):
 
 
 class ScopeManager:
-    __slots__ = ("shared_types", "scope_ctx", "name", "_scope", "_token")
+    __slots__ = (
+        "graph_resolutions",
+        "shared_types",
+        "scope_ctx",
+        "name",
+        "_scope",
+        "_token",
+    )
 
     shared_types: SharedData
     scope_ctx: ScopeContext
@@ -1127,8 +1138,10 @@ class ScopeManager:
         self,
         type_info: SharedData,
         scope_ctx: ScopeContext,
+        graph_resolutions: ResolvedInstances[Any],
         name: Maybe[Hashable] = MISSING,
     ):
+        self.graph_resolutions = graph_resolutions
         self.shared_types = type_info
         self.scope_ctx = scope_ctx
         self.name = name
@@ -1143,7 +1156,10 @@ class ScopeManager:
             pre = MISSING
 
         self._scope = SyncScope(
-            name=self.name, pre=pre, **self.shared_types
+            graph_resolutions=self.graph_resolutions,
+            name=self.name,
+            pre=pre,
+            **self.shared_types,
         ).__enter__()
         self._token = self.scope_ctx.set(self._scope)
         return self._scope
@@ -1155,8 +1171,12 @@ class ScopeManager:
             pre = MISSING
 
         self._scope = await AsyncScope(
-            name=self.name, pre=pre, **self.shared_types
+            graph_resolutions=self.graph_resolutions,
+            name=self.name,
+            pre=pre,
+            **self.shared_types,
         ).__aenter__()
+
         self._token = self.scope_ctx.set(self._scope)
         return self._scope
 
