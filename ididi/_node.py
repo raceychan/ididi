@@ -192,7 +192,7 @@ class Dependency(FrozenSlot, Generic[T]):
 
 
 class Dependencies:
-    __slost__ = ("_deps", "_sig")
+    __slots__ = ("_deps", "_sig")
 
     def __init__(
         self, deps: dict[str, Dependency[Any]], sig: Union[Signature, None] = None
