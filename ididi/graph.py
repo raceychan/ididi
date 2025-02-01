@@ -1027,7 +1027,7 @@ class SyncScope(ScopeBase[ExitStack], Resolver):
     ):
         if factory_type in ("default", "function"):
             if is_reuse:
-                register_dependent(self._resolution_registry, dependent_type, resolved)
+                register_dependent(self._graph_resolutions, dependent_type, resolved)
             return resolved
 
         if factory_type == "aresource":
@@ -1106,7 +1106,7 @@ class AsyncScope(ScopeBase[AsyncExitStack], Resolver):
         if factory_type in ("default", "function"):
             instance = await resolved if isawaitable(resolved) else resolved
             if is_reuse:
-                register_dependent(self._resolution_registry, dependent_type, instance)
+                register_dependent(self._graph_resolutions, dependent_type, instance)
             return cast(T, instance)
 
         if factory_type == "resource":
