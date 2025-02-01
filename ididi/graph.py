@@ -11,7 +11,6 @@ from typing import (
     Callable,
     ClassVar,
     ContextManager,
-    Generator,
     Generic,
     Hashable,
     Literal,
@@ -25,7 +24,7 @@ from typing import (
     overload,
 )
 
-from typing_extensions import Self, Unpack
+from typing_extensions import Self, Unpack, override
 
 from ._ds import GraphNodes, GraphNodesView, ResolvedInstances, TypeRegistry, Visitor
 from ._node import (
@@ -177,7 +176,7 @@ class Resolver:
         return concrete_node
 
     def get_resolve_cache(self, dependent: IFactory[P, T]) -> Maybe[T]:
-        raise NotImplementedError
+        return self._resolution_registry.get(dependent, MISSING)
 
     def resolve_callback(
         self,
@@ -186,7 +185,13 @@ class Resolver:
         factory_type: FactoryType,
         is_reuse: bool,
     ) -> T:
-        raise NotImplementedError
+
+        if factory_type not in ("default", "function"):
+            raise ResourceOutsideScopeError(dependent_type)
+
+        if is_reuse:
+            register_dependent(self._resolution_registry, dependent_type, resolved)
+        return resolved
 
     async def aresolve_callback(
         self,
@@ -194,8 +199,14 @@ class Resolver:
         dependent_type: type[T],
         factory_type: FactoryType,
         is_reuse: bool,
-    ) -> T:
-        raise NotImplementedError
+    ):
+        if factory_type not in ("default", "function"):
+            raise ResourceOutsideScopeError(dependent_type)
+
+        instance = await resolved if isawaitable(resolved) else resolved
+        if is_reuse:
+            register_dependent(self._resolution_registry, dependent_type, instance)
+        return cast(T, instance)
 
     @overload
     def resolve(
@@ -720,42 +731,7 @@ class Graph(Resolver):
                 ignore=self._ignore,
             ),
         )
-
         # resolution_registry=self._resolution_registry,
-        # registered_singleton=self._registered_singleton,
-
-    def get_resolve_cache(self, dependent: IFactory[P, T]) -> Maybe[T]:
-        return self._resolution_registry.get(dependent, MISSING)
-
-    def resolve_callback(
-        self,
-        resolved: T,
-        dependent_type: type[T],
-        factory_type: FactoryType,
-        is_reuse: bool,
-    ) -> T:
-
-        if factory_type not in ("default", "function"):
-            raise ResourceOutsideScopeError(dependent_type)
-
-        if is_reuse:
-            register_dependent(self._resolution_registry, dependent_type, resolved)
-        return resolved
-
-    async def aresolve_callback(
-        self,
-        resolved: Union[T, Awaitable[T]],
-        dependent_type: type[T],
-        factory_type: FactoryType,
-        is_reuse: bool,
-    ):
-        if factory_type not in ("default", "function"):
-            raise ResourceOutsideScopeError(dependent_type)
-
-        instance = await resolved if isawaitable(resolved) else resolved
-        if is_reuse:
-            register_dependent(self._resolution_registry, dependent_type, instance)
-        return cast(T, instance)
 
     @overload
     def use_scope(
@@ -1033,6 +1009,7 @@ class SyncScope(ScopeBase[ExitStack], Resolver):
     ) -> None:
         self._stack.__exit__(exc_type, exc_value, traceback)
 
+    @override
     def resolve_callback(
         self,
         resolved: T,
@@ -1053,6 +1030,7 @@ class SyncScope(ScopeBase[ExitStack], Resolver):
             self.cache_result(dependent_type, instance)
         return instance
 
+    @override
     def get_resolve_cache(self, dependent: IFactory[P, T]) -> Maybe[T]:
         if resolution := self._resolution_registry.get(dependent, MISSING):
             return resolution
@@ -1096,6 +1074,7 @@ class AsyncScope(ScopeBase[AsyncExitStack], Resolver):
     ) -> None:
         await self._stack.__aexit__(exc_type, exc_value, traceback)
 
+    @override
     def get_resolve_cache(self, dependent: IFactory[P, T]) -> Maybe[T]:
         if resolution := self._resolution_registry.get(dependent, MISSING):
             return resolution
@@ -1106,36 +1085,12 @@ class AsyncScope(ScopeBase[AsyncExitStack], Resolver):
         # return self._graph_resolutions.get(depndent, MISSING)
         return MISSING
 
-    @overload
-    async def resolve(self, dependent: IAnyFactory[T], /) -> T: ...
-
-    @overload
-    async def resolve(
-        self,
-        dependent: IFactory[P, AsyncGenerator[T, None]],
-        /,
-        *args: P.args,
-        **overrides: P.kwargs,
-    ) -> T: ...
-
-    @overload
-    async def resolve(
-        self, dependent: IFactory[P, T], /, *args: P.args, **overrides: P.kwargs
-    ) -> T: ...
-
-    async def resolve(
-        self,
-        dependent: IFactory[P, Union[T, AsyncGenerator[T, None]]],
-        /,
-        *args: P.args,
-        **overrides: P.kwargs,
-    ) -> T:
-        r = await super().aresolve(dependent, *args, **overrides)
-        return cast(T, r)
-
     async def enter_async_context(self, context: AsyncContextManager[T]) -> T:
         return await self._stack.enter_async_context(context)
 
+    resolve = Resolver.aresolve
+
+    @override
     async def aresolve_callback(
         self,
         resolved: Union[T, Awaitable[T]],
@@ -1181,7 +1136,7 @@ class ScopeManager:
     def scope(self):
         return self._scope
 
-    # TODO: BUG
+    # TODO: To be implemented
     def use_scope(self, name: Maybe[Hashable] = MISSING):
         try:
             scope = self._scope_ctx.get()

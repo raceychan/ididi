@@ -18,6 +18,7 @@ from typing import (
     get_origin,
 )
 
+from msgspec import Struct
 from typing_extensions import Unpack
 
 from ._type_resolve import (
@@ -179,12 +180,9 @@ class Dependency(FrozenData, Generic[T]):
         )
 
 
-class Dependencies:
-    __slots__ = ("_deps", "_sig")
-
-    def __init__(self, deps: dict[str, Dependency[Any]]):
-        self._deps = deps
-        self._sig: Union[Signature, None] = None
+class Dependencies(Struct):
+    _deps: dict[str, Dependency[Any]]
+    _sig: Union[Signature, None] = None
 
     def __iter__(self) -> Iterator[tuple[str, Dependency[Any]]]:
         return iter(self._deps.items())
@@ -228,10 +226,15 @@ class Dependencies:
         self, ignore: NodeIgnore
     ) -> Generator[tuple[str, Dependency[Any]], None, None]:
         for i, (param_name, param) in enumerate(self._deps.items()):
-            """
-            for param_name, param in ignore.filter(self._deps)
-            """
-            if (i in ignore) or (param_name in ignore) or (param.param_type in ignore):
+            param_type = param.param_type
+
+            param_type = (
+                get_args(param_type)[0]
+                if get_origin(param_type) is Annotated
+                else param_type
+            )
+
+            if (i in ignore) or (param_name in ignore) or (param_type in ignore):
                 continue
             yield param_name, param
 
@@ -334,7 +337,6 @@ class DependentNode(Generic[T]):
         "factory_type",
         "dependencies",
         "config",
-        "_unsolved_params",
     )
 
     dependent_type: type[T]
@@ -358,7 +360,6 @@ class DependentNode(Generic[T]):
         self.factory_type: FactoryType = factory_type
         self.dependencies = dependencies
         self.config = config
-        self._unsolved_params: list[tuple[str, type]] = []
 
     def __repr__(self) -> str:
         str_repr = f"{self.__class__.__name__}(type: {self.dependent_type}"
@@ -412,15 +413,15 @@ class DependentNode(Generic[T]):
     @lru_cache(CacheMax)
     def unsolved_params(self, ignore: NodeIgnore) -> list[tuple[str, type]]:
         "yield dependencies that needs to be resolved"
-        if not self._unsolved_params:
-            ignores = self.config.ignore | ignore
-            for param_name, param in self.dependencies.filter_ignore(ignore=ignores):
-                param_type: type[T] = param.param_type
-                if is_provided(param.default) and is_unsolvable_type(param_type):
-                    continue
-                param_pair = (param_name, param_type)
-                self._unsolved_params.append(param_pair)
-        return self._unsolved_params
+        unsolved_params: list[tuple[str, type]] = []
+        ignores = self.config.ignore | ignore
+        for param_name, param in self.dependencies.filter_ignore(ignore=ignores):
+            param_type: type[T] = param.param_type
+            if is_provided(param.default) and is_unsolvable_type(param_type):
+                continue
+            param_pair = (param_name, param_type)
+            unsolved_params.append(param_pair)
+        return unsolved_params
 
     def inject_params(
         self, params: Union[dict[str, Any], None] = None
