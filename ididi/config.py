@@ -11,7 +11,7 @@ class FrozenSlot:
     This is mainly due to the fact that dataclass does not support slots before python 3.10
     """
 
-    __slots__: tuple[str, ...]
+    __slots__: tuple[str, ...] = ()
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, self.__class__):
