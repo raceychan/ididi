@@ -86,11 +86,12 @@ def register_dependent(
     instance: T,
 ) -> None:
     if isinstance(dependent_type, type):
-        instance_type: type[T] = type(instance)
-        for base in get_bases(instance_type):
+        base_types = get_bases(type(instance))
+        for base in base_types:
             if base in mapping:
                 continue
             mapping[base] = instance
+
     mapping[dependent_type] = instance
 
 
@@ -267,16 +268,19 @@ class Resolver:
         if args:
             raise PositionalOverrideError(args)
 
+
         if is_provided(resolution := self.get_resolve_cache(dependent)):
             return resolution
 
         provided_params = frozenset(overrides)
+
         node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
 
         unsolved_params = node.unsolved_params(self._ignore | provided_params)
 
         params = overrides
         for param_name, param_type in unsolved_params:
+
             params[param_name] = self.resolve(param_type)
 
         resolved = node.factory(**params)
@@ -305,6 +309,7 @@ class Resolver:
             return resolution
 
         provided_params = frozenset(overrides)
+
         node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
 
         unsolved_params = node.unsolved_params(self._ignore | provided_params)
@@ -341,6 +346,7 @@ class Resolver:
         Recursively analyze the type information of a dependency.
         """
 
+
         if node := self._resolved_nodes.get(dependent):
             return node
 
@@ -353,6 +359,7 @@ class Resolver:
                 return self._resolved_nodes[dependent_type]
 
             if dependent_type not in self._type_registry:
+
                 self._node(dependent_type, config)
 
             node = self._resolve_concrete_node(dependent_type)
@@ -380,6 +387,7 @@ class Resolver:
                         dependency_type=param.param_type,
                         factory=node.factory,
                     )
+
 
                 try:
                     pnode = dfs(param_type, frozenset())
@@ -415,6 +423,7 @@ class Resolver:
     def _node(
         self, dependent: INode[P, T], config: NodeConfig = DefaultConfig
     ) -> DependentNode[T]:
+
         node = DependentNode[T].from_node(dependent, config=config)
 
         if ori_node := self._nodes.get(node.dependent_type):
@@ -478,6 +487,9 @@ class Resolver:
         self._node(dependent, config=NodeConfig(**config))
         return dependent
 
+    static_resolve = analyze
+    static_resolve_all = analyze_nodes
+
 
 @final
 class Graph(Resolver):
@@ -519,15 +531,6 @@ class Graph(Resolver):
     "Instances of reusable types"
     _registered_singleton: set[type]
     "Types that are menually added singletons "
-
-    # __slots__ = (
-    #     "_config",
-    #     "_nodes",
-    #     "_resolved_nodes",
-    #     "_resolution_registry",
-    #     "_type_registry",
-    #     "_registered_singleton",
-    # )
 
     def __init__(
         self, *, self_inject: bool = True, ignore: GraphIgnoreConfig = frozenset()
@@ -577,8 +580,8 @@ class Graph(Resolver):
             f"resolved={len(self._resolution_registry)})"
         )
 
-    def __contains__(self, item: type) -> bool:
-        return item in self._nodes
+    def __contains__(self, item: INode[P, T]) -> bool:
+        return resolve_node_type(item) in self._nodes
 
     @property
     def nodes(self) -> GraphNodesView[Any]:
@@ -716,9 +719,6 @@ class Graph(Resolver):
             if dep.__name__ == dep_name:
                 return node
 
-    # static_resolve = analyze
-    # static_resolve_all = analyze_nodes
-
     def scope(self, name: Maybe[Hashable] = MISSING) -> "ScopeManager":
         """
         create a scope for resource,
@@ -738,7 +738,6 @@ class Graph(Resolver):
                 ignore=self._ignore,
             ),
         )
-        # resolution_registry=self._resolution_registry,
 
     @overload
     def use_scope(
@@ -1040,6 +1039,7 @@ class SyncScope(ScopeBase[ExitStack], Resolver):
 
     @override
     def get_resolve_cache(self, dependent: IFactory[P, T]) -> Maybe[T]:
+
         if resolution := self._resolution_registry.get(dependent, MISSING):
             return resolution
 

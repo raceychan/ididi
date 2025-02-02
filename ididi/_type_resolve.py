@@ -64,10 +64,14 @@ ResolveOrder: dict[FactoryType, int] = {
 # when merge graphs we need to make sure a node with default constructor
 # does not override a node with resource / function factory
 
-ExtraUnsolvableTypes = {
-    Any,
-    Literal,
-}
+ExtraUnsolvableTypes: set[Any] = {Any, Literal}
+
+try:
+    from typing import TypeAliasType  # type: ignore
+except ImportError:
+    from typing_extensions import TypeAliasType
+
+ExtraUnsolvableTypes.add(TypeAliasType)
 
 
 class EmptyInitProtocol(Protocol): ...

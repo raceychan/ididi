@@ -48,6 +48,7 @@ def test_static_resolve_all():
     with pytest.raises(UnsolvableReturnTypeError):
         dg.node(update_user)
 
+    dg.static_resolve_all()
     dg.analyze_nodes()
 
 

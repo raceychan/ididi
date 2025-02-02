@@ -96,5 +96,4 @@ publish = { cmd = "twine upload --skip-existing dist/*", depends-on = [
   "build",
 ] }
 test-publish = { cmd = "twine upload --repository testpypi --skip-existing dist/" }
-
 patch = { cmd = "hatch version patch" }

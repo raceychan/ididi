@@ -27,24 +27,7 @@ TypeMappings = dict[type[T], list[type[T]]]
 """
 
 
-
-class BaseRegistry:
-    """Base registry class with common functionali"""
-
-    _mappings: dict[type, Any]
-    __slots__ = ("_mappings",)
-
-    def __len__(self) -> int:
-        return len(self._mappings)
-
-    def __contains__(self, dependent_type: type) -> bool:
-        return dependent_type in self._mappings
-
-    def clear(self) -> None:
-        self._mappings.clear()
-
-
-class TypeRegistry(BaseRegistry):
+class TypeRegistry:
     __slots__ = ("_mappings",)
 
     def __init__(self):
@@ -52,6 +35,12 @@ class TypeRegistry(BaseRegistry):
 
     def __getitem__(self, dependent_type: type[T]) -> list[type[T]]:
         return self._mappings[dependent_type].copy()
+
+    def __len__(self) -> int:
+        return len(self._mappings)
+
+    def __contains__(self, dependent_type: type) -> bool:
+        return dependent_type in self._mappings
 
     def update(self, other: "TypeRegistry"):
         self._mappings.update(other._mappings)
@@ -67,6 +56,9 @@ class TypeRegistry(BaseRegistry):
             self._mappings[base].remove(dependent_type)
 
         del self._mappings[dependent_type]
+
+    def clear(self) -> None:
+        self._mappings.clear()
 
 
 class Visitor:

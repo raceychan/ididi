@@ -462,10 +462,12 @@ class DependentNode(Generic[T]):
         signature: Signature,
         config: NodeConfig,
     ) -> "DependentNode[T]":
+
         deps = Dependencies.from_signature(factory=factory, signature=signature)
 
         for name, param in deps.filter_ignore(config.ignore):
             param_type = param.param_type
+
             if get_origin(param_type) is Annotated:
                 annotate_meta = flatten_annotated(param_type)
                 if IDIDI_IGNORE_PARAM_MARK in annotate_meta:

@@ -941,3 +941,8 @@ def override(self, old_dep: INode[P, T], new_dep: INode[P, T]) -> None:
 Note that, if you only want to override dependency for `create_user`
 you can still just use `create_user.replace(UserService, FakeUserService)`,
 and such override won't affect others.
+
+
+## version 1.3.4
+
+- refactor `Scope` and `Graph` to avoid circular reference, 
