@@ -117,7 +117,6 @@ ididi has strong support to `typing` module, includes:
 - NewType
 - TypedDict
 
-
 ...and more.
 
 Check out `tests/features/test_typing_support.py` for examples.
@@ -174,7 +173,8 @@ async with dg.scope() as scope:
 ```
 
 > [!TIP]
-> `dg.node` will leave your class/factory untouched, i.e., you can use it just like it is not decorated.
+> `dg.node` will leave your class/factory untouched, i.e., you can use it as a function.
+> e.g. `dg.node(get_resource, reuse=False)`
 
 #### Contexted Scope
 

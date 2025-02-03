@@ -345,6 +345,7 @@ def test_nested_scope_with_context_scope():
     dg = DependencyGraph()
 
     with dg.scope() as dg1:
+        dg1.__enter__()
         with dg.scope() as dg2:
             with dg.scope() as dg3:
                 local = dg.use_scope()
@@ -361,6 +362,7 @@ async def test_async_nested_scope_with_context_scope():
             self.name = name
 
     async with dg.scope() as dg1:
+        await dg1.__aenter__()
         with dg.scope() as dg2:
 
             normal = dg2.resolve(Normal)
@@ -442,3 +444,9 @@ async def test_scope_different_across_context():
 
         with pytest.raises(OutOfScopeError):
             func2()
+
+
+async def test_use_scope_create_on_miss():
+    dg = DependencyGraph()
+
+    dg.use_scope(create_on_miss=True)
