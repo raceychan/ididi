@@ -191,6 +191,24 @@ class Dependency(FrozenSlot, Generic[T]):
         )
 
 
+def unpack_to_deps(
+    param_annotation: Annotated[Any, "Unpack"]
+) -> "dict[str, Dependency[Any]]":
+    unpack: type = get_args(param_annotation)[0]
+    fields = unpack.__annotations__
+    dependencies: dict[str, Dependency[Any]] = {}
+
+    for name, ftype in fields.items():
+        dep_param = Dependency[Any](
+            name=name,
+            param_kind=ParameterKind.KEYWORD_ONLY,
+            param_type=resolve_annotation(ftype),
+            default=MISSING,
+        )
+        dependencies[name] = dep_param
+    return dependencies
+
+
 class Dependencies:
     __slots__ = ("_deps", "_sig")
 
@@ -242,13 +260,8 @@ class Dependencies:
         self, ignore: NodeIgnore
     ) -> Generator[tuple[str, Dependency[Any]], None, None]:
         for i, (param_name, param) in enumerate(self._deps.items()):
-            param_type = param.param_type
-
-            param_type = (
-                get_args(param_type)[0]
-                if get_origin(param_type) is Annotated
-                else param_type
-            )
+            if get_origin(param_type := param.param_type) is Annotated:
+                param_type = get_args(param_type)[0]
 
             if (i in ignore) or (param_name in ignore) or (param_type in ignore):
                 continue
@@ -281,16 +294,7 @@ class Dependencies:
             param_type = resolve_annotation(param_annotation)
 
             if param_type is Unpack:
-                unpack: type = get_args(param_annotation)[0]
-                fields = unpack.__annotations__
-                for name, ftype in fields.items():
-                    dep_param = Dependency[Any](
-                        name=name,
-                        param_kind=ParameterKind.KEYWORD_ONLY,
-                        param_type=resolve_annotation(ftype),
-                        default=MISSING,
-                    )
-                    dependencies[name] = dep_param
+                dependencies.update(unpack_to_deps(param_annotation))
                 continue
 
             if param.default == INSPECT_EMPTY:
@@ -400,15 +404,13 @@ class DependentNode(Generic[T]):
                     continue
 
             if is_provided(param.default) and get_origin(param.default) is Annotated:
-                annt_default = param.default
-                if node := resolve_use(annt_default):
-                    yield param.replace_type(annt_default)
-                    self.dependencies.update(
-                        param_name,
-                        param.replace_type(node.dependent_type).replace_default(
-                            MISSING
-                        ),
-                    )
+                annoted_default = param.default
+                if node := resolve_use(annoted_default):
+                    yield param.replace_type(annoted_default)
+                    analyzed_param = param.replace_type(
+                        node.dependent_type
+                    ).replace_default(MISSING)
+                    self.dependencies.update(param_name, analyzed_param)
                     continue
 
             if isinstance(param_type, ForwardRef):

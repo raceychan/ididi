@@ -4,6 +4,8 @@ from typing import Any, Final, Iterable
 
 from .interfaces import GraphIgnore, GraphIgnoreConfig, NodeIgnore, NodeIgnoreConfig
 
+EmptyIgnore: Final[frozenset[Any]] = frozenset()
+
 
 class FrozenSlot:
     """
@@ -45,7 +47,7 @@ class NodeConfig(FrozenSlot):
         self,
         *,
         reuse: bool = True,
-        ignore: NodeIgnoreConfig = frozenset(),
+        ignore: NodeIgnoreConfig = EmptyIgnore,
     ):
 
         if not isinstance(ignore, frozenset):

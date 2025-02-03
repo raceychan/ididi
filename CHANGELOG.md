@@ -946,3 +946,11 @@ and such override won't affect others.
 ## version 1.3.4
 
 - refactor `Scope` and `Graph` to avoid circular reference, 
+
+## version 1.3.5
+
+a quick bug fix, where in 1.3.4, registered_singleton is not shared between graph and scope.
+
+The general rule is that scope can access registered singletons and resolved instances but not vice versa.
+
+

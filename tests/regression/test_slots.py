@@ -9,6 +9,7 @@ def test_graph_ds_slots():
     sm = ScopeManager(1, 2, 3, 4)
     asc = AsyncScope(
         graph_resolutions=1,
+        graph_singletons=2,
         name=2,
         pre=3,
         nodes=4,
@@ -19,6 +20,7 @@ def test_graph_ds_slots():
 
     sc = SyncScope(
         graph_resolutions=1,
+        graph_singletons=9,
         name=2,
         pre=3,
         nodes=4,
