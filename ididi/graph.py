@@ -25,7 +25,7 @@ from typing import (
 
 from typing_extensions import Self, Unpack, override
 
-from ._ds import GraphNodes, GraphNodesView, ResolvedInstances, TypeRegistry, Visitor
+from ._ds import GraphNodes, GraphNodesView, ResolvedSingletons, TypeRegistry, Visitor
 from ._node import (
     DefaultConfig,
     Dependencies,
@@ -109,7 +109,7 @@ SharedSlots: tuple[str, ...] = (
     "_resolved_nodes",
     "_type_registry",
     "_ignore",
-    "_resolved_instances",
+    "_resolved_singletons",
     "_registered_singletons",
 )
 
@@ -119,7 +119,7 @@ class Resolver:
 
     def __init__(
         self,
-        resolved_instances: ResolvedInstances[Any],
+        resolved_singletons: ResolvedSingletons[Any],
         registered_singletons: set[type],
         **args: Unpack[SharedData],
     ):
@@ -129,7 +129,7 @@ class Resolver:
         self._ignore = args["ignore"]
 
         self._registered_singletons = registered_singletons
-        self._resolved_instances = resolved_instances
+        self._resolved_singletons = resolved_singletons
 
     def is_registered_singleton(self, dependent_type: type) -> bool:
         return dependent_type in self._registered_singletons
@@ -160,7 +160,7 @@ class Resolver:
 
         self._nodes.pop(dependent_type)
         self._type_registry.remove(dependent_type)
-        self._resolved_instances.pop(dependent_type, None)
+        self._resolved_singletons.pop(dependent_type, None)
         self._resolved_nodes.pop(dependent_type, None)
 
     def _register_node(self, node: DependentNode[Any]) -> None:
@@ -188,7 +188,7 @@ class Resolver:
         return concrete_node
 
     def get_resolve_cache(self, dependent: IFactory[P, T]) -> Maybe[T]:
-        return self._resolved_instances.get(dependent, MISSING)
+        return self._resolved_singletons.get(dependent, MISSING)
 
     def resolve_callback(
         self,
@@ -201,7 +201,7 @@ class Resolver:
             raise ResourceOutsideScopeError(dependent_type)
 
         if is_reuse:
-            register_dependent(self._resolved_instances, dependent_type, resolved)
+            register_dependent(self._resolved_singletons, dependent_type, resolved)
         return resolved
 
     async def aresolve_callback(
@@ -216,7 +216,7 @@ class Resolver:
 
         instance = await resolved if isawaitable(resolved) else resolved
         if is_reuse:
-            register_dependent(self._resolved_instances, dependent_type, instance)
+            register_dependent(self._resolved_singletons, dependent_type, instance)
         return cast(T, instance)
 
     @overload
@@ -514,7 +514,7 @@ class Graph(Resolver):
     "Nodes that have been recursively resolved and is validated to be resolvable."
     _type_registry: TypeRegistry
     "Map a type to its implementations"
-    _resolved_instances: ResolvedInstances[Any]
+    _resolved_singletons: ResolvedSingletons[Any]
     "Instances of reusable types"
     _registered_singletons: set[type]
     "Types that are menually added singletons "
@@ -552,7 +552,7 @@ class Graph(Resolver):
             nodes=dict(),
             resolved_nodes=dict(),
             type_registry=TypeRegistry(),
-            resolved_instances=dict(),
+            resolved_singletons=dict(),
             registered_singletons=set(),
             ignore=config.ignore,
         )
@@ -564,7 +564,7 @@ class Graph(Resolver):
         return (
             f"{self.__class__.__name__}("
             f"nodes={len(self._nodes)}, "
-            f"resolved={len(self._resolved_instances)})"
+            f"resolved={len(self._resolved_singletons)})"
         )
 
     def __contains__(self, item: INode[P, T]) -> bool:
@@ -575,11 +575,11 @@ class Graph(Resolver):
         return MappingProxyType(self._nodes)
 
     @property
-    def resolution_registry(self) -> ResolvedInstances[Any]:
+    def resolution_registry(self) -> ResolvedSingletons[Any]:
         """
         A mapping of dependent types to their resolved instances.
         """
-        return self._resolved_instances
+        return self._resolved_singletons
 
     @property
     def type_registry(self) -> TypeRegistry:
@@ -650,7 +650,7 @@ class Graph(Resolver):
             self._merge_nodes(other)
 
             self._type_registry.update(other._type_registry)
-            self._resolved_instances.update(other._resolved_instances)
+            self._resolved_singletons.update(other._resolved_singletons)
 
     def reset(self, clear_nodes: bool = False) -> None:
         """
@@ -662,7 +662,7 @@ class Graph(Resolver):
         - the node registry
         - the type registry
         """
-        self._resolved_instances.clear()
+        self._resolved_singletons.clear()
         self._registered_singletons.clear()
 
         if clear_nodes:
@@ -678,7 +678,7 @@ class Graph(Resolver):
         """
         if dependent_type is None:
             dependent_type = type(dependent)
-        register_dependent(self._resolved_instances, dependent_type, dependent)
+        register_dependent(self._resolved_singletons, dependent_type, dependent)
         self._registered_singletons.add(dependent_type)
 
     def remove_singleton(self, dependent_type: type) -> None:
@@ -720,11 +720,16 @@ class Graph(Resolver):
             type_registry=self._type_registry,
             ignore=self._ignore,
         )
+        """
+        # isolated: bool = False
+        if True, 
+        don't share resolved_singletons and registered_singleton
+        """
 
         return ScopeManager(
             name=name,
             scope_ctx=self._scope_context,
-            graph_resolutions=self._resolved_instances,
+            graph_resolutions=self._resolved_singletons,
             graph_singletons=self._registered_singletons,
             shared_data=shared_data,
         )
@@ -873,7 +878,7 @@ class Graph(Resolver):
 
                 @wraps(func)
                 async def _async_scoped_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-                    context_scope = self.use_scope(create_on_miss=True, as_async=True)
+                    context_scope = self.scope()
                     async with context_scope as scope:
                         for param_name, param_type in unresolved:
                             if param_name in kwargs:
@@ -902,7 +907,7 @@ class Graph(Resolver):
 
                 @wraps(sync_func)
                 def _sync_scoped_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-                    context_scope = self.use_scope(create_on_miss=True, as_async=False)
+                    context_scope = self.scope()
                     with context_scope as scope:
                         for param_name, param_type in unresolved:
                             if param_name in kwargs:
@@ -939,7 +944,7 @@ class ScopeBase(Generic[Stack]):
     _name: Hashable
     _pre: Maybe[Union["SyncScope", "AsyncScope"]]
 
-    _resolved_instances: ResolvedInstances[Any]
+    _resolved_singletons: ResolvedSingletons[Any]
     _registered_singletons: set[type]
 
     def __repr__(self):
@@ -970,7 +975,7 @@ class ScopeBase(Generic[Stack]):
 
         if dependent_type is None:
             dependent_type = type(dependent)
-        register_dependent(self._resolved_instances, dependent_type, dependent)
+        register_dependent(self._resolved_singletons, dependent_type, dependent)
         self._registered_singletons.add(dependent_type)
 
 
@@ -980,19 +985,24 @@ class SyncScope(ScopeBase[ExitStack], Resolver):
     def __init__(
         self,
         *,
-        graph_resolutions: ResolvedInstances[Any],
+        graph_resolutions: ResolvedSingletons[Any],
         graph_singletons: set[type],
+        registered_singletons: set[type],
+        resolved_singletons: ResolvedSingletons[Any],
         name: Maybe[Hashable] = MISSING,
         pre: Maybe[Union["SyncScope", "AsyncScope"]] = MISSING,
         **args: Unpack[SharedData],
     ):
-
         self._name = name
         self._pre = pre
         self._stack = ExitStack()
         self._graph_resolutions = graph_resolutions
         self._graph_singletons = graph_singletons
-        super().__init__(**args, registered_singletons=set(), resolved_instances=dict())
+        super().__init__(
+            **args,
+            registered_singletons=registered_singletons,
+            resolved_singletons=resolved_singletons,
+        )
 
     def __enter__(self) -> "SyncScope":
         return self
@@ -1023,12 +1033,12 @@ class SyncScope(ScopeBase[ExitStack], Resolver):
 
         instance = self.enter_context(cast(ContextManager[T], resolved))
         if is_reuse:
-            register_dependent(self._resolved_instances, dependent_type, instance)
+            register_dependent(self._resolved_singletons, dependent_type, instance)
         return instance
 
     @override
     def get_resolve_cache(self, dependent: IFactory[P, T]) -> Maybe[T]:
-        if resolution := self._resolved_instances.get(dependent, MISSING):
+        if resolution := self._resolved_singletons.get(dependent, MISSING):
             return resolution
 
         if self.should_be_scoped(dependent):
@@ -1043,8 +1053,10 @@ class AsyncScope(ScopeBase[AsyncExitStack], Resolver):
     def __init__(
         self,
         *,
-        graph_resolutions: ResolvedInstances[Any],
+        graph_resolutions: ResolvedSingletons[Any],
         graph_singletons: set[type],
+        registered_singletons: set[type],
+        resolved_singletons: ResolvedSingletons[Any],
         name: Maybe[Hashable] = MISSING,
         pre: Maybe[Union["SyncScope", "AsyncScope"]] = MISSING,
         **args: Unpack[SharedData],
@@ -1055,7 +1067,11 @@ class AsyncScope(ScopeBase[AsyncExitStack], Resolver):
         self._graph_resolutions = graph_resolutions
         self._graph_singletons = graph_singletons
 
-        super().__init__(**args, registered_singletons=set(), resolved_instances=dict())
+        super().__init__(
+            **args,
+            registered_singletons=registered_singletons,
+            resolved_singletons=resolved_singletons,
+        )
 
     async def __aenter__(self) -> "AsyncScope":
         return self
@@ -1070,7 +1086,7 @@ class AsyncScope(ScopeBase[AsyncExitStack], Resolver):
 
     @override
     def get_resolve_cache(self, dependent: IFactory[P, T]) -> Maybe[T]:
-        if resolution := self._resolved_instances.get(dependent, MISSING):
+        if resolution := self._resolved_singletons.get(dependent, MISSING):
             return resolution
 
         if self.should_be_scoped(dependent):
@@ -1116,7 +1132,7 @@ class AsyncScope(ScopeBase[AsyncExitStack], Resolver):
             )
 
         if is_reuse:
-            register_dependent(self._resolved_instances, dependent_type, instance)
+            register_dependent(self._resolved_singletons, dependent_type, instance)
         return instance
 
 
@@ -1138,7 +1154,7 @@ class ScopeManager:
         self,
         shared_data: SharedData,
         scope_ctx: ScopeContext,
-        graph_resolutions: ResolvedInstances[Any],
+        graph_resolutions: ResolvedSingletons[Any],
         graph_singletons: set[type],
         name: Maybe[Hashable] = MISSING,
     ):
@@ -1151,19 +1167,41 @@ class ScopeManager:
         self._scope: Maybe[Union[SyncScope, AsyncScope]] = MISSING
         self._token: Maybe[ScopeToken] = MISSING
 
+    def create_scope(self, previous_scope: Maybe[Union[SyncScope, AsyncScope]]):
+        """
+        in 1.3.6, merge registered_singletons and resolved_singletons with previous
+
+        resolved_singletons = prev._resolved_singletons
+        """
+
+        return SyncScope(
+            graph_resolutions=self.graph_resolutions,
+            graph_singletons=self.graph_singletons,
+            registered_singletons=set(),
+            resolved_singletons=dict(),
+            name=self.name,
+            pre=previous_scope,
+            **self.shared_data,
+        )
+
+    def create_ascope(self, previous_scope: Maybe[Union[SyncScope, AsyncScope]]):
+        return AsyncScope(
+            graph_resolutions=self.graph_resolutions,
+            graph_singletons=self.graph_singletons,
+            registered_singletons=set(),
+            resolved_singletons=dict(),
+            name=self.name,
+            pre=previous_scope,
+            **self.shared_data,
+        )
+
     def __enter__(self) -> SyncScope:
         try:
             pre = self.scope_ctx.get()
         except LookupError:
             pre = MISSING
 
-        self._scope = SyncScope(
-            graph_resolutions=self.graph_resolutions,
-            graph_singletons=self.graph_singletons,
-            name=self.name,
-            pre=pre,
-            **self.shared_data,
-        ).__enter__()
+        self._scope = self.create_scope(previous_scope=pre)
         self._token = self.scope_ctx.set(self._scope)
         return self._scope
 
@@ -1173,14 +1211,7 @@ class ScopeManager:
         except LookupError:
             pre = MISSING
 
-        self._scope = await AsyncScope(
-            graph_resolutions=self.graph_resolutions,
-            graph_singletons=self.graph_singletons,
-            name=self.name,
-            pre=pre,
-            **self.shared_data,
-        ).__aenter__()
-
+        self._scope = self.create_ascope(previous_scope=pre)
         self._token = self.scope_ctx.set(self._scope)
         return self._scope
 
@@ -1201,7 +1232,6 @@ class ScopeManager:
         traceback: Union[TracebackType, None],
     ) -> None:
         await cast(AsyncScope, self._scope).__aexit__(exc_type, exc_value, traceback)
-
         if is_provided(self._token):
             self.scope_ctx.reset(self._token)
 

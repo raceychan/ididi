@@ -16,9 +16,9 @@ GraphNodesView = MappingProxyType[type[T], DependentNode[T]]
 ### a readonly view of GraphNodes
 """
 
-ResolvedInstances = dict[type[T], T]
+ResolvedSingletons = dict[type[T], T]
 """
-mapping a type to its resolved instance
+mapping a type to its resolved instance, only instances of reusable node will be added here.
 """
 
 TypeMappings = dict[type[T], list[type[T]]]

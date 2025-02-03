@@ -2,7 +2,7 @@ import typing as ty
 
 import pytest
 
-from ididi import DependencyGraph
+from ididi import AsyncResource, DependencyGraph
 from ididi.errors import (
     AsyncResourceInSyncError,
     OutOfScopeError,
@@ -405,3 +405,57 @@ async def test_db_exec():
 
     sql = "select moeny from bank"
     assert await main(sql=sql) == sql
+
+
+@pytest.mark.skip("not implemented")
+async def test_scope_stack():
+    dg = DependencyGraph()
+
+    class Connection: ...
+
+    async def conn_factory() -> AsyncResource[Connection]:
+        conn = Connection()
+        yield conn
+
+    async with dg.scope() as parent_scope:
+        conn = await parent_scope.resolve(conn_factory)
+        async with dg.scope() as sub_scope:
+            sub_conn = await sub_scope.resolve(conn_factory)
+            assert sub_conn is conn
+
+
+@pytest.mark.asyncio
+async def test_scope_different_across_context():
+    dg = DependencyGraph()
+
+    class Normal:
+        def __init__(self, name: str = "normal"):
+            self.name = name
+
+    with dg.scope(1) as s1:
+
+        def func1():
+            with dg.scope(2) as s2:
+                with dg.scope(3) as s3:
+                    repr(s1)
+                    n3 = s3.resolve(Normal)
+                    n1 = s1.resolve(Normal)
+                    assert (
+                        n1 is n3
+                    ), "Non-resources reusable instances should be shared across scopes"
+                    assert s3.get_scope(1) is s1
+                    assert s3.get_scope(2) is s2
+                    assert s3.get_scope(3) is s3
+
+                with pytest.raises(OutOfScopeError):
+                    s3 = dg.use_scope(3)
+
+                return s1
+
+        func1()
+
+        def func2():
+            dg.use_scope(2)
+
+        with pytest.raises(OutOfScopeError):
+            func2()

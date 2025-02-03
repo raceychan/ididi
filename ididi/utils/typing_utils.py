@@ -1,4 +1,4 @@
-from typing import Any, AsyncGenerator, ForwardRef, Generator, Mapping, TypeVar, Union
+from typing import Any,  ForwardRef,  Mapping, TypeVar, Union
 from typing import _eval_type as ty_eval_type  # type: ignore
 from typing import cast
 
@@ -9,8 +9,7 @@ R = TypeVar("R")
 P = ParamSpec("P")
 C = TypeVar("C", covariant=True)
 
-Resource = Generator[T, None, None]
-AsyncResource = AsyncGenerator[T, None]
+
 
 PrimitiveBuiltins = type[Union[int, float, complex, str, bool, bytes, bytearray]]
 ContainerBuiltins = type[

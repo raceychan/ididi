@@ -65,6 +65,17 @@ async def main(command: CreateUser, uow: UnitOfWork):
 await main(CreateUser(name='user'))
 ```
 
+To resolve `AsyncConnection` outside of entry function
+
+```python
+from ididi import Graph
+
+dg = Graph()
+
+async with dg.scope():
+    conn = await scope.resolve(conn_factory)
+```
+
 
 ### Dependency factory 
 
@@ -108,7 +119,17 @@ Check out `tests/features/test_typing_support.py` for examples.
 
 ### Scope
 
-Using Scope to manage resources
+`Scope` is a temporary view of the graph specialized for handling resources. 
+
+In a nutshell:
+
+- Scope can access registered singletons and resolved instances of its parent graph
+
+- its parent graph can't access its registered singletons and resolved resources.
+
+- Non-resource instances resolved by the scope can be access by its parent graph
+
+#### Using Scope to manage resources
 
 - **Infinite number of nested scope**
 - **Parent scope can be accssed by its child scopes(within the same context)**

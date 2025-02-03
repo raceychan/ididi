@@ -54,6 +54,8 @@ GraphConfigParam = Union[str, type, TypeAliasType]
 NodeIgnoreConfig = Union[NodeConfigParam, Iterable[NodeConfigParam]]
 GraphIgnoreConfig = Union[GraphConfigParam, Iterable[GraphConfigParam]]
 
+Resource = Generator[T, None, None]
+AsyncResource = AsyncGenerator[T, None]
 
 # P1 = TypeVar("P1")
 # P2 = TypeVar("P2")
