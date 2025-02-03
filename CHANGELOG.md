@@ -954,11 +954,11 @@ and such override won't affect others.
 The general rule is that scope can access registered singletons and resolved instances but not vice versa.
 
 
-
 ## version 1.3.6
-
 
 - Fix: `Graph.entry` no longer uses existing scope, instead, always create a new scope
 
 
+## version 1.3.7
 
+- a quick fix to the previous quick fix in 1.3.4, guess the fix was too quick ;)

@@ -101,6 +101,7 @@ class SharedData(TypedDict):
     nodes: GraphNodes
     resolved_nodes: dict[Hashable, DependentNode[Any]]
     type_registry: TypeRegistry
+    # registered_singletons: set[type]
     ignore: GraphIgnore
 
 
@@ -981,9 +982,8 @@ class SyncScope(ScopeBase[ExitStack], Resolver):
         self,
         *,
         graph_resolutions: ResolvedSingletons[Any],
-        graph_singletons: set[type],
-        registered_singletons: set[type],
         resolved_singletons: ResolvedSingletons[Any],
+        registered_singletons: set[type],
         name: Maybe[Hashable] = MISSING,
         pre: Maybe[Union["SyncScope", "AsyncScope"]] = MISSING,
         **args: Unpack[SharedData],
@@ -992,11 +992,10 @@ class SyncScope(ScopeBase[ExitStack], Resolver):
         self._pre = pre
         self._stack = ExitStack()
         self._graph_resolutions = graph_resolutions
-        self._graph_singletons = graph_singletons
         super().__init__(
             **args,
-            registered_singletons=registered_singletons,
             resolved_singletons=resolved_singletons,
+            registered_singletons=registered_singletons,
         )
 
     def __enter__(self) -> "SyncScope":
@@ -1049,9 +1048,8 @@ class AsyncScope(ScopeBase[AsyncExitStack], Resolver):
         self,
         *,
         graph_resolutions: ResolvedSingletons[Any],
-        graph_singletons: set[type],
-        registered_singletons: set[type],
         resolved_singletons: ResolvedSingletons[Any],
+        registered_singletons: set[type],
         name: Maybe[Hashable] = MISSING,
         pre: Maybe[Union["SyncScope", "AsyncScope"]] = MISSING,
         **args: Unpack[SharedData],
@@ -1060,12 +1058,11 @@ class AsyncScope(ScopeBase[AsyncExitStack], Resolver):
         self._pre = pre
         self._stack = AsyncExitStack()
         self._graph_resolutions = graph_resolutions
-        self._graph_singletons = graph_singletons
 
         super().__init__(
             **args,
-            registered_singletons=registered_singletons,
             resolved_singletons=resolved_singletons,
+            registered_singletons=registered_singletons,
         )
 
     async def __aenter__(self) -> "AsyncScope":
@@ -1163,11 +1160,9 @@ class ScopeManager:
         self._token: Maybe[ScopeToken] = MISSING
 
     def create_scope(self, previous_scope: Maybe[Union[SyncScope, AsyncScope]]):
-
         return SyncScope(
             graph_resolutions=self.graph_resolutions,
-            graph_singletons=self.graph_singletons,
-            registered_singletons=set(),
+            registered_singletons=self.graph_singletons.copy(),
             resolved_singletons=dict(),
             name=self.name,
             pre=previous_scope,
@@ -1177,8 +1172,7 @@ class ScopeManager:
     def create_ascope(self, previous_scope: Maybe[Union[SyncScope, AsyncScope]]):
         return AsyncScope(
             graph_resolutions=self.graph_resolutions,
-            graph_singletons=self.graph_singletons,
-            registered_singletons=set(),
+            registered_singletons=self.graph_singletons.copy(),
             resolved_singletons=dict(),
             name=self.name,
             pre=previous_scope,
