@@ -83,19 +83,24 @@ assign which factory method to use with `ididi.use`
 
 ```python
 from ididi import use
+from typing import NewType
 from datetime import datetime, timezone
+
+UserID = NewType("UserID", str)
 
 def utc_factory() -> datetime:
     return datetime.now(timezone.utc)
 
-UTC_DATETIME = Annotated[datetime, use(utc_factory)]
+def user_id_factory() -> UserID:
+    return UserID(str(uuid4()))
 
-class Timer:
-    def __init__(self, time: UTC_DATETIME):
-        self.time = time
+class User:
+    def __init__(self, user_id: UserID, created_at: Annotated[datetime, use(utc_factory)]):
+        self.user_id = user_id
+        self.created_at = created_at
 
-tmer = ididi.resolve(Timer)
-assert tmer.time.tzinfo == timezone.utc
+user = ididi.resolve(User)
+assert user.created_at.tzinfo == timezone.utc
 ```
 
 > [!TIP]
@@ -112,6 +117,7 @@ ididi has strong support to `typing` module, includes:
 - NewType
 - TypedDict
 
+
 ...and more.
 
 Check out `tests/features/test_typing_support.py` for examples.
@@ -123,18 +129,16 @@ Check out `tests/features/test_typing_support.py` for examples.
 
 In a nutshell:
 
+- Scope only manages resources, non-resources will be handled by parent graph.
 - Scope can access registered singletons and resolved instances of its parent graph
-
 - its parent graph can't access its registered singletons and resolved resources.
-
-- Non-resource instances resolved by the scope can be access by its parent graph
 
 #### Using Scope to manage resources
 
 - **Infinite number of nested scope**
 - **Parent scope can be accssed by its child scopes(within the same context)**
 - **Resources will be shared across dependents only withint the same scope**
-- **Resources will be automatically closed and destroyed when the scope is exited.**
+- **Resources will be automatically closed when the scope is exited.**
 - **Classes that implment `contextlib.AbstractContextManager` or `contextlib.AbstractAsyncContextManager` are also considered to be resources and can/should be resolved within scope.**
 - **Scopes are separated by context**
 
@@ -237,8 +241,11 @@ or its parent scopes, i.e. `dg.use_scope(app_name)` to get app_scope.
 
 ### Override class dependency resolution
 
-You can control how ididi resolve a dependency during testing,
-by register the test double of the dependency using `dg.node`
+You can control how ididi resolve a dependency during testing, by register the test double of the dependency using
+
+
+- `Graph.override`
+- `entry.replace`
 
 Example:
 For the following dependent
@@ -263,14 +270,13 @@ def db_factory() -> DataBase:
 
 def test_resolve():
     dg = DependencyGraph()
-    dg.node(reuse=False)(UserRepository)
-    assert isinstance(dg.resolve(UserRepository).db, DataBase)
+    assert isinstance(dg.resolve(db_factory).db, DataBase)
 
-    dg.node(db_factory)
+    dg.override(DataBase, db_factory)
     assert isinstance(dg.resolve(UserRepository).db, FakeDB)
 ```
 
-use `dg.node` to replace `DataBase` with its test double.
+Use `Graph.override` to replace `DataBase` with its test double.
 
 ### Override entry dependency resolution
 
@@ -290,8 +296,11 @@ async def test_entry_replace():
     assert isinstance(res, FakeUserService)
 ```
 
-use `entryfunc.replace` to replace a dependency with its test double.
-you can also use `replace(service=FakeUserService)` to override
+Use `entryfunc.replace` to replace a dependency with its test double. 
+
+#### `Graph.override` vs `entry.replace`
+
+`Graph.override` applies to the whole graph, `entry.replace` applies to only the entry function.  
 
 ### More
 

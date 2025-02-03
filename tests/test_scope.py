@@ -407,23 +407,6 @@ async def test_db_exec():
     assert await main(sql=sql) == sql
 
 
-@pytest.mark.skip("not implemented")
-async def test_scope_stack():
-    dg = DependencyGraph()
-
-    class Connection: ...
-
-    async def conn_factory() -> AsyncResource[Connection]:
-        conn = Connection()
-        yield conn
-
-    async with dg.scope() as parent_scope:
-        conn = await parent_scope.resolve(conn_factory)
-        async with dg.scope() as sub_scope:
-            sub_conn = await sub_scope.resolve(conn_factory)
-            assert sub_conn is conn
-
-
 @pytest.mark.asyncio
 async def test_scope_different_across_context():
     dg = DependencyGraph()

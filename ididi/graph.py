@@ -720,11 +720,6 @@ class Graph(Resolver):
             type_registry=self._type_registry,
             ignore=self._ignore,
         )
-        """
-        # isolated: bool = False
-        if True, 
-        don't share resolved_singletons and registered_singleton
-        """
 
         return ScopeManager(
             name=name,
@@ -1168,11 +1163,6 @@ class ScopeManager:
         self._token: Maybe[ScopeToken] = MISSING
 
     def create_scope(self, previous_scope: Maybe[Union[SyncScope, AsyncScope]]):
-        """
-        in 1.3.6, merge registered_singletons and resolved_singletons with previous
-
-        resolved_singletons = prev._resolved_singletons
-        """
 
         return SyncScope(
             graph_resolutions=self.graph_resolutions,
