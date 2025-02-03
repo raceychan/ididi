@@ -227,7 +227,7 @@ async def test_resource_across_scope():
     async with dg.scope() as scope2:
         s2 = await scope2.resolve(Service)
 
-    assert s1 != s2
+    assert s1 is not s2
     """
     This would cause error before 1.1.5 bug fix, s1 == s2
     because in graph.get_resolve_cache

@@ -14,7 +14,7 @@ def test_scope_resolve_fallback():
         u2 = scope.resolve(UserService)
 
     assert UserService in graph._resolved_singletons
-    assert UserService not in scope._resolved_singletons
+    assert UserService in scope._resolved_singletons
 
     assert u is u2
 
@@ -34,6 +34,7 @@ def test_scope_resouce_fallback():
 
     assert UserService not in graph._resolved_singletons
     assert UserService in scope._resolved_singletons
+    assert UserService not in graph._resolved_singletons
 
     assert u is not u2
 

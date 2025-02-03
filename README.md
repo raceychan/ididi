@@ -128,8 +128,8 @@ Check out `tests/features/test_typing_support.py` for examples.
 
 In a nutshell:
 
-- Scope only manages resources, non-resources will be handled by parent graph.
-- Scope can access registered singletons and resolved instances of its parent graph
+- Scope can access(read-only) registered singletons and resolved instances of its parent graph
+- Dependents registered/resolved in a scope will stay in the scope.
 - its parent graph can't access its registered singletons and resolved resources.
 
 #### Using Scope to manage resources

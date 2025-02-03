@@ -417,6 +417,8 @@ async def test_scope_different_across_context():
         def __init__(self, name: str = "normal"):
             self.name = name
 
+    dg.resolve(Normal)
+
     with dg.scope(1) as s1:
 
         def func1():
@@ -450,3 +452,17 @@ async def test_use_scope_create_on_miss():
     dg = DependencyGraph()
 
     dg.use_scope(create_on_miss=True)
+
+
+async def test_share_single_pattern():
+    dg = DependencyGraph()
+
+    with dg.scope() as scope:
+        g = scope.resolve(DependencyGraph)
+
+        assert g is dg
+
+
+
+
+

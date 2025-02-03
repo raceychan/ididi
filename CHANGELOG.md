@@ -959,6 +959,11 @@ The general rule is that scope can access registered singletons and resolved ins
 - Fix: `Graph.entry` no longer uses existing scope, instead, always create a new scope
 
 
-## version 1.3.7
+## version 1.4.0
 
-- a quick fix to the previous quick fix in 1.3.4, guess the fix was too quick ;)
+This minor focus on a small refactor on `Scope`, we like the idea that `Scope` is a temporary view of its parent `Graph`, so following change is made:
+
+- both resource and non-resource instances created in scope will stay in the scope
+- when a graph create a scope, it shares a copy of its resolved singletons and registered singletons, scope can read them, but can not modify them.
+
+This gives a better separation between `Graph` and `Scope`.
