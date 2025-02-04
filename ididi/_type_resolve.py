@@ -115,9 +115,6 @@ def get_typed_signature(
     typed_params = get_typed_params(raw_sig, gvars)
     typed_return = actualize_strforward(raw_sig.return_annotation, gvars)
 
-    if get_origin(call) is Annotated:
-        raise Exception
-
     if isinstance(typed_return, ForwardRef):
         raise ForwardReferenceNotFoundError(typed_return)
     if check_return and is_unsolvable_type(typed_return):

@@ -140,7 +140,7 @@ class Resolver:
     def should_be_scoped(self, dep_type: INode[P, T]) -> bool:
         "Recursively check if a dependent type contains any resource dependency"
         if not (resolved_node := self._resolved_nodes.get(dep_type)):
-            resolved_node = self.analyze(dep_type)
+            resolved_node = self.analyze(dep_type, ignore=self._ignore)
 
         if self.is_registered_singleton(resolved_node.dependent_type):
             return False
@@ -357,6 +357,21 @@ class Resolver:
         if is_unsolvable_type(dependent):
             raise TopLevelBulitinTypeError(dependent)
 
+        if is_class(dependent) or is_new_type(dependent):
+            dependent_type = resolve_annotation(dependent)
+            if get_origin(dependent_type) is Annotated:
+                if node := resolve_use(dependent_type):
+                    self._node(node.factory)
+                dependent_type, *_ = get_args(dependent_type)
+        else:
+            dependent_type = resolve_factory(dependent)
+            if dependent_type not in self._nodes:
+                self._node(dependent, config=config)
+
+        dependent_type = cast(type[T], dependent_type)
+        current_path: list[type] = []
+        ignore = ignore or self._ignore
+
         def dfs(dependent_type: type[T], dignore: GraphIgnore) -> DependentNode[T]:
             # when we register a concrete node we also register its bases to type_registry
             if dependent_type in self._resolved_nodes:
@@ -405,27 +420,12 @@ class Resolver:
             self._resolved_nodes[dependent_type] = node
             return node
 
-        if is_class(dependent) or is_new_type(dependent):
-            dependent_type = resolve_annotation(dependent)
-            if get_origin(dependent_type) is Annotated:
-                if node := resolve_use(dependent_type):
-                    self._node(node.factory)
-                dependent_type, *_ = get_args(dependent_type)
-        else:
-            dependent_type = resolve_factory(dependent)
-            if dependent_type not in self._nodes:
-                self._node(dependent, config=config)
-
-        dependent_type = cast(type[T], dependent_type)
-        current_path: list[type] = []
-
-        ignore = (ignore | self._ignore) if ignore else self._ignore
         return dfs(dependent_type, ignore)
 
     def analyze_nodes(self) -> None:
         unsolved_nodes: set[type] = self._nodes.keys() - self._resolved_nodes.keys()
         for node_type in unsolved_nodes:
-            self.analyze(node_type)
+            self.analyze(node_type, ignore=self._ignore)
 
     def _node(
         self, dependent: INode[P, T], config: NodeConfig = DefaultConfig
@@ -803,7 +803,7 @@ class Graph(Resolver):
                 self._resolved_nodes[param_type] = inject_node
                 param_type = inject_node.dependent_type
 
-            self.analyze(param_type, config=config)
+            self.analyze(param_type, ignore=self._ignore, config=config)
             depends_on_resource = depends_on_resource or self.should_be_scoped(
                 param_type
             )
@@ -869,11 +869,13 @@ class Graph(Resolver):
 
             for i, (pname, ptype) in enumerate(unresolved):
                 if ptype is before and is_provided(after):
-                    analyzed = self.analyze(after).dependent_type
+                    analyzed = self.analyze(after, ignore=self._ignore).dependent_type
                     unresolved[i] = (pname, analyzed)
 
                 if pname in kw_overrides:
-                    analyzed = self.analyze(kw_overrides[pname]).dependent_type
+                    analyzed = self.analyze(
+                        kw_overrides[pname], ignore=self._ignore
+                    ).dependent_type
                     unresolved[i] = (pname, analyzed)
 
         if iscoroutinefunction(func):
