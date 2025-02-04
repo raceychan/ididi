@@ -115,6 +115,9 @@ def get_typed_signature(
     typed_params = get_typed_params(raw_sig, gvars)
     typed_return = actualize_strforward(raw_sig.return_annotation, gvars)
 
+    if get_origin(call) is Annotated:
+        raise Exception
+
     if isinstance(typed_return, ForwardRef):
         raise ForwardReferenceNotFoundError(typed_return)
     if check_return and is_unsolvable_type(typed_return):
@@ -204,7 +207,7 @@ def is_class(
     origin = get_origin(obj) or obj
     is_type = isinstance(origin, type)
     is_generic_alias = isinstance(obj, GenericAlias)
-    return is_type or is_generic_alias
+    return is_type or is_generic_alias or origin is Annotated
 
 
 def is_class_with_empty_init(cls: type) -> bool:
