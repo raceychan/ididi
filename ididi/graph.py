@@ -731,8 +731,8 @@ class Graph(Resolver):
         return ScopeManager(
             name=name,
             scope_ctx=self._scope_context,
-            graph_resolutions=self._resolved_singletons,
-            graph_singletons=self._registered_singletons,
+            graph_resolutions=self._resolved_singletons.copy(),
+            graph_singletons=self._registered_singletons.copy(),
             shared_data=shared_data,
         )
 
@@ -1122,15 +1122,15 @@ class ScopeManager:
         self.scope_ctx = scope_ctx
         self.graph_resolutions = graph_resolutions
         self.graph_singletons = graph_singletons
-
         self.name = name
+
         self._scope: Maybe[Union[SyncScope, AsyncScope]] = MISSING
         self._token: Maybe[ScopeToken] = MISSING
 
     def create_scope(self, previous_scope: Maybe[Union[SyncScope, AsyncScope]]):
         return SyncScope(
-            registered_singletons=self.graph_singletons.copy(),
-            resolved_singletons=self.graph_resolutions.copy(),
+            registered_singletons=self.graph_singletons,
+            resolved_singletons=self.graph_resolutions,
             name=self.name,
             pre=previous_scope,
             **self.shared_data,
@@ -1138,8 +1138,8 @@ class ScopeManager:
 
     def create_ascope(self, previous_scope: Maybe[Union[SyncScope, AsyncScope]]):
         return AsyncScope(
-            registered_singletons=self.graph_singletons.copy(),
-            resolved_singletons=self.graph_resolutions.copy(),
+            registered_singletons=self.graph_singletons,
+            resolved_singletons=self.graph_resolutions,
             name=self.name,
             pre=previous_scope,
             **self.shared_data,

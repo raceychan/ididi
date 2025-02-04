@@ -984,3 +984,53 @@ def test_ignore_dependences():
 
     assert len(dg.nodes[User].dependencies) == 0
 ```
+
+
+
+## version 1.4.2
+
+resolve function
+
+```graph
+Graph.resolve_function
+```
+
+where we treat function as a dependent.
+
+graph._nodes[get_current_user] = DependentNode(dependent_type=get_current_user)
+
+
+```
+def resolve_params(self, function):
+    require_scope, unresolved = self.analyze_params(function)
+    if require_scope:
+        raise OutOfScopeError
+    params = {}
+    for pname, ptype in unresolved:
+        params[pname] = self.resolve(ptype)
+    return params
+
+async def resolve_afunction(self, function): ...
+```
+
+then we can rewrite entry as such
+
+```python
+@wraps(func)
+async def _async_scoped_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+    async with self.scope() as scope:
+        params = await scope.aresolve_params(function, ignore=kwargs)
+        await scope.aresolve_function(*args, **(params|kwargs))
+
+```
+
+or 
+
+we introduce `FuncReturn` Mark
+
+```python
+def get_user(session: Session, token: Token) -> FuncReturn[User]:
+    ...
+
+dg.resolve(get_user)
+```
