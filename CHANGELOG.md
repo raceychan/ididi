@@ -970,5 +970,17 @@ This gives a better separation between `Graph` and `Scope`.
 ## version 1.4.1
 
 we should take a smarter approach with `ignore`, for node configured with ignore,
-we don't put them in node's dependencies. This would be more efficient and make more sense.
+we don't put them in node's dependencies. 
+This would be more efficient and make more sense.
 
+```python
+def test_ignore_dependences():
+    dg = DependencyGraph()
+
+    class User:
+        def __init__(self, name: Ignore[str]): ...
+
+    dg.node(User)
+
+    assert len(dg.nodes[User].dependencies) == 0
+```

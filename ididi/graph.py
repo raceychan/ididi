@@ -140,7 +140,7 @@ class Resolver:
     def should_be_scoped(self, dep_type: INode[P, T]) -> bool:
         "Recursively check if a dependent type contains any resource dependency"
         if not (resolved_node := self._resolved_nodes.get(dep_type)):
-            resolved_node = self.analyze(dep_type, ignore=self._ignore)
+            resolved_node = self.analyze(dep_type)
 
         if self.is_registered_singleton(resolved_node.dependent_type):
             return False
@@ -188,6 +188,102 @@ class Resolver:
         concrete_node = self._nodes[concrete_type]
         concrete_node.check_for_implementations()
         return concrete_node
+
+    def check_param_conflict(self, param_type: type, current_path: list[type]):
+        if param_type in current_path:
+            i = current_path.index(param_type)
+            cycle = current_path[i:] + [param_type]
+            raise CircularDependencyDetectedError(cycle)
+
+        if (subnode := self._nodes.get(param_type)) and not subnode.config.reuse:
+            if any(self._nodes[p].config.reuse for p in current_path):
+                raise ReusabilityConflictError(current_path, param_type)
+
+    def analyze(
+        self,
+        dependent: INode[P, T],
+        *,
+        config: NodeConfig = DefaultConfig,
+        ignore: Union[GraphIgnore, None] = None,
+    ) -> DependentNode[T]:
+        """
+        Recursively analyze the type information of a dependency.
+        """
+        if node := self._resolved_nodes.get(dependent):
+            return node
+
+        if is_unsolvable_type(dependent):
+            raise TopLevelBulitinTypeError(dependent)
+
+        if is_class(dependent) or is_new_type(dependent):
+            dependent_type = resolve_annotation(dependent)
+            if get_origin(dependent_type) is Annotated:
+                if node := resolve_use(dependent_type):
+                    self._node(node.factory)
+                dependent_type, *_ = get_args(dependent_type)
+        else:
+            dependent_type = resolve_factory(dependent)
+            if dependent_type not in self._nodes:
+                self._node(dependent, config=config)
+
+        dependent_type = cast(type[T], dependent_type)
+        current_path: list[type] = []
+        ignore = (ignore | self._ignore) if ignore else self._ignore
+
+        def dfs(dependent_type: type[T], dignore: GraphIgnore) -> DependentNode[T]:
+            # when we register a concrete node we also register its bases to type_registry
+            if dependent_type in self._resolved_nodes:
+                return self._resolved_nodes[dependent_type]
+
+            if dependent_type not in self._type_registry:
+                self._node(dependent_type, config)
+
+            node = self._resolve_concrete_node(dependent_type)
+
+            if self.is_registered_singleton(dependent_type):
+                return node
+
+            current_path.append(dependent_type)
+            for param in node.analyze_unsolved_params(dignore):
+                if (param_type := param.param_type) in self._resolved_nodes:
+                    continue
+
+                self.check_param_conflict(param_type, current_path)
+
+                if inject_node := resolve_use(param_type):
+                    self._node(inject_node.factory)
+                    continue
+
+                if is_provided(param.default):
+                    continue
+
+                if param.unresolvable:
+                    raise UnsolvableDependencyError(
+                        dep_name=param.name,
+                        dependent_type=dependent_type,
+                        dependency_type=param.param_type,
+                        factory=node.factory,
+                    )
+
+                try:
+                    pnode = dfs(param_type, EmptyIgnore)
+                except UnsolvableNodeError as une:
+                    une.add_context(node.dependent_type, param.name, param.param_type)
+                    raise
+
+                self._register_node(pnode)
+                self._resolved_nodes[param_type] = pnode
+
+            current_path.pop()
+            self._resolved_nodes[dependent_type] = node
+            return node
+
+        return dfs(dependent_type, ignore)
+
+    def analyze_nodes(self) -> None:
+        unsolved_nodes: set[type] = self._nodes.keys() - self._resolved_nodes.keys()
+        for node_type in unsolved_nodes:
+            self.analyze(node_type)
 
     def register_singleton(
         self, dependent: T, dependent_type: Union[type[T], None] = None
@@ -282,9 +378,8 @@ class Resolver:
             return resolution
 
         provided_params = frozenset(overrides)
-        ignores = self._ignore | provided_params
-        node: DependentNode[T] = self.analyze(dependent, ignore=ignores)
-        unsolved_params = node.unsolved_params(ignores)
+        node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
+        unsolved_params = node.unsolved_params(self._ignore | provided_params)
 
         params = overrides
         for param_name, param_type in unsolved_params:
@@ -315,9 +410,8 @@ class Resolver:
             return resolution
 
         provided_params = frozenset(overrides)
-        ignores = self._ignore | provided_params
-        node: DependentNode[T] = self.analyze(dependent, ignore=ignores)
-        unsolved_params = node.unsolved_params(ignores)
+        node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
+        unsolved_params = node.unsolved_params(self._ignore | provided_params)
 
         params = overrides
         for param_name, param_type in unsolved_params:
@@ -330,102 +424,6 @@ class Resolver:
             factory_type=node.factory_type,
             is_reuse=node.config.reuse,
         )
-
-    def check_param_conflict(self, param_type: type, current_path: list[type]):
-        if param_type in current_path:
-            i = current_path.index(param_type)
-            cycle = current_path[i:] + [param_type]
-            raise CircularDependencyDetectedError(cycle)
-
-        if (subnode := self._nodes.get(param_type)) and not subnode.config.reuse:
-            if any(self._nodes[p].config.reuse for p in current_path):
-                raise ReusabilityConflictError(current_path, param_type)
-
-    def analyze(
-        self,
-        dependent: INode[P, T],
-        *,
-        config: NodeConfig = DefaultConfig,
-        ignore: Union[GraphIgnore, None] = None,
-    ) -> DependentNode[T]:
-        """
-        Recursively analyze the type information of a dependency.
-        """
-        if node := self._resolved_nodes.get(dependent):
-            return node
-
-        if is_unsolvable_type(dependent):
-            raise TopLevelBulitinTypeError(dependent)
-
-        if is_class(dependent) or is_new_type(dependent):
-            dependent_type = resolve_annotation(dependent)
-            if get_origin(dependent_type) is Annotated:
-                if node := resolve_use(dependent_type):
-                    self._node(node.factory)
-                dependent_type, *_ = get_args(dependent_type)
-        else:
-            dependent_type = resolve_factory(dependent)
-            if dependent_type not in self._nodes:
-                self._node(dependent, config=config)
-
-        dependent_type = cast(type[T], dependent_type)
-        current_path: list[type] = []
-        ignore = ignore or self._ignore
-
-        def dfs(dependent_type: type[T], dignore: GraphIgnore) -> DependentNode[T]:
-            # when we register a concrete node we also register its bases to type_registry
-            if dependent_type in self._resolved_nodes:
-                return self._resolved_nodes[dependent_type]
-
-            if dependent_type not in self._type_registry:
-                self._node(dependent_type, config)
-
-            node = self._resolve_concrete_node(dependent_type)
-
-            if self.is_registered_singleton(dependent_type):
-                return node
-
-            current_path.append(dependent_type)
-            for param in node.analyze_unsolved_params(dignore):
-                if (param_type := param.param_type) in self._resolved_nodes:
-                    continue
-
-                self.check_param_conflict(param_type, current_path)
-
-                if inject_node := resolve_use(param_type):
-                    self._node(inject_node.factory)
-                    continue
-
-                if is_provided(param.default):
-                    continue
-
-                if param.unresolvable:
-                    raise UnsolvableDependencyError(
-                        dep_name=param.name,
-                        dependent_type=dependent_type,
-                        dependency_type=param.param_type,
-                        factory=node.factory,
-                    )
-
-                try:
-                    pnode = dfs(param_type, EmptyIgnore)
-                except UnsolvableNodeError as une:
-                    une.add_context(node.dependent_type, param.name, param.param_type)
-                    raise
-
-                self._register_node(pnode)
-                self._resolved_nodes[param_type] = pnode
-
-            current_path.pop()
-            self._resolved_nodes[dependent_type] = node
-            return node
-
-        return dfs(dependent_type, ignore)
-
-    def analyze_nodes(self) -> None:
-        unsolved_nodes: set[type] = self._nodes.keys() - self._resolved_nodes.keys()
-        for node_type in unsolved_nodes:
-            self.analyze(node_type, ignore=self._ignore)
 
     def _node(
         self, dependent: INode[P, T], config: NodeConfig = DefaultConfig
@@ -803,7 +801,7 @@ class Graph(Resolver):
                 self._resolved_nodes[param_type] = inject_node
                 param_type = inject_node.dependent_type
 
-            self.analyze(param_type, ignore=self._ignore, config=config)
+            self.analyze(param_type, config=config)
             depends_on_resource = depends_on_resource or self.should_be_scoped(
                 param_type
             )
@@ -869,13 +867,11 @@ class Graph(Resolver):
 
             for i, (pname, ptype) in enumerate(unresolved):
                 if ptype is before and is_provided(after):
-                    analyzed = self.analyze(after, ignore=self._ignore).dependent_type
+                    analyzed = self.analyze(after).dependent_type
                     unresolved[i] = (pname, analyzed)
 
                 if pname in kw_overrides:
-                    analyzed = self.analyze(
-                        kw_overrides[pname], ignore=self._ignore
-                    ).dependent_type
+                    analyzed = self.analyze(kw_overrides[pname]).dependent_type
                     unresolved[i] = (pname, analyzed)
 
         if iscoroutinefunction(func):
