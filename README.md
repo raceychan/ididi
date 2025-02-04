@@ -104,7 +104,7 @@ assert user.created_at.tzinfo == timezone.utc
 ```
 
 > [!TIP]
-> **`DependencyGraph.node` accepts a wide arrange of types, such as dependent class, sync/async facotry, sync/async resource factory, with typing support.**
+> **`Graph.node` accepts a wide arrange of types, such as dependent class, sync/async facotry, sync/async resource factory, with typing support.**
 
 ### TypingSupport
 
@@ -255,7 +255,7 @@ class UserRepository:
     def __init__(self, db: DataBase):
         self.db=db
 
-dg = DependencyGraph()
+dg = Graph()
 assert isinstance(dg.resolve(UserRepository).db, DataBase)
 ```
 
@@ -269,7 +269,7 @@ def db_factory() -> DataBase:
 
 
 def test_resolve():
-    dg = DependencyGraph()
+    dg = Graph()
     assert isinstance(dg.resolve(db_factory).db, DataBase)
 
     dg.override(DataBase, db_factory)

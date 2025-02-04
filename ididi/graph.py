@@ -315,10 +315,11 @@ class Resolver:
         node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
         unsolved_params = node.unsolved_params(self._ignore | provided_params)
 
+        params = overrides
         for param_name, param_type in unsolved_params:
-            overrides[param_name] = await self.aresolve(param_type)
+            params[param_name] = await self.aresolve(param_type)
 
-        resolved = node.inject_params(overrides)
+        resolved = node.factory(**params)
         return await self.aresolve_callback(
             resolved=resolved,
             dependent_type=node.dependent_type,

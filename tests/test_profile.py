@@ -13,15 +13,15 @@ class Config:
 
 # Factory functions for Level 4 (Leaf) Services
 def create_l4_service1():
-    return L4Service1(Config("l4_s1"))
+    return L4Service1(config=Config("l4_s1"))
 
 
 def create_l4_service2():
-    return L4Service2(Config("l4_s2"))
+    return L4Service2(config=Config("l4_s2"))
 
 
 def create_l4_service3():
-    return L4Service3(Config("l4_s3"))
+    return L4Service3(config=Config("l4_s3"))
 
 
 # Level 4 Classes
@@ -42,15 +42,21 @@ class L4Service3:
 
 # Factory functions for Level 3
 def create_l3_service1():
-    return L3Service1(create_l4_service1(), create_l4_service2(), create_l4_service3())
+    return L3Service1(
+        s1=create_l4_service1(), s2=create_l4_service2(), s3=create_l4_service3()
+    )
 
 
 def create_l3_service2():
-    return L3Service2(create_l4_service1(), create_l4_service2(), create_l4_service3())
+    return L3Service2(
+        s1=create_l4_service1(), s2=create_l4_service2(), s3=create_l4_service3()
+    )
 
 
 def create_l3_service3():
-    return L3Service3(create_l4_service1(), create_l4_service2(), create_l4_service3())
+    return L3Service3(
+        s1=create_l4_service1(), s2=create_l4_service2(), s3=create_l4_service3()
+    )
 
 
 # Level 3 Classes
@@ -77,15 +83,21 @@ class L3Service3:
 
 # Factory functions for Level 2
 def create_l2_service1():
-    return L2Service1(create_l3_service1(), create_l3_service2(), create_l3_service3())
+    return L2Service1(
+        s1=create_l3_service1(), s2=create_l3_service2(), s3=create_l3_service3()
+    )
 
 
 def create_l2_service2():
-    return L2Service2(create_l3_service1(), create_l3_service2(), create_l3_service3())
+    return L2Service2(
+        s1=create_l3_service1(), s2=create_l3_service2(), s3=create_l3_service3()
+    )
 
 
 def create_l2_service3():
-    return L2Service3(create_l3_service1(), create_l3_service2(), create_l3_service3())
+    return L2Service3(
+        s1=create_l3_service1(), s2=create_l3_service2(), s3=create_l3_service3()
+    )
 
 
 # Level 2 Classes
@@ -112,15 +124,21 @@ class L2Service3:
 
 # Factory functions for Level 1
 def create_l1_service1():
-    return L1Service1(create_l2_service1(), create_l2_service2(), create_l2_service3())
+    return L1Service1(
+        s1=create_l2_service1(), s2=create_l2_service2(), s3=create_l2_service3()
+    )
 
 
 def create_l1_service2():
-    return L1Service2(create_l2_service1(), create_l2_service2(), create_l2_service3())
+    return L1Service2(
+        s1=create_l2_service1(), s2=create_l2_service2(), s3=create_l2_service3()
+    )
 
 
 def create_l1_service3():
-    return L1Service3(create_l2_service1(), create_l2_service2(), create_l2_service3())
+    return L1Service3(
+        s1=create_l2_service1(), s2=create_l2_service2(), s3=create_l2_service3()
+    )
 
 
 # Level 1 Classes
@@ -154,22 +172,24 @@ class RootService:
 
 
 def create_root_service():
-    return RootService(create_l1_service1(), create_l1_service2(), create_l1_service3())
+    return RootService(
+        s1=create_l1_service1(), s2=create_l1_service2(), s3=create_l1_service3()
+    )
 
 
 def create_root_service_reuse():
     # Level 4 (leaves)
-    l4_s1 = L4Service1(Config("l4_s1"))
-    l4_s2 = L4Service2(Config("l4_s2"))
-    l4_s3 = L4Service3(Config("l4_s3"))
+    l4_s1 = L4Service1(config=Config("l4_s1"))
+    l4_s2 = L4Service2(config=Config("l4_s2"))
+    l4_s3 = L4Service3(config=Config("l4_s3"))
 
     # Level 3
-    l3_s1 = L3Service1(l4_s1, l4_s2, l4_s3)
-    l3_s2 = L3Service2(l4_s1, l4_s2, l4_s3)
-    l3_s3 = L3Service3(l4_s1, l4_s2, l4_s3)
+    l3_s1 = L3Service1(s1=l4_s1, s2=l4_s2, s3=l4_s3)
+    l3_s2 = L3Service2(s1=l4_s1, s2=l4_s2, s3=l4_s3)
+    l3_s3 = L3Service3(s1=l4_s1, s2=l4_s2, s3=l4_s3)
 
     # Level 2
-    l2_s1 = L2Service1(l3_s1, l3_s2, l3_s3)
+    l2_s1 = L2Service1(s1=l3_s1, s2=l3_s2, s3=l3_s3)
     l2_s2 = L2Service2(l3_s1, l3_s2, l3_s3)
     l2_s3 = L2Service3(l3_s1, l3_s2, l3_s3)
 
@@ -215,7 +235,9 @@ def test_create_root():
 
     print(f"ididi resolve {res}")
 
-    print(f"current implementation(without reuse) is {round(res / menual, 6)} times slower")
+    print(
+        f"current implementation(without reuse) is {round(res / menual, 6)} times slower"
+    )
 
 
 @pytest.mark.benchmark
@@ -250,4 +272,6 @@ def test_create_root_reuse():
     res = round(end - start, 6)
     print(f"ididi resolve {res}")
 
-    print(f"current implementation(reuse dependencies) is {round(res / menual, 6)} times slower")
+    print(
+        f"current implementation(reuse dependencies) is {round(res / menual, 6)} times slower"
+    )

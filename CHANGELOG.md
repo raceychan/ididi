@@ -765,8 +765,6 @@ ididi v1.3.0
 0.000139 seoncds to resolve 100 instances
 
 
-
-
 ### renaming
 
 - rename `DependencyGraph` to `Graph`
@@ -967,3 +965,7 @@ This minor focus on a small refactor on `Scope`, we like the idea that `Scope` i
 - when a graph create a scope, it shares a copy of its resolved singletons and registered singletons, scope can read them, but can not modify them.
 
 This gives a better separation between `Graph` and `Scope`.
+
+
+## version 1.4.1
+

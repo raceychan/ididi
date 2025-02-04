@@ -7,8 +7,6 @@ from inspect import isasyncgenfunction, isgeneratorfunction
 from typing import (
     Annotated,
     Any,
-    AsyncGenerator,
-    Awaitable,
     ForwardRef,
     Generator,
     Generic,
@@ -434,14 +432,6 @@ class DependentNode(Generic[T]):
             param_pair = (param_name, param_type)
             unsolved_params.append(param_pair)
         return unsolved_params
-
-    def inject_params(
-        self, params: Union[dict[str, Any], None] = None
-    ) -> Union[T, Awaitable[T], Generator[T, None, None], AsyncGenerator[T, None]]:
-        "Inject dependencies to the dependent accordidng to its signature, return an instance of the dependent type"
-        if not params:
-            return self.factory()
-        return self.factory(**params)
 
     def check_for_implementations(self) -> None:
         if isinstance(self.factory, type):
