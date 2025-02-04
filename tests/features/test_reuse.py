@@ -1,4 +1,4 @@
-from ididi.graph import DependencyGraph
+from ididi import DependencyGraph, use
 
 dg = DependencyGraph()
 
@@ -18,6 +18,15 @@ def test_config_eq():
     c2 = ng.nodes[Config].config
     assert c1 != 1
     assert c1 != c2
+
+
+def test_remove_annotated():
+
+    def config_factory() -> Config: ...
+
+    dg = DependencyGraph()
+    dg.node(config_factory)
+    dg.remove_dependent(use(config_factory))
 
 
 class Engine:

@@ -4,6 +4,7 @@ from functools import lru_cache, partial, wraps
 from inspect import isawaitable, iscoroutinefunction
 from types import MappingProxyType, TracebackType
 from typing import (
+    Annotated,
     Any,
     AsyncContextManager,
     Awaitable,
@@ -19,6 +20,7 @@ from typing import (
     Union,
     cast,
     final,
+    get_args,
     get_origin,
     overload,
 )
@@ -405,6 +407,10 @@ class Resolver:
 
         if is_class(dependent) or is_new_type(dependent):
             dependent_type = resolve_annotation(dependent)
+            if get_origin(dependent_type) is Annotated:
+                if node := resolve_use(dependent_type):
+                    self._node(node.factory)
+                dependent_type, *_ = get_args(dependent_type)
         else:
             dependent_type = resolve_factory(dependent)
             if dependent_type not in self._nodes:
@@ -1183,5 +1189,3 @@ class ScopeManager:
 
 
 DependencyGraph = Graph
-
-

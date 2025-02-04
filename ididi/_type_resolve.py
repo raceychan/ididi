@@ -291,7 +291,8 @@ def get_bases(dependent: type) -> tuple[type, ...]:
 def resolve_node_type(dependent: INode[P, T]) -> type[T]:
     if is_class(dependent) or is_new_type(dependent):
         dependent_type = resolve_annotation(dependent)
+        if get_origin(dependent_type) is Annotated:
+            dependent_type, *_ = get_args(dependent_type)
     else:
         dependent_type = resolve_factory(dependent)
-
     return cast(type[T], dependent_type)

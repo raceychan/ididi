@@ -180,14 +180,6 @@ class Dependency(FrozenSlot, Generic[T]):
             default=self.default,
         )
 
-    def replace_default(self, default: T) -> "Dependency[T]":
-        return Dependency(
-            name=self.name,
-            param_kind=self.param_kind,
-            param_type=self.param_type,
-            default=default,
-        )
-
 
 def unpack_to_deps(
     param_annotation: Annotated[Any, "Unpack"]
@@ -411,21 +403,10 @@ class DependentNode(Generic[T]):
 
         for param_name, param in self.dependencies.filter_ignore(ignore):
             param_type = cast(Union[type, ForwardRef], param.param_type)
-
-            if get_origin(param_type) is Annotated:
-                if node := resolve_use(param_type):
-                    yield param
-                    self.dependencies.update(
-                        param_name, param.replace_type(node.dependent_type)
-                    )
-                    continue
-
             if isinstance(param_type, ForwardRef):
                 new_type = resolve_forwardref(self.dependent_type, param_type)
                 param = param.replace_type(new_type)
-
             yield param
-
             if param.param_type != param_type:
                 self.dependencies.update(param_name, param)
 
