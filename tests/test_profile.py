@@ -210,12 +210,14 @@ def create_root_service_reuse():
 def test_create_root():
     n = 1000
     start = perf_counter()
+
     for _ in range(n):
         root_service = create_root_service()
     end = perf_counter()
-    menual = round(end - start, 6)
 
-    print(f"menaul construction {menual}")
+    menual = round((end - start), 6)
+
+    print(f"\nmenaul construction took {menual}")
 
     dg = Graph()
     classes: dict[str, type] = {
@@ -231,9 +233,9 @@ def test_create_root():
     for _ in range(n):
         dg.resolve(RootService)
     end = perf_counter()
-    res = round(end - start, 6)
+    res = round((end - start), 6)
 
-    print(f"ididi resolve {res}")
+    print(f"ididi resolve took {res}")
 
     print(
         f"current implementation(without reuse) is {round(res / menual, 6)} times slower"

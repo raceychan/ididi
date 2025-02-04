@@ -969,3 +969,6 @@ This gives a better separation between `Graph` and `Scope`.
 
 ## version 1.4.1
 
+we should take a smarter approach with `ignore`, for node configured with ignore,
+we don't put them in node's dependencies. This would be more efficient and make more sense.
+

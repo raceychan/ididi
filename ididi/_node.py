@@ -257,11 +257,8 @@ class Dependencies:
     def filter_ignore(
         self, ignore: NodeIgnore
     ) -> Generator[tuple[str, Dependency[Any]], None, None]:
-        for i, (param_name, param) in enumerate(self._deps.items()):
-            if get_origin(param_type := param.param_type) is Annotated:
-                param_type = get_args(param_type)[0]
-
-            if (i in ignore) or (param_name in ignore) or (param_type in ignore):
+        for param_name, param in self._deps.items():
+            if (param_name in ignore) or (param.param_type in ignore):
                 continue
             yield param_name, param
 
@@ -270,9 +267,9 @@ class Dependencies:
         cls,
         factory: INodeFactory[P, T],
         signature: Signature,
+        config: NodeConfig,
     ) -> "Dependencies":
         params = tuple(signature.parameters.values())
-
         if is_class_or_method(factory):
             params = params[1:]  # skip 'self'
 
@@ -289,16 +286,29 @@ class Dependencies:
                 e.add_context(factory, param.name, type(MISSING))
                 raise e
 
+            param_default = param.default
+
+            if param_default == INSPECT_EMPTY:
+                default = MISSING
+            else:
+                default = param.default
+
             param_type = resolve_annotation(param_annotation)
+            if get_origin(default) is Annotated:
+                param_type = resolve_annotation(default)
+                default = MISSING
+
+            if get_origin(param_type) is Annotated:
+                annotate_meta = flatten_annotated(param_type)
+                if IDIDI_IGNORE_PARAM_MARK in annotate_meta:
+                    continue
+
+                if IDIDI_USE_FACTORY_MARK not in annotate_meta:
+                    param_type, *_ = get_args(param_type)
 
             if param_type is Unpack:
                 dependencies.update(unpack_to_deps(param_annotation))
                 continue
-
-            if param.default == INSPECT_EMPTY:
-                default = MISSING
-            else:
-                default = param.default
 
             dep_param = Dependency(
                 name=param.name,
@@ -308,7 +318,17 @@ class Dependencies:
             )
             dependencies[param.name] = dep_param
 
-        return cls(dependencies)
+        ignore = config.ignore
+        excluded_deps = {
+            param_name: param
+            for pos_idx, (param_name, param) in enumerate(dependencies.items())
+            if (
+                pos_idx not in ignore
+                and param_name not in ignore
+                and param.param_type not in ignore
+            )
+        }
+        return cls(excluded_deps)
 
 
 # ======================= Node =====================================
@@ -388,9 +408,8 @@ class DependentNode(Generic[T]):
         self, ignore: NodeIgnore
     ) -> Generator[Dependency[T], None, None]:
         "params that needs to be statically resolved"
-        ignores = self.config.ignore | ignore
 
-        for param_name, param in self.dependencies.filter_ignore(ignores):
+        for param_name, param in self.dependencies.filter_ignore(ignore):
             param_type = cast(Union[type, ForwardRef], param.param_type)
 
             if get_origin(param_type) is Annotated:
@@ -399,16 +418,6 @@ class DependentNode(Generic[T]):
                     self.dependencies.update(
                         param_name, param.replace_type(node.dependent_type)
                     )
-                    continue
-
-            if is_provided(param.default) and get_origin(param.default) is Annotated:
-                annoted_default = param.default
-                if node := resolve_use(annoted_default):
-                    yield param.replace_type(annoted_default)
-                    analyzed_param = param.replace_type(
-                        node.dependent_type
-                    ).replace_default(MISSING)
-                    self.dependencies.update(param_name, analyzed_param)
                     continue
 
             if isinstance(param_type, ForwardRef):
@@ -424,8 +433,7 @@ class DependentNode(Generic[T]):
     def unsolved_params(self, ignore: NodeIgnore) -> list[tuple[str, type]]:
         "yield dependencies that needs to be resolved"
         unsolved_params: list[tuple[str, type]] = []
-        ignores = self.config.ignore | ignore
-        for param_name, param in self.dependencies.filter_ignore(ignore=ignores):
+        for param_name, param in self.dependencies.filter_ignore(ignore=ignore):
             param_type: type[T] = param.param_type
             if is_provided(param.default) and is_unsolvable_type(param_type):
                 continue
@@ -454,27 +462,14 @@ class DependentNode(Generic[T]):
         signature: Signature,
         config: NodeConfig,
     ) -> "DependentNode[T]":
-
-        deps = Dependencies.from_signature(factory=factory, signature=signature)
-
-        for name, param in deps.filter_ignore(config.ignore):
-            param_type = param.param_type
-
-            if get_origin(param_type) is Annotated:
-                annotate_meta = flatten_annotated(param_type)
-                if IDIDI_IGNORE_PARAM_MARK in annotate_meta:
-                    config = NodeConfig(
-                        reuse=config.reuse, ignore=config.ignore | {name}
-                    )
-                elif IDIDI_USE_FACTORY_MARK not in annotate_meta:
-                    param_type, *_ = get_args(param_type)
-                    deps.update(name, param.replace_type(param_type))
-
+        dependencies = Dependencies.from_signature(
+            factory=factory, signature=signature, config=config
+        )
         node = DependentNode(
             dependent_type=resolve_annotation(dependent_type),
             factory=factory,
             factory_type=factory_type,
-            dependencies=deps,
+            dependencies=dependencies,
             config=config,
         )
         return node

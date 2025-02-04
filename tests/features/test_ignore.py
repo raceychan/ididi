@@ -1,4 +1,7 @@
-from ididi import DependencyGraph, Ignore, use
+from datetime import datetime
+from typing import Annotated
+
+from ididi import DependencyGraph, Graph, Ignore, use
 
 from ..test_data import AuthenticationService, Database, DatabaseConfig, UserService
 
@@ -12,10 +15,8 @@ def test_ignore_param():
 
     dg.analyze(User)
     node = dg.nodes[User]
-    assert node.config.ignore
-
+    assert not node.dependencies
     u = dg.resolve(User, name="test")
-
     assert u.name == "test"
 
 
@@ -58,3 +59,12 @@ def test_node_with_many_ignore():
     dg = DependencyGraph()
 
     dg.node(ignore="config")(Database)
+
+
+def test_ignore_datetime():
+    dg = Graph()
+
+    class Clock:
+        def __init__(self, dt: Annotated[datetime, Ignore[datetime]]): ...
+
+    dg.resolve(Clock, dt=datetime.now())

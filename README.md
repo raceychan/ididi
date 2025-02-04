@@ -44,7 +44,6 @@ pip install ididi[graphviz]
 
 ### Quick Start
 
-
 ```python
 from typing import AsyncGenerator
 from ididi import use, entry
@@ -76,10 +75,69 @@ async with dg.scope():
     conn = await scope.resolve(conn_factory)
 ```
 
+## Key Concepts
+
+### Marks
+
+ididi provides two `mark`s, `use` and `Ignore`, they are convenient shortcut for `Graph.node`.
+Technically, they are just metadata carried by `typing.Annotated`, and should work fine with other Annotated metadata.
+
+#### `use`
+
+You can use `Graph.node` to register a dependent with its factory,
+here we register dependent `Database` with its factory `db_factory`.
+This means whenver we call `dg.resolve(Database)`, `db_factory` will be call.
+
+```python
+def db_factory() -> Database:
+    return Database()
+
+dg = Graph()
+dg.node(db_factory)
+```
+
+Alternatively, you can annotate it inside `__init__`, this allow you to instantiate
+`Graph` in a lazy manner.
+
+```python
+from ididi import use
+class Repository:
+    def __init__(self, db: Annotated[Database, use(db_factory)]):
+        ...
+```
+
+#### `Ignore`
+
+ididi takes a "resolve by default" approach, for dependencies you would like ididi to ignore, you can config ididi to ignore them.
+
+- Ignore at Graph level
+
+```python
+from datetime import datetime
+from pathlib import Path
+
+dg = Graph(ignore=(datetime, Path))
+```
+
+- Ignore at Node level
+
+```python
+dg = Graph()
+class Clock:
+    def __init__(self, dt: datetime): ...
+
+dg.node(Clock, ignore=datetime)
+```
+
+Alternatively, you can mark a dependency using `ididi.Ignore`,
+```python
+from ididi import Ignore
+
+class Clock:
+    def __init__(self, dt: Ignore[datetime]): ...
+```
 
 ### Dependency factory 
-
-assign which factory method to use with `ididi.use`
 
 ```python
 from ididi import use
@@ -120,7 +178,6 @@ ididi has strong support to `typing` module, includes:
 ...and more.
 
 Check out `tests/features/test_typing_support.py` for examples.
-
 
 ### Scope
 
@@ -302,7 +359,8 @@ Use `entryfunc.replace` to replace a dependency with its test double.
 
 `Graph.override` applies to the whole graph, `entry.replace` applies to only the entry function.  
 
-### More
+
+## More
 
 For more detailed information, check out [Documentation](https://raceychan.github.io/ididi)
 
@@ -310,7 +368,7 @@ For more detailed information, check out [Documentation](https://raceychan.githu
 
 - Usage of factory
 
-- Visualize the dependency graph(beta)
+- Visualize the dependency graph
 
 - Circular Dependency Detection
 

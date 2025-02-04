@@ -280,8 +280,9 @@ class Resolver:
             return resolution
 
         provided_params = frozenset(overrides)
-        node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
-        unsolved_params = node.unsolved_params(self._ignore | provided_params)
+        ignores = self._ignore | provided_params
+        node: DependentNode[T] = self.analyze(dependent, ignore=ignores)
+        unsolved_params = node.unsolved_params(ignores)
 
         params = overrides
         for param_name, param_type in unsolved_params:
@@ -312,8 +313,9 @@ class Resolver:
             return resolution
 
         provided_params = frozenset(overrides)
-        node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
-        unsolved_params = node.unsolved_params(self._ignore | provided_params)
+        ignores = self._ignore | provided_params
+        node: DependentNode[T] = self.analyze(dependent, ignore=ignores)
+        unsolved_params = node.unsolved_params(ignores)
 
         params = overrides
         for param_name, param_type in unsolved_params:
@@ -776,16 +778,15 @@ class Graph(Resolver):
         self, func: Callable[P, T], **iconfig: Unpack[INodeConfig]
     ) -> tuple[bool, list[tuple[str, type]]]:
         config = NodeConfig(**iconfig)
-        ignores = self._ignore | config.ignore
 
         deps = Dependencies.from_signature(
-            signature=get_typed_signature(func), factory=func
+            signature=get_typed_signature(func), factory=func, config=config
         )
 
         depends_on_resource: bool = False
         unresolved: list[tuple[str, type]] = []
 
-        for name, dep in deps.filter_ignore(ignores):
+        for name, dep in deps.filter_ignore(self._ignore):
             param_type = dep.param_type
 
             if is_unsolvable_type(param_type):
@@ -1182,3 +1183,5 @@ class ScopeManager:
 
 
 DependencyGraph = Graph
+
+
