@@ -137,7 +137,7 @@ class Resolver:
         """
         Remove a node from the graph and clean up all its references.
         """
-        dependent_type = node.dependent_type
+        dependent_type = node.dependent
 
         self._nodes.pop(dependent_type)
         self._type_registry.remove(dependent_type)
@@ -150,13 +150,13 @@ class Resolver:
         Automatically registers any unregistered dependencies.
         """
 
-        dep_type = node.dependent_type
-        dependent_type: type = get_origin(dep_type) or dep_type
-        if dependent_type in self._nodes:
+        dep_type = node.dependent
+        dependent: Callable[..., Any] = get_origin(dep_type) or dep_type
+        if dependent in self._nodes:
             return
 
-        self._nodes[dependent_type] = node
-        self._type_registry.register(dependent_type)
+        self._nodes[dependent] = node
+        self._type_registry.register(dependent)
 
     def _resolve_concrete_node(self, dependent: Callable[..., T]) -> DependentNode[Any]:
         # when user assign impl via factory
@@ -179,7 +179,7 @@ class Resolver:
         if not (resolved_node := self._analyzed_nodes.get(dep_type)):
             resolved_node = self.analyze(dep_type)
 
-        if self.is_registered_singleton(resolved_node.dependent_type):
+        if self.is_registered_singleton(resolved_node.dependent):
             return False
 
         if resolved_node.is_resource:
@@ -192,7 +192,7 @@ class Resolver:
         return contain_resource
 
     def check_param_conflict(
-        self, param_type: type, current_path: list[Callable[..., T]]
+        self, param_type: Callable[..., T], current_path: list[Callable[..., T]]
     ):
         if param_type in current_path:
             i = current_path.index(param_type)
@@ -226,7 +226,7 @@ class Resolver:
                 self._node(node.factory)
 
             if is_function(dependent):
-                node = DependentNode._from_function(dependent, config=config)
+                node = DependentNode.from_node(dependent, config=config)
                 self._nodes[dependent] = node
                 return cast(Callable[..., T], dependent)
 
@@ -279,7 +279,7 @@ class Resolver:
                         self._node(inject_node.factory)
                         continue
                 elif is_function(param_type):
-                    pnode = DependentNode._from_function(param_type, config=config)
+                    pnode = DependentNode.from_node(param_type, config=config)
                     self._nodes[param_type] = pnode
                     continue
 
@@ -297,7 +297,7 @@ class Resolver:
                 try:
                     pnode = dfs(param_type, EmptyIgnore)
                 except UnsolvableNodeError as une:
-                    une.add_context(node.dependent_type, param.name, param.param_type)
+                    une.add_context(node.dependent, param.name, param.param_type)
                     raise
 
                 self._register_node(pnode)
@@ -311,12 +311,12 @@ class Resolver:
 
     def analyze_params(
         self, func: Callable[P, T], config: NodeConfig = DefaultConfig
-    ) -> tuple[bool, list[tuple[str, type]]]:
+    ) -> tuple[bool, list[tuple[str, Callable[..., Any]]]]:
         deps = Dependencies.from_signature(
             signature=get_typed_signature(func), factory=func, config=config
         )
         depends_on_resource: bool = False
-        unresolved: list[tuple[str, type]] = []
+        unresolved: list[tuple[str, Callable[..., Any]]] = []
 
         for name, dep in deps.filter_ignore(self._ignore):
             param_type = dep.param_type
@@ -326,7 +326,7 @@ class Resolver:
 
             if inject_node := (resolve_use(param_type) or resolve_use(dep.default)):
                 self._node(inject_node.factory)
-                param_type = inject_node.dependent_type
+                param_type = inject_node.dependent
 
             self.analyze(param_type, config=config)
             depends_on_resource = depends_on_resource or self.should_be_scoped(
@@ -360,30 +360,30 @@ class Resolver:
     def resolve_callback(
         self,
         resolved: Any,
-        dependent_type: type[T],
+        dependent: Callable[..., T],
         factory_type: FactoryType,
         is_reuse: bool,
     ) -> T:
         if factory_type not in ("default", "function"):
-            raise ResourceOutsideScopeError(dependent_type)
+            raise ResourceOutsideScopeError(dependent)
 
         if is_reuse:
-            register_dependent(self._resolved_singletons, dependent_type, resolved)
+            register_dependent(self._resolved_singletons, dependent, resolved)
         return resolved
 
     async def aresolve_callback(
         self,
         resolved: Any,
-        dependent_type: type[T],
+        dependent: Callable[..., T],
         factory_type: FactoryType,
         is_reuse: bool,
     ):
         if factory_type not in ("default", "function"):
-            raise ResourceOutsideScopeError(dependent_type)
+            raise ResourceOutsideScopeError(dependent)
 
         instance = await resolved if isawaitable(resolved) else resolved
         if is_reuse:
-            register_dependent(self._resolved_singletons, dependent_type, instance)
+            register_dependent(self._resolved_singletons, dependent, instance)
         return cast(T, instance)
 
     @overload
@@ -446,7 +446,7 @@ class Resolver:
         resolved = node.factory(**params)
         return self.resolve_callback(
             resolved=resolved,
-            dependent_type=node.dependent_type,
+            dependent=node.dependent,
             factory_type=node.factory_type,
             is_reuse=node.config.reuse,
         )
@@ -478,7 +478,7 @@ class Resolver:
         resolved = node.factory(**params)
         return await self.aresolve_callback(
             resolved=resolved,
-            dependent_type=node.dependent_type,
+            dependent=node.dependent,
             factory_type=node.factory_type,
             is_reuse=node.config.reuse,
         )
@@ -487,8 +487,10 @@ class Resolver:
         self, dependent: INode[P, T], config: NodeConfig = DefaultConfig
     ) -> DependentNode[T]:
         node = DependentNode[T].from_node(dependent, config=config)
+        if is_function(node.dependent):
+            return node
 
-        if ori_node := self._nodes.get(node.dependent_type):
+        if ori_node := self._nodes.get(node.dependent):
             if should_override(node, ori_node):
                 self._remove_node(ori_node)
 
@@ -886,19 +888,19 @@ class Graph(Resolver):
         require_scope, unresolved = self.analyze_params(func, config=config)
 
         def replace(
-            before: Maybe[type[T]] = MISSING,
-            after: Maybe[type[T]] = MISSING,
+            before: Maybe[Callable[..., T]] = MISSING,
+            after: Maybe[Callable[..., T]] = MISSING,
             **kw_overrides: type[Any],
         ):
             nonlocal unresolved
 
             for i, (pname, ptype) in enumerate(unresolved):
                 if ptype is before and is_provided(after):
-                    analyzed = self.analyze(after).dependent_type
+                    analyzed = self.analyze(after).dependent
                     unresolved[i] = (pname, analyzed)
 
                 if pname in kw_overrides:
-                    analyzed = self.analyze(kw_overrides[pname]).dependent_type
+                    analyzed = self.analyze(kw_overrides[pname]).dependent
                     unresolved[i] = (pname, analyzed)
 
         if iscoroutinefunction(func):
@@ -1028,21 +1030,21 @@ class SyncScope(ScopeBase[ExitStack], Resolver):
     def resolve_callback(
         self,
         resolved: T,
-        dependent_type: type[T],
+        dependent: Callable[..., T],
         factory_type: FactoryType,
         is_reuse: bool,
     ):
         if factory_type in ("default", "function"):
             if is_reuse:
-                register_dependent(self._resolved_singletons, dependent_type, resolved)
+                register_dependent(self._resolved_singletons, dependent, resolved)
             return resolved
 
         if factory_type == "aresource":
-            raise AsyncResourceInSyncError(dependent_type)
+            raise AsyncResourceInSyncError(dependent)
 
         instance = self.enter_context(cast(ContextManager[T], resolved))
         if is_reuse:
-            register_dependent(self._resolved_singletons, dependent_type, instance)
+            register_dependent(self._resolved_singletons, dependent, instance)
         return instance
 
 
@@ -1099,14 +1101,14 @@ class AsyncScope(ScopeBase[AsyncExitStack], Resolver):
     async def aresolve_callback(
         self,
         resolved: Union[T, Awaitable[T]],
-        dependent_type: type[T],
+        dependent: Callable[..., T],
         factory_type: FactoryType,
         is_reuse: bool,
     ) -> T:
         if factory_type in ("default", "function"):
             instance = await resolved if isawaitable(resolved) else resolved
             if is_reuse:
-                register_dependent(self._resolved_singletons, dependent_type, instance)
+                register_dependent(self._resolved_singletons, dependent, instance)
             return cast(T, instance)
 
         if factory_type == "resource":
@@ -1117,7 +1119,7 @@ class AsyncScope(ScopeBase[AsyncExitStack], Resolver):
             )
 
         if is_reuse:
-            register_dependent(self._resolved_singletons, dependent_type, instance)
+            register_dependent(self._resolved_singletons, dependent, instance)
         return instance
 
 

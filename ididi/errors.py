@@ -44,7 +44,7 @@ class AsyncResourceInSyncError(NodeResolveError):
 
 
 class ResourceOutsideScopeError(NodeResolveError):
-    def __init__(self, dependent: type):
+    def __init__(self, dependent: Any):
         super().__init__(f"resource {dependent} has to be resolved within scope")
 
 
@@ -68,7 +68,10 @@ class UnsolvableNodeError(NodeResolveError):
         self.__notes__.append(note)
 
     def add_context(
-        self, dependent: Callable[..., Any], param_name: str, param_annotation: type
+        self,
+        dependent: Callable[..., Any],
+        param_name: str,
+        param_annotation: Callable[..., Any],
     ):
         dep_repr = getattr(dependent, "__name__", str(dependent))
         param_repr = getattr(param_annotation, "__name__", str(param_annotation))
@@ -217,7 +220,7 @@ class CircularDependencyDetectedError(GraphResolveError):
 
 
 class ReusabilityConflictError(GraphResolveError):
-    def __init__(self, path: list[Callable[..., Any]], nonreuse: type):
+    def __init__(self, path: list[Callable[..., Any]], nonreuse: Any):
         conflict_str = " -> ".join(t.__name__ for t in path)
         msg = f"""Transient dependency `{nonreuse.__name__}` with reuse dependents \
         \n make sure each of {conflict_str} is configured as `reuse=False` \

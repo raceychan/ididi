@@ -7,6 +7,7 @@ from inspect import isasyncgenfunction, isgeneratorfunction
 from typing import (
     Annotated,
     Any,
+    Callable,
     ForwardRef,
     Generator,
     Generic,
@@ -78,7 +79,7 @@ def use(
     """
 
     node = DependentNode[T].from_node(factory, config=NodeConfig(**iconfig))
-    annt = Annotated[node.dependent_type, node, IDIDI_USE_FACTORY_MARK]
+    annt = Annotated[node.dependent, node, IDIDI_USE_FACTORY_MARK]
     return cast(T, annt)
 
 
@@ -137,14 +138,14 @@ class Dependency(FrozenSlot, Generic[T]):
     __slots__ = ("name", "param_type", "param_kind", "default")
 
     name: str
-    param_type: type[T]  # resolved_type
+    param_type: Callable[..., T]  # resolved_type
     param_kind: ParameterKind
     default: Maybe[T]
 
     def __init__(
         self,
         name: str,
-        param_type: type[T],
+        param_type: Callable[..., T],
         param_kind: ParameterKind,
         default: Maybe[T],
     ) -> None:
@@ -367,7 +368,7 @@ class DependentNode(Generic[T]):
     """
 
     __slots__ = (
-        "dependent_type",
+        "dependent",
         "factory",
         "factory_type",
         "dependencies",
@@ -377,21 +378,21 @@ class DependentNode(Generic[T]):
     def __init__(
         self,
         *,
-        dependent_type: type[T],
+        dependent: Callable[..., T],
         factory: INodeAnyFactory[T],
         factory_type: FactoryType,
         dependencies: Dependencies,
         config: NodeConfig,
     ):
 
-        self.dependent_type = dependent_type
+        self.dependent = dependent
         self.factory = factory
         self.factory_type: FactoryType = factory_type
         self.dependencies = dependencies
         self.config = config
 
     def __repr__(self) -> str:
-        str_repr = f"{self.__class__.__name__}(type: {self.dependent_type}"
+        str_repr = f"{self.__class__.__name__}(type: {self.dependent}"
         if self.factory_type != "default":
             str_repr += f", factory: {self.factory}"
         str_repr += ")"
@@ -407,20 +408,20 @@ class DependentNode(Generic[T]):
         "params that needs to be statically resolved"
 
         for param_name, param in self.dependencies.filter_ignore(ignore):
-            param_type = cast(Union[type, ForwardRef], param.param_type)
+            param_type = cast(Union[Callable[..., T], ForwardRef], param.param_type)
             if isinstance(param_type, ForwardRef):
-                new_type = resolve_forwardref(self.dependent_type, param_type)
+                new_type = resolve_forwardref(self.dependent, param_type)
                 param = param.replace_type(new_type)
             yield param
             if param.param_type != param_type:
                 self.dependencies.update(param_name, param)
 
     @lru_cache(CacheMax)
-    def unsolved_params(self, ignore: NodeIgnore) -> list[tuple[str, type]]:
+    def unsolved_params(self, ignore: NodeIgnore) -> list[tuple[str, Callable[..., T]]]:
         "yield dependencies that needs to be resolved"
-        unsolved_params: list[tuple[str, type]] = []
+        unsolved_params: list[tuple[str, Callable[..., T]]] = []
         for param_name, param in self.dependencies.filter_ignore(ignore=ignore):
-            param_type: type[T] = param.param_type
+            param_type: Callable[..., T] = param.param_type
             if is_provided(param.default) and is_unsolvable_type(param_type):
                 continue
             param_pair = (param_name, param_type)
@@ -452,7 +453,7 @@ class DependentNode(Generic[T]):
             factory=factory, signature=signature, config=config
         )
         node = DependentNode(
-            dependent_type=resolve_annotation(dependent_type),
+            dependent=resolve_annotation(dependent_type),
             factory=factory,
             factory_type=factory_type,
             dependencies=dependencies,
@@ -483,10 +484,11 @@ class DependentNode(Generic[T]):
 
         signature = get_typed_signature(f, check_return=True)
         dependent: type[T] = resolve_annotation(signature.return_annotation)
-        # if get_origin(dependent) is Annotated:
-        #     metas = flatten_annotated(dependent)
-        #     if IDIDI_IGNORE_PARAM_MARK in metas:
-        #         return cls._from_function(f, config=config)
+        if get_origin(dependent) is Annotated:
+            metas = flatten_annotated(dependent)
+            if IDIDI_IGNORE_PARAM_MARK in metas:
+                node = cls._from_function(f, config=config)
+                return node
 
         node = cls.create(
             dependent_type=dependent,
@@ -550,7 +552,7 @@ class DependentNode(Generic[T]):
         )
 
         node = DependentNode(
-            dependent_type=function,
+            dependent=function,
             factory=function,
             factory_type="function",
             dependencies=deps,

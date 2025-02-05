@@ -1,6 +1,6 @@
 from collections import defaultdict
 from types import MappingProxyType
-from typing import Any, Callable, Union, Hashable
+from typing import Any, Callable, Hashable, Union
 
 from ._node import DependentNode
 from ._type_resolve import get_bases
@@ -45,13 +45,13 @@ class TypeRegistry:
     def update(self, other: "TypeRegistry"):
         self._mappings.update(other._mappings)
 
-    def register(self, dependent_type: type[T]) -> None:
-        self._mappings[dependent_type].append(dependent_type)
+    def register(self, dependent: Callable[..., T]) -> None:
+        self._mappings[dependent].append(dependent)
 
-        for base in get_bases(dependent_type):
-            self._mappings[base].append(dependent_type)
+        for base in get_bases(dependent):
+            self._mappings[base].append(dependent)
 
-    def remove(self, dependent_type: type):
+    def remove(self, dependent_type: Callable[..., T]):
         for base in get_bases(dependent_type):
             self._mappings[base].remove(dependent_type)
 
