@@ -161,7 +161,7 @@ def resolve_factory(factory: Callable[..., T]) -> type[T]:
 
     should handle Annotate, Generator function, etc.
     """
-    sig = get_typed_signature(factory, check_return=True)
+    sig = get_typed_signature(factory)
     dependent: type[T] = resolve_annotation(sig.return_annotation)
     return dependent
 

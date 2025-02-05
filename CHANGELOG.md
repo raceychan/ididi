@@ -991,71 +991,19 @@ def test_ignore_dependences():
 
 Function as Dependency
 
+a function with its return type Annotated by `Ignore` is considered a pure function dependency, instead of a factory.
+
+
 ```python
-def get_user(session: Session, token: Token) -> Ignore[Any]:
+@dg.node
+def get_user(session: Session, token: Token) -> Ignore[User]:
     ...
 ```
 
+which means that, `get_user` won't be used to resolve `User`. 
 
 ```python
-def validate_admin(user: Annotated[User, get_user]):
+def validate_admin(user: Annotated[User, get_user])->Ignore[Any]:
     ...
 ```
 
-<!-- 
-# TODO: are FnDep nodes?
-if so, we need to define new type of node
-```python
-class FnDepNode:
-    factory: Callable[P, ...]
-    factory_type: Literal["function", "resource"]
-    dependencies: Dependencies
-    config: NodeConfig
-```
-
-
-```
-def resolve_params(self, function):
-    require_scope, unresolved = self.analyze_params(function)
-    if require_scope:
-        raise OutOfScopeError
-    params = {}
-    for pname, ptype in unresolved:
-        params[pname] = self.resolve(ptype)
-    return params
-
-async def resolve_afunction(self, function): ...
-```
-
-then we can rewrite entry as such
-
-```python
-@wraps(func)
-async def _async_scoped_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-    async with self.scope() as scope:
-        params = await scope.aresolve_params(function, ignore=kwargs)
-        await scope.aresolve_function(*args, **(params|kwargs))
-
-```
-
-or 
-
-we introduce `FuncReturn` Mark
-
-```python
-def get_user(session: Session, token: Token) -> Fndep[User]:
-    ...
-
-dg.resolve(get_user)
-```
-
-FuncReturn can be Any
-
-
-
-The biggest difference between Funcdep and factory is that
-factory is associated with a type where Fndep is not.
-
-in short, 
-
-dg.resolve(User) won't call get_user -->
