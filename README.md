@@ -137,6 +137,33 @@ class Clock:
     def __init__(self, dt: Ignore[datetime]): ...
 ```
 
+### Function dependency
+
+Declear a function is dependency using `Ignore` to annotate its return type
+
+```python
+@dataclass
+class User:
+    name: str
+    role: str
+
+def get_user(config: Config) -> Ignore[User]:
+    assert isinstance(config, Config)
+    return User("user", "admin")
+
+
+def validate_admin(
+    user: Annotated[User, get_user], service: UserService
+) -> Ignore[str]:
+    assert user.role == "admin"
+    assert isinstance(service, UserService)
+    return "ok"
+
+assert dg.resolve(validate_admin) == "ok"
+```
+
+Note that since `get_user` returns `Ignore[User]` instead of `User`, it won't be used as factory to resolve `User`.
+
 ### Dependency factory 
 
 ```python
