@@ -1,6 +1,6 @@
 from collections import defaultdict
-from types import MappingProxyType
-from typing import Any, Callable, Hashable, Union
+from types import FunctionType, MappingProxyType
+from typing import Any, Callable, Hashable, Union, cast
 
 from ._node import DependentNode
 from ._type_resolve import get_bases
@@ -69,9 +69,9 @@ class Visitor:
 
     def _visit(
         self,
-        start_types: Union[list[Any], type],
-        pre_visit: Union[Callable[[type], None], None] = None,
-        post_visit: Union[Callable[[type], None], None] = None,
+        start_types: Union[list[Callable[..., Any]], Callable[..., Any]],
+        pre_visit: Union[Callable[[Callable[..., Any]], None], None] = None,
+        post_visit: Union[Callable[[Callable[..., Any]], None], None] = None,
     ) -> None:
         """Generic DFS traversal with customizable visit callbacks.
 
@@ -80,12 +80,12 @@ class Visitor:
             pre_visit: Called before visiting node's dependencies
             post_visit: Called after visiting node's dependencies
         """
-        if isinstance(start_types, type):
+        if isinstance(start_types, type) or isinstance(start_types, FunctionType):
             start_types = [start_types]
 
-        visited = set[type]()
+        visited = set[Callable[..., Any]]()
 
-        def _get_deps(node_type: type) -> list[type]:
+        def _get_deps(node_type: Callable[..., Any]) -> list[Callable[..., Any]]:
             node = self._nodes[node_type]
             return [
                 p.param_type
@@ -93,7 +93,7 @@ class Visitor:
                 if p.param_type in self._nodes
             ]
 
-        def dfs(node_type: type):
+        def dfs(node_type: Callable[..., Any]):
             if node_type in visited:
                 return
             visited.add(node_type)
@@ -107,13 +107,15 @@ class Visitor:
             if post_visit:
                 post_visit(node_type)
 
-        for node_type in start_types:
+        for node_type in cast(list[Callable[..., Any]], start_types):
             dfs(node_type)
 
-    def get_dependents(self, dependency: type) -> list[type]:
-        dependents: list[type] = []
+    def get_dependents(
+        self, dependency: Callable[..., Any]
+    ) -> list[Callable[..., Any]]:
+        dependents: list[Callable[..., Any]] = []
 
-        def collect_dependent(node_type: type):
+        def collect_dependent(node_type: Callable[..., Any]):
             node = self._nodes[node_type]
             if any(p.param_type is dependency for _, p in node.dependencies):
                 dependents.append(node_type)
@@ -121,23 +123,25 @@ class Visitor:
         self._visit(list(self._nodes), pre_visit=collect_dependent)
         return dependents
 
-    def get_dependencies(self, dependent: type, recursive: bool = False) -> list[type]:
+    def get_dependencies(
+        self, dependent: Callable[..., Any], recursive: bool = False
+    ) -> list[Callable[..., Any]]:
         if not recursive:
             return [p.param_type for _, p in self._nodes[dependent].dependencies]
 
-        def collect_dependencies(t: type):
+        def collect_dependencies(t: Callable[..., Any]):
             if t != dependent:
                 dependencies.append(t)
 
-        dependencies: list[type] = []
+        dependencies: list[Callable[..., Any]] = []
         self._visit(
             dependent,
             post_visit=collect_dependencies,
         )
         return dependencies
 
-    def top_sorted_dependencies(self) -> list[type]:
+    def top_sorted_dependencies(self) -> list[Callable[..., Any]]:
         "Sort the whole graph, from lowest dependencies to toppest dependents"
-        order: list[type] = []
+        order: list[Callable[..., Any]] = []
         self._visit(list(self._nodes), post_visit=order.append)
         return order

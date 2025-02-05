@@ -371,6 +371,7 @@ class DependentNode(Generic[T]):
         "dependent",
         "factory",
         "factory_type",
+        "function_dependent",
         "dependencies",
         "config",
     )
@@ -381,6 +382,7 @@ class DependentNode(Generic[T]):
         dependent: Callable[..., T],
         factory: INodeAnyFactory[T],
         factory_type: FactoryType,
+        function_dependent: bool = False,
         dependencies: Dependencies,
         config: NodeConfig,
     ):
@@ -388,6 +390,7 @@ class DependentNode(Generic[T]):
         self.dependent = dependent
         self.factory = factory
         self.factory_type: FactoryType = factory_type
+        self.function_dependent = function_dependent
         self.dependencies = dependencies
         self.config = config
 
@@ -484,10 +487,11 @@ class DependentNode(Generic[T]):
 
         signature = get_typed_signature(f, check_return=True)
         dependent: type[T] = resolve_annotation(signature.return_annotation)
+
         if get_origin(dependent) is Annotated:
             metas = flatten_annotated(dependent)
             if IDIDI_IGNORE_PARAM_MARK in metas:
-                node = cls._from_function(f, config=config)
+                node = cls._from_function(f, factory_type=factory_type, config=config)
                 return node
 
         node = cls.create(
@@ -546,7 +550,13 @@ class DependentNode(Generic[T]):
             return cls._from_factory(factory=factory, config=config)
 
     @classmethod
-    def _from_function(cls, function: Any, *, config: NodeConfig = DefaultConfig):
+    def _from_function(
+        cls,
+        function: Any,
+        *,
+        factory_type: FactoryType,
+        config: NodeConfig = DefaultConfig,
+    ):
         deps = Dependencies.from_signature(
             function, get_typed_signature(function), config
         )
@@ -554,7 +564,8 @@ class DependentNode(Generic[T]):
         node = DependentNode(
             dependent=function,
             factory=function,
-            factory_type="function",
+            factory_type=factory_type,
+            function_dependent=True,
             dependencies=deps,
             config=config,
         )

@@ -487,7 +487,7 @@ class Resolver:
         self, dependent: INode[P, T], config: NodeConfig = DefaultConfig
     ) -> DependentNode[T]:
         node = DependentNode[T].from_node(dependent, config=config)
-        if is_function(node.dependent):
+        if node.function_dependent:
             return node
 
         if ori_node := self._nodes.get(node.dependent):
