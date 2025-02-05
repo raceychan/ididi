@@ -20,7 +20,6 @@ from typing_extensions import Unpack
 
 from ._type_resolve import (
     IDIDI_IGNORE_PARAM_MARK,
-    IDIDI_UNTYPE_DEP_MARK,
     IDIDI_USE_FACTORY_MARK,
     FactoryType,
     ResolveOrder,
@@ -33,6 +32,7 @@ from ._type_resolve import (
     is_class_or_method,
     is_class_with_empty_init,
     is_ctxmgr_cls,
+    is_function,
     is_unsolvable_type,
     isasyncgenfunction,
     isgeneratorfunction,
@@ -76,7 +76,7 @@ def use(
     def func(service: Annotated[UserService, use(factory)]): ...
     ```
     """
-    # TODO: support untyped, untyped deps are nodes with dependent being functions.
+
     node = DependentNode[T].from_node(factory, config=NodeConfig(**iconfig))
     annt = Annotated[node.dependent_type, node, IDIDI_USE_FACTORY_MARK]
     return cast(T, annt)
@@ -298,7 +298,10 @@ class Dependencies:
                     continue
 
                 if IDIDI_USE_FACTORY_MARK not in annotate_meta:
-                    param_type, *_ = get_args(param_type)
+                    param_type, *rest = get_args(param_type)
+                    for r in rest:
+                        if is_function(r):
+                            param_type = r
 
             if param_type is Unpack:
                 dependencies.update(unpack_to_deps(param_annotation))
@@ -480,6 +483,11 @@ class DependentNode(Generic[T]):
 
         signature = get_typed_signature(f, check_return=True)
         dependent: type[T] = resolve_annotation(signature.return_annotation)
+        # if get_origin(dependent) is Annotated:
+        #     metas = flatten_annotated(dependent)
+        #     if IDIDI_IGNORE_PARAM_MARK in metas:
+        #         return cls._from_function(f, config=config)
+
         node = cls.create(
             dependent_type=dependent,
             factory=cast(INodeFactory[P, T], f),
@@ -534,3 +542,18 @@ class DependentNode(Generic[T]):
         else:
             factory = cast(INodeFactory[P, T], factory_or_class)
             return cls._from_factory(factory=factory, config=config)
+
+    @classmethod
+    def _from_function(cls, function: Any, *, config: NodeConfig = DefaultConfig):
+        deps = Dependencies.from_signature(
+            function, get_typed_signature(function), config
+        )
+
+        node = DependentNode(
+            dependent_type=function,
+            factory=function,
+            factory_type="function",
+            dependencies=deps,
+            config=config,
+        )
+        return node

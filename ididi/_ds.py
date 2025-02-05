@@ -1,12 +1,12 @@
 from collections import defaultdict
 from types import MappingProxyType
-from typing import Any, Callable, Union
+from typing import Any, Callable, Union, Hashable
 
 from ._node import DependentNode
 from ._type_resolve import get_bases
 from .utils.typing_utils import T
 
-GraphNodes = dict[type, DependentNode[Any]]
+GraphNodes = dict[Callable[..., T], DependentNode[T]]
 """
 ### mapping a type to its corresponding node
 """
@@ -33,13 +33,13 @@ class TypeRegistry:
     def __init__(self):
         self._mappings: TypeMappings[Any] = defaultdict(list)
 
-    def __getitem__(self, dependent_type: type[T]) -> list[type[T]]:
+    def __getitem__(self, dependent_type: Callable[..., T]) -> list[type[T]]:
         return self._mappings[dependent_type].copy()
 
     def __len__(self) -> int:
         return len(self._mappings)
 
-    def __contains__(self, dependent_type: type) -> bool:
+    def __contains__(self, dependent_type: Hashable) -> bool:
         return dependent_type in self._mappings
 
     def update(self, other: "TypeRegistry"):
@@ -64,12 +64,12 @@ class TypeRegistry:
 class Visitor:
     __slots__ = ("_nodes",)
 
-    def __init__(self, nodes: GraphNodes):
+    def __init__(self, nodes: GraphNodes[Any]):
         self._nodes = nodes
 
     def _visit(
         self,
-        start_types: Union[list[type], type],
+        start_types: Union[list[Any], type],
         pre_visit: Union[Callable[[type], None], None] = None,
         post_visit: Union[Callable[[type], None], None] = None,
     ) -> None:

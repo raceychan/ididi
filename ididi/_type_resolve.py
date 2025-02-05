@@ -8,7 +8,7 @@ from functools import lru_cache
 from inspect import Parameter, Signature
 from inspect import isasyncgenfunction as isasyncgenfunction
 from inspect import isgeneratorfunction as isgeneratorfunction
-from types import GenericAlias, MethodType
+from types import FunctionType, GenericAlias, MethodType
 from typing import (
     Annotated,
     Any,
@@ -50,7 +50,7 @@ AsyncResource = Union[AsyncContextManager[Any], AsyncClosable]
 
 IDIDI_USE_FACTORY_MARK = "__ididi_use_factory__"
 IDIDI_IGNORE_PARAM_MARK = "__ididi_ignore_param__"
-IDIDI_UNTYPE_DEP_MARK = "__ididi_untyped_dep__"
+# IDIDI_UNTYPE_DEP_MARK = "__ididi_untyped_dep__"
 
 FactoryType = Literal["default", "function", "resource", "aresource"]
 # carry this information in node so that resolve does not have to do
@@ -118,6 +118,7 @@ def get_typed_signature(
 
     if isinstance(typed_return, ForwardRef):
         raise ForwardReferenceNotFoundError(typed_return)
+
     if check_return and is_unsolvable_type(typed_return):
         raise UnsolvableReturnTypeError(call, typed_return)
 
@@ -196,6 +197,10 @@ def is_class_or_method(obj: Any) -> bool:
     return isinstance(obj, (type, MethodType, classmethod))
 
 
+def is_function(obj: Any):
+    return isinstance(obj, FunctionType)
+
+
 def is_class(
     obj: Union[type[T], Callable[..., Union[T, Awaitable[T]]]]
 ) -> TypeGuard[type[T]]:
@@ -205,7 +210,7 @@ def is_class(
     origin = get_origin(obj) or obj
     is_type = isinstance(origin, type)
     is_generic_alias = isinstance(obj, GenericAlias)
-    return is_type or is_generic_alias or origin is Annotated
+    return is_type or is_generic_alias
 
 
 def is_class_with_empty_init(cls: type) -> bool:

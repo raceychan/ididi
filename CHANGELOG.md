@@ -989,15 +989,29 @@ def test_ignore_dependences():
 
 ## version 1.4.2
 
-resolve function
+Function as Dependency
 
-```graph
-Graph.resolve_function
+```python
+def get_user(session: Session, token: Token) -> Ignore[Any]:
+    ...
 ```
 
-where we treat function as a dependent.
 
-graph._nodes[get_current_user] = DependentNode(dependent_type=get_current_user)
+```python
+def validate_admin(user: Annotated[User, get_user]):
+    ...
+```
+
+<!-- 
+# TODO: are FnDep nodes?
+if so, we need to define new type of node
+```python
+class FnDepNode:
+    factory: Callable[P, ...]
+    factory_type: Literal["function", "resource"]
+    dependencies: Dependencies
+    config: NodeConfig
+```
 
 
 ```
@@ -1029,8 +1043,19 @@ or
 we introduce `FuncReturn` Mark
 
 ```python
-def get_user(session: Session, token: Token) -> FuncReturn[User]:
+def get_user(session: Session, token: Token) -> Fndep[User]:
     ...
 
 dg.resolve(get_user)
 ```
+
+FuncReturn can be Any
+
+
+
+The biggest difference between Funcdep and factory is that
+factory is associated with a type where Fndep is not.
+
+in short, 
+
+dg.resolve(User) won't call get_user -->

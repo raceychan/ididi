@@ -115,8 +115,8 @@ class UnsolvableDependencyError(UnsolvableParameterError):
         *,
         dep_name: str,
         factory: Union[Callable[..., Any], type],
-        dependent_type: type,
-        dependency_type: type,
+        dependent_type: Callable[..., Any],
+        dependency_type: Callable[..., Any],
     ):
         type_repr = getattr(dependency_type, "__name__", str(dependency_type))
         param_repr = f" * {dependent_type.__name__}({dep_name}: {type_repr}) \n value of `{dep_name}` must be provided"
@@ -206,18 +206,18 @@ class GraphResolveError(GraphError):
 class CircularDependencyDetectedError(GraphResolveError):
     """Raised when a circular dependency is detected in the dependency graph."""
 
-    def __init__(self, cycle_path: list[type]):
+    def __init__(self, cycle_path: list[Callable[..., Any]]):
         cycle_str = " -> ".join(t.__name__ for t in cycle_path)
         self._cycle_path = cycle_path
         super().__init__(f"Circular dependency detected: {cycle_str}")
 
     @property
-    def cycle_path(self) -> list[type]:
+    def cycle_path(self) -> list[Callable[..., Any]]:
         return self._cycle_path
 
 
 class ReusabilityConflictError(GraphResolveError):
-    def __init__(self, path: list[type], nonreuse: type):
+    def __init__(self, path: list[Callable[..., Any]], nonreuse: type):
         conflict_str = " -> ".join(t.__name__ for t in path)
         msg = f"""Transient dependency `{nonreuse.__name__}` with reuse dependents \
         \n make sure each of {conflict_str} is configured as `reuse=False` \
