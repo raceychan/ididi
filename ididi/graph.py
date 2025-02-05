@@ -133,27 +133,6 @@ class Resolver:
         self._registered_singletons = registered_singletons
         self._resolved_singletons = resolved_singletons
 
-    def is_registered_singleton(self, dependent_type: type) -> bool:
-        return dependent_type in self._registered_singletons
-
-    @lru_cache(CacheMax)
-    def should_be_scoped(self, dep_type: INode[P, T]) -> bool:
-        "Recursively check if a dependent type contains any resource dependency"
-        if not (resolved_node := self._resolved_nodes.get(dep_type)):
-            resolved_node = self.analyze(dep_type)
-
-        if self.is_registered_singleton(resolved_node.dependent_type):
-            return False
-
-        if resolved_node.is_resource:
-            return True
-
-        unsolved_params = resolved_node.unsolved_params(ignore=self._ignore)
-        contain_resource = any(
-            self.should_be_scoped(param_type) for _, param_type in unsolved_params
-        )
-        return contain_resource
-
     def _remove_node(self, node: DependentNode[Any]) -> None:
         """
         Remove a node from the graph and clean up all its references.
@@ -188,6 +167,29 @@ class Resolver:
         concrete_node = self._nodes[concrete_type]
         concrete_node.check_for_implementations()
         return concrete_node
+
+    # =================  Public =================
+
+    def is_registered_singleton(self, dependent_type: type) -> bool:
+        return dependent_type in self._registered_singletons
+
+    @lru_cache(CacheMax)
+    def should_be_scoped(self, dep_type: INode[P, T]) -> bool:
+        "Recursively check if a dependent type contains any resource dependency"
+        if not (resolved_node := self._resolved_nodes.get(dep_type)):
+            resolved_node = self.analyze(dep_type)
+
+        if self.is_registered_singleton(resolved_node.dependent_type):
+            return False
+
+        if resolved_node.is_resource:
+            return True
+
+        unsolved_params = resolved_node.unsolved_params(ignore=self._ignore)
+        contain_resource = any(
+            self.should_be_scoped(param_type) for _, param_type in unsolved_params
+        )
+        return contain_resource
 
     def check_param_conflict(self, param_type: type, current_path: list[type]):
         if param_type in current_path:
@@ -424,6 +426,45 @@ class Resolver:
             factory_type=node.factory_type,
             is_reuse=node.config.reuse,
         )
+
+    def analyze_params(
+        self, func: Callable[P, T], config: NodeConfig = DefaultConfig
+    ) -> tuple[bool, list[tuple[str, type]]]:
+        deps = Dependencies.from_signature(
+            signature=get_typed_signature(func), factory=func, config=config
+        )
+        depends_on_resource: bool = False
+        unresolved: list[tuple[str, type]] = []
+
+        for name, dep in deps.filter_ignore(self._ignore):
+            param_type = dep.param_type
+
+            if is_unsolvable_type(param_type):
+                continue
+
+            if inject_node := (resolve_use(param_type) or resolve_use(dep.default)):
+                self._register_node(inject_node)
+                self._resolved_nodes[param_type] = inject_node
+                param_type = inject_node.dependent_type
+
+            self.analyze(param_type, config=config)
+            depends_on_resource = depends_on_resource or self.should_be_scoped(
+                param_type
+            )
+            unresolved.append((name, param_type))
+
+        return depends_on_resource, unresolved
+
+    def resolve_untyped(self, function: Callable[P, T], **overrides: Any) -> T:
+        """
+        recursively resolve params of function and call it
+
+        async def validate_admin(user: Annotated[User, use(get_user)]):
+            ...
+        """
+        ...
+
+    # async def aresolve_function(self, function: Callable[P, T]) -> T: ...
 
     def _node(
         self, dependent: INode[P, T], config: NodeConfig = DefaultConfig
@@ -778,37 +819,6 @@ class Graph(Resolver):
             return scope.get_scope(name)
         return scope
 
-    def analyze_params(
-        self, func: Callable[P, T], **iconfig: Unpack[INodeConfig]
-    ) -> tuple[bool, list[tuple[str, type]]]:
-        config = NodeConfig(**iconfig)
-
-        deps = Dependencies.from_signature(
-            signature=get_typed_signature(func), factory=func, config=config
-        )
-
-        depends_on_resource: bool = False
-        unresolved: list[tuple[str, type]] = []
-
-        for name, dep in deps.filter_ignore(self._ignore):
-            param_type = dep.param_type
-
-            if is_unsolvable_type(param_type):
-                continue
-
-            if inject_node := (resolve_use(param_type) or resolve_use(dep.default)):
-                self._register_node(inject_node)
-                self._resolved_nodes[param_type] = inject_node
-                param_type = inject_node.dependent_type
-
-            self.analyze(param_type, config=config)
-            depends_on_resource = depends_on_resource or self.should_be_scoped(
-                param_type
-            )
-            unresolved.append((name, param_type))
-
-        return depends_on_resource, unresolved
-
     @overload
     def entry(self, **iconfig: Unpack[INodeConfig]) -> TEntryDecor: ...
 
@@ -856,7 +866,8 @@ class Graph(Resolver):
             configured = cast(TEntryDecor, partial(self.entry, **iconfig))
             return configured
 
-        require_scope, unresolved = self.analyze_params(func, **iconfig)
+        config = NodeConfig(**iconfig)
+        require_scope, unresolved = self.analyze_params(func, config=config)
 
         def replace(
             before: Maybe[type[T]] = MISSING,
@@ -885,7 +896,6 @@ class Graph(Resolver):
                             if param_name in kwargs:
                                 continue
                             kwargs[param_name] = await scope.resolve(param_type)
-
                         r = await func(*args, **kwargs)
                         return r
 
@@ -914,7 +924,6 @@ class Graph(Resolver):
                             if param_name in kwargs:
                                 continue
                             kwargs[param_name] = scope.resolve(param_type)
-
                         r = sync_func(*args, **kwargs)
                         return r
 

@@ -20,6 +20,7 @@ from typing_extensions import Unpack
 
 from ._type_resolve import (
     IDIDI_IGNORE_PARAM_MARK,
+    IDIDI_UNTYPE_DEP_MARK,
     IDIDI_USE_FACTORY_MARK,
     FactoryType,
     ResolveOrder,
@@ -56,7 +57,7 @@ from .interfaces import (
 from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import P, T
 
-# ============== Ididi special hooks ===========
+# ============== Ididi marks ===========
 
 Ignore = Annotated[T, IDIDI_IGNORE_PARAM_MARK]
 
@@ -75,12 +76,13 @@ def use(
     def func(service: Annotated[UserService, use(factory)]): ...
     ```
     """
+    # TODO: support untyped, untyped deps are nodes with dependent being functions.
     node = DependentNode[T].from_node(factory, config=NodeConfig(**iconfig))
     annt = Annotated[node.dependent_type, node, IDIDI_USE_FACTORY_MARK]
     return cast(T, annt)
 
 
-# ============== Ididi special hooks ===========
+# ============== Ididi marks ===========
 
 
 def search_meta(meta: list[Any]) -> Union["DependentNode[Any]", None]:

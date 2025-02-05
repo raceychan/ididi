@@ -3,6 +3,11 @@ class Config:
         self.env = env
 
 
+class MessageQueue:
+    def __init__(self, config: Config):
+        self.config = config
+
+
 class Database:
     def __init__(self, config: Config):
         self.config = config
@@ -16,3 +21,8 @@ class UserRepository:
 class UserService:
     def __init__(self, repo: UserRepository):
         self.repo = repo
+
+
+class ProductService:
+    def __init__(self, mq: MessageQueue):
+        self.mq = mq
