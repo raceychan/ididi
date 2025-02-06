@@ -4,9 +4,10 @@ from typing import Any, Callable, Hashable, Union, cast
 
 from ._node import DependentNode
 from ._type_resolve import get_bases
+from .interfaces import IDependent
 from .utils.typing_utils import T
 
-GraphNodes = dict[Callable[..., T], DependentNode[T]]
+GraphNodes = dict[IDependent[T], DependentNode[T]]
 """
 ### mapping a type to its corresponding node
 """
@@ -33,7 +34,7 @@ class TypeRegistry:
     def __init__(self):
         self._mappings: TypeMappings[Any] = defaultdict(list)
 
-    def __getitem__(self, dependent_type: Callable[..., T]) -> list[type[T]]:
+    def __getitem__(self, dependent_type: IDependent[T]) -> list[type[T]]:
         return self._mappings[dependent_type].copy()
 
     def __len__(self) -> int:
@@ -45,13 +46,13 @@ class TypeRegistry:
     def update(self, other: "TypeRegistry"):
         self._mappings.update(other._mappings)
 
-    def register(self, dependent: Callable[..., T]) -> None:
+    def register(self, dependent: IDependent[T]) -> None:
         self._mappings[dependent].append(dependent)
 
         for base in get_bases(dependent):
             self._mappings[base].append(dependent)
 
-    def remove(self, dependent_type: Callable[..., T]):
+    def remove(self, dependent_type: IDependent[T]):
         for base in get_bases(dependent_type):
             self._mappings[base].remove(dependent_type)
 

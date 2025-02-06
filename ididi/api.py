@@ -4,7 +4,7 @@ from typing import Any, Awaitable, Callable, Union, cast, overload
 from typing_extensions import Unpack
 
 from .graph import Graph as Graph
-from .interfaces import INodeConfig, TEntryDecor
+from .interfaces import IDependent, INodeConfig, TEntryDecor
 from .utils.typing_utils import P, T
 
 
@@ -13,7 +13,7 @@ def entry(**iconfig: Unpack[INodeConfig]) -> TEntryDecor: ...
 
 
 @overload
-def entry(func: Callable[P, T]) -> Callable[..., T]: ...
+def entry(func: Callable[P, T]) -> IDependent[T]: ...
 
 
 def entry(

@@ -34,7 +34,7 @@ from .errors import (
     GenericDependencyNotSupportedError,
     UnsolvableReturnTypeError,
 )
-from .interfaces import AsyncClosable, Closable, INode, P, T
+from .interfaces import  IDependent, INode, P, T
 from .utils.typing_utils import T, actualize_strforward, eval_type, is_builtin_type
 
 if sys.version_info >= (3, 10):
@@ -45,8 +45,8 @@ else:
     UNION_META = (Union,)
 
 
-SyncResource = Union[ContextManager[Any], Closable]
-AsyncResource = Union[AsyncContextManager[Any], AsyncClosable]
+SyncResource = Union[ContextManager[Any]]
+AsyncResource = Union[AsyncContextManager[Any]]
 
 IDIDI_USE_FACTORY_MARK = "__ididi_use_factory__"
 IDIDI_IGNORE_PARAM_MARK = "__ididi_ignore_param__"
@@ -104,7 +104,7 @@ def get_factory_sig_from_cls(cls: type[T]) -> Signature:
 
 
 def get_typed_signature(
-    call: Callable[..., T],
+    call: IDependent[T],
     check_return: bool = False,
 ) -> Signature:
     """
@@ -155,7 +155,7 @@ def resolve_annotation(annotation: Any) -> type:
     return origin
 
 
-def resolve_factory(factory: Callable[..., T]) -> type[T]:
+def resolve_factory(factory: IDependent[T]) -> type[T]:
     """
     The dependent type from its factory, based on factory signature.
 
@@ -227,7 +227,7 @@ def is_class_with_empty_init(cls: type) -> bool:
 
 
 def resolve_forwardref(
-    dependent: Union[type[T], Callable[..., T]], ref: ForwardRef
+    dependent: Union[type[T], IDependent[T]], ref: ForwardRef
 ) -> type[T]:
     globalvs = dependent.__init__.__globals__
 

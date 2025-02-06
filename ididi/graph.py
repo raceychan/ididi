@@ -64,8 +64,8 @@ from .interfaces import (
     EntryFunc,
     GraphIgnore,
     GraphIgnoreConfig,
-    IAnyFactory,
     IAsyncFactory,
+    IDependent,
     IEmptyFactory,
     IFactory,
     INode,
@@ -158,7 +158,7 @@ class Resolver:
         self._nodes[dependent] = node
         self._type_registry.register(dependent)
 
-    def _resolve_concrete_node(self, dependent: Callable[..., T]) -> DependentNode[Any]:
+    def _resolve_concrete_node(self, dependent: IDependent[T]) -> DependentNode[Any]:
         # when user assign impl via factory
         if (node := self._nodes.get(dependent)) and node.factory_type != "default":
             return node
@@ -170,7 +170,7 @@ class Resolver:
 
     # =================  Public =================
 
-    def is_registered_singleton(self, dependent_type: Callable[..., T]) -> bool:
+    def is_registered_singleton(self, dependent_type: IDependent[T]) -> bool:
         return dependent_type in self._registered_singletons
 
     @lru_cache(CacheMax)
@@ -192,7 +192,7 @@ class Resolver:
         return contain_resource
 
     def check_param_conflict(
-        self, param_type: Callable[..., T], current_path: list[Callable[..., T]]
+        self, param_type: IDependent[T], current_path: list[IDependent[T]]
     ):
         if param_type in current_path:
             i = current_path.index(param_type)
@@ -203,9 +203,7 @@ class Resolver:
             if any(self._nodes[p].config.reuse for p in current_path):
                 raise ReusabilityConflictError(current_path, param_type)
 
-    def _analyze_dep(
-        self, dependent: INode[P, T], config: NodeConfig
-    ) -> Callable[..., T]:
+    def _analyze_dep(self, dependent: INode[P, T], config: NodeConfig) -> IDependent[T]:
         if is_function(dependent):
             if is_new_type(dependent):
                 resolved_type = resolve_annotation(dependent)
@@ -228,7 +226,7 @@ class Resolver:
             if is_function(dependent):
                 node = DependentNode.from_node(dependent, config=config)
                 self._nodes[dependent] = node
-                return cast(Callable[..., T], dependent)
+                return cast(IDependent[T], dependent)
 
             resolved_type, *_ = get_args(annt_dep)
         return resolved_type
@@ -251,10 +249,10 @@ class Resolver:
         if is_unsolvable_type(dependent_type):
             raise TopLevelBulitinTypeError(dependent_type)
 
-        current_path: list[Callable[..., T]] = []
+        current_path: list[IDependent[T]] = []
         ignore = (ignore | self._ignore) if ignore else self._ignore
 
-        def dfs(dep: Callable[..., T], dignore: GraphIgnore) -> DependentNode[T]:
+        def dfs(dep: IDependent[T], dignore: GraphIgnore) -> DependentNode[T]:
             # when we register a concrete node we also register its bases to type_registry
             if dep in self._analyzed_nodes:
                 return self._analyzed_nodes[dep]
@@ -313,7 +311,7 @@ class Resolver:
         self, func: Callable[P, T], config: NodeConfig = DefaultConfig
     ) -> tuple[bool, list[tuple[str, Callable[..., Any]]]]:
         deps = Dependencies.from_signature(
-            signature=get_typed_signature(func), factory=func, config=config
+            signature=get_typed_signature(func), function=func, config=config
         )
         depends_on_resource: bool = False
         unresolved: list[tuple[str, Callable[..., Any]]] = []
@@ -360,7 +358,7 @@ class Resolver:
     def resolve_callback(
         self,
         resolved: Any,
-        dependent: Callable[..., T],
+        dependent: IDependent[T],
         factory_type: FactoryType,
         is_reuse: bool,
     ) -> T:
@@ -374,7 +372,7 @@ class Resolver:
     async def aresolve_callback(
         self,
         resolved: Any,
-        dependent: Callable[..., T],
+        dependent: IDependent[T],
         factory_type: FactoryType,
         is_reuse: bool,
     ):
@@ -389,7 +387,7 @@ class Resolver:
     @overload
     def resolve(
         self,
-        dependent: IAnyFactory[T],
+        dependent: IDependent[T],
         /,
     ) -> T: ...
 
@@ -888,8 +886,8 @@ class Graph(Resolver):
         require_scope, unresolved = self.analyze_params(func, config=config)
 
         def replace(
-            before: Maybe[Callable[..., T]] = MISSING,
-            after: Maybe[Callable[..., T]] = MISSING,
+            before: Maybe[IDependent[T]] = MISSING,
+            after: Maybe[IDependent[T]] = MISSING,
             **kw_overrides: type[Any],
         ):
             nonlocal unresolved
@@ -931,7 +929,7 @@ class Graph(Resolver):
 
                 f = _async_wrapper
         else:
-            sync_func = cast(Callable[..., T], func)
+            sync_func = cast(IDependent[T], func)
             if require_scope:
 
                 @wraps(sync_func)
@@ -1030,7 +1028,7 @@ class SyncScope(ScopeBase[ExitStack], Resolver):
     def resolve_callback(
         self,
         resolved: T,
-        dependent: Callable[..., T],
+        dependent: IDependent[T],
         factory_type: FactoryType,
         is_reuse: bool,
     ):
@@ -1085,7 +1083,7 @@ class AsyncScope(ScopeBase[AsyncExitStack], Resolver):
         return await self._stack.enter_async_context(context)
 
     @overload
-    async def resolve(self, dependent: IAnyFactory[T], /) -> T: ...
+    async def resolve(self, dependent: IDependent[T], /) -> T: ...
 
     @overload
     async def resolve(
@@ -1101,7 +1099,7 @@ class AsyncScope(ScopeBase[AsyncExitStack], Resolver):
     async def aresolve_callback(
         self,
         resolved: Union[T, Awaitable[T]],
-        dependent: Callable[..., T],
+        dependent: IDependent[T],
         factory_type: FactoryType,
         is_reuse: bool,
     ) -> T:

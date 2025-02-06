@@ -991,19 +991,27 @@ def test_ignore_dependences():
 
 Function as Dependency
 
-a function with its return type Annotated by `Ignore` is considered a pure function dependency, instead of a factory.
-
-
-```python
-@dg.node
-def get_user(session: Session, token: Token) -> Ignore[User]:
-    ...
-```
-
-which means that, `get_user` won't be used to resolve `User`. 
+Declear a function as dependency via annotating its return type with `Ignore`.
 
 ```python
-def validate_admin(user: Annotated[User, get_user])->Ignore[Any]:
-    ...
+@dataclass
+class User:
+    name: str
+    role: str
+
+def get_user(config: Config) -> Ignore[User]:
+    assert isinstance(config, Config)
+    return User("user", "admin")
+
+
+def validate_admin(
+    user: Annotated[User, get_user], service: UserService
+) -> Ignore[str]:
+    assert user.role == "admin"
+    assert isinstance(service, UserService)
+    return "ok"
+
+assert dg.resolve(validate_admin) == "ok"
 ```
 
+Note that since `get_user` returns `Ignore[User]` instead of `User`, it won't be used as factory to resolve `User`.

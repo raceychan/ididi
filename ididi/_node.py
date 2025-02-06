@@ -7,7 +7,6 @@ from inspect import isasyncgenfunction, isgeneratorfunction
 from typing import (
     Annotated,
     Any,
-    Callable,
     ForwardRef,
     Generator,
     Generic,
@@ -49,6 +48,7 @@ from .errors import (
 from .interfaces import (
     EMPTY_SIGNATURE,
     INSPECT_EMPTY,
+    IDependent,
     INode,
     INodeAnyFactory,
     INodeConfig,
@@ -138,14 +138,14 @@ class Dependency(FrozenSlot, Generic[T]):
     __slots__ = ("name", "param_type", "param_kind", "default")
 
     name: str
-    param_type: Callable[..., T]  # resolved_type
+    param_type: IDependent[T]  # resolved_type
     param_kind: ParameterKind
     default: Maybe[T]
 
     def __init__(
         self,
         name: str,
-        param_type: Callable[..., T],
+        param_type: IDependent[T],
         param_kind: ParameterKind,
         default: Maybe[T],
     ) -> None:
@@ -260,12 +260,12 @@ class Dependencies:
     @classmethod
     def from_signature(
         cls,
-        factory: INodeFactory[P, T],
+        function: INodeFactory[P, T],
         signature: Signature,
         config: NodeConfig,
     ) -> "Dependencies":
         params = tuple(signature.parameters.values())
-        if is_class_or_method(factory):
+        if is_class_or_method(function):
             params = params[1:]  # skip 'self'
 
         dependencies: dict[str, Dependency[Any]] = {}
@@ -274,11 +274,11 @@ class Dependencies:
             param_annotation = param.annotation
             if param_annotation is INSPECT_EMPTY:
                 e = MissingAnnotationError(
-                    dependent_type=factory,
+                    dependent_type=function,
                     param_name=param.name,
                     param_type=param_annotation,
                 )
-                e.add_context(factory, param.name, type(MISSING))
+                e.add_context(function, param.name, type(MISSING))
                 raise e
 
             param_default = param.default
@@ -295,14 +295,18 @@ class Dependencies:
 
             if get_origin(param_type) is Annotated:
                 annotate_meta = flatten_annotated(param_type)
+
                 if IDIDI_IGNORE_PARAM_MARK in annotate_meta:
                     continue
 
-                if IDIDI_USE_FACTORY_MARK not in annotate_meta:
-                    param_type, *rest = get_args(param_type)
-                    for r in rest:
-                        if is_function(r):
-                            param_type = r
+                try:
+                    idx = annotate_meta.index(IDIDI_USE_FACTORY_MARK)
+                except ValueError:
+                    param_type = get_args(param_type)[0]
+                else:
+                    node: DependentNode[Any] = annotate_meta[idx - 1]
+                    if node.function_dependent:
+                        param_type = node.dependent
 
             if param_type is Unpack:
                 dependencies.update(unpack_to_deps(param_annotation))
@@ -379,7 +383,7 @@ class DependentNode(Generic[T]):
     def __init__(
         self,
         *,
-        dependent: Callable[..., T],
+        dependent: IDependent[T],
         factory: INodeAnyFactory[T],
         factory_type: FactoryType,
         function_dependent: bool = False,
@@ -398,6 +402,7 @@ class DependentNode(Generic[T]):
         str_repr = f"{self.__class__.__name__}(type: {self.dependent}"
         if self.factory_type != "default":
             str_repr += f", factory: {self.factory}"
+        str_repr += f", function_dependent: {self.function_dependent}"
         str_repr += ")"
         return str_repr
 
@@ -411,7 +416,7 @@ class DependentNode(Generic[T]):
         "params that needs to be statically resolved"
 
         for param_name, param in self.dependencies.filter_ignore(ignore):
-            param_type = cast(Union[Callable[..., T], ForwardRef], param.param_type)
+            param_type = cast(Union[IDependent[T], ForwardRef], param.param_type)
             if isinstance(param_type, ForwardRef):
                 new_type = resolve_forwardref(self.dependent, param_type)
                 param = param.replace_type(new_type)
@@ -420,11 +425,11 @@ class DependentNode(Generic[T]):
                 self.dependencies.update(param_name, param)
 
     @lru_cache(CacheMax)
-    def unsolved_params(self, ignore: NodeIgnore) -> list[tuple[str, Callable[..., T]]]:
+    def unsolved_params(self, ignore: NodeIgnore) -> list[tuple[str, IDependent[T]]]:
         "yield dependencies that needs to be resolved"
-        unsolved_params: list[tuple[str, Callable[..., T]]] = []
+        unsolved_params: list[tuple[str, IDependent[T]]] = []
         for param_name, param in self.dependencies.filter_ignore(ignore=ignore):
-            param_type: Callable[..., T] = param.param_type
+            param_type: IDependent[T] = param.param_type
             if is_provided(param.default) and is_unsolvable_type(param_type):
                 continue
             param_pair = (param_name, param_type)
@@ -446,17 +451,17 @@ class DependentNode(Generic[T]):
     def create(
         cls,
         *,
-        dependent_type: type[T],
+        dependent: IDependent[T],
         factory: INodeFactory[P, T],
         factory_type: FactoryType,
         signature: Signature,
         config: NodeConfig,
     ) -> "DependentNode[T]":
         dependencies = Dependencies.from_signature(
-            factory=factory, signature=signature, config=config
+            function=factory, signature=signature, config=config
         )
         node = DependentNode(
-            dependent=resolve_annotation(dependent_type),
+            dependent=resolve_annotation(dependent),
             factory=factory,
             factory_type=factory_type,
             dependencies=dependencies,
@@ -465,7 +470,29 @@ class DependentNode(Generic[T]):
         return node
 
     @classmethod
-    def _from_factory(
+    def _from_function_dep(
+        cls,
+        function: Any,
+        *,
+        signature: Signature,
+        factory_type: FactoryType,
+        config: NodeConfig = DefaultConfig,
+    ):
+        deps = Dependencies.from_signature(
+            function=function, signature=signature, config=config
+        )
+        node = DependentNode(
+            dependent=function,
+            factory=function,
+            factory_type=factory_type,
+            function_dependent=True,
+            dependencies=deps,
+            config=config,
+        )
+        return node
+
+    @classmethod
+    def _from_function(
         cls,
         *,
         factory: INodeFactory[P, T],
@@ -491,11 +518,15 @@ class DependentNode(Generic[T]):
         if get_origin(dependent) is Annotated:
             metas = flatten_annotated(dependent)
             if IDIDI_IGNORE_PARAM_MARK in metas:
-                node = cls._from_function(f, factory_type=factory_type, config=config)
+                node = cls._from_function_dep(
+                    f, signature=signature, factory_type=factory_type, config=config
+                )
                 return node
 
+            dependent, *_ = get_args(dependent)
+
         node = cls.create(
-            dependent_type=dependent,
+            dependent=dependent,
             factory=cast(INodeFactory[P, T], f),
             factory_type=factory_type,
             signature=signature,
@@ -520,7 +551,7 @@ class DependentNode(Generic[T]):
             factory_type = "default"
 
         return cls.create(
-            dependent_type=dependent,
+            dependent=dependent,
             factory=dependent,
             factory_type=factory_type,
             signature=signature,
@@ -547,26 +578,4 @@ class DependentNode(Generic[T]):
             return cls._from_class(dependent=dependent, config=config)
         else:
             factory = cast(INodeFactory[P, T], factory_or_class)
-            return cls._from_factory(factory=factory, config=config)
-
-    @classmethod
-    def _from_function(
-        cls,
-        function: Any,
-        *,
-        factory_type: FactoryType,
-        config: NodeConfig = DefaultConfig,
-    ):
-        deps = Dependencies.from_signature(
-            function, get_typed_signature(function), config
-        )
-
-        node = DependentNode(
-            dependent=function,
-            factory=function,
-            factory_type=factory_type,
-            function_dependent=True,
-            dependencies=deps,
-            config=config,
-        )
-        return node
+            return cls._from_function(factory=factory, config=config)

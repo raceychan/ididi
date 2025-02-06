@@ -11,7 +11,6 @@ from typing import (
     TypedDict,
     Union,
     overload,
-    runtime_checkable,
 )
 
 from typing_extensions import TypeAliasType
@@ -22,12 +21,10 @@ from .utils.typing_utils import C, P, R, T
 EMPTY_SIGNATURE = Signature()
 INSPECT_EMPTY = Signature.empty
 
+IDependent = Callable[..., T]
 IEmptyFactory = Callable[[], R]
-
 IFactory = Callable[P, R]
-IAnyFactory = Callable[..., R]
 IAsyncFactory = Callable[P, Awaitable[R]]
-IAnyAsyncFactory = Callable[..., Awaitable[R]]
 IResourceFactory = IFactory[P, Generator[R, None, None]]
 IAsyncResourceFactory = Callable[P, AsyncGenerator[R, None]]
 
@@ -111,14 +108,12 @@ class INodeConfig(TypedDict, total=False):
     reuse: bool
 
 
-@runtime_checkable
-class Closable(Protocol):
-    def close(self) -> None: ...
+# class Closable(Protocol):
+#     def close(self) -> None: ...
 
 
-@runtime_checkable
-class AsyncClosable(Protocol):
-    async def close(self) -> Coroutine[Any, Any, None]: ...
+# class AsyncClosable(Protocol):
+#     async def close(self) -> Coroutine[Any, Any, None]: ...
 
 
 class EntryFunc(Protocol[P, C]):
@@ -152,10 +147,3 @@ class EntryFunc(Protocol[P, C]):
 
 class TEntryDecor(Protocol):
     def __call__(self, func: Callable[P, T]) -> EntryFunc[P, T]: ...
-
-
-# @dataclass_transform(kw_only_default=True)
-# class PlainData(Struct, kw_only=True):
-#     ...
-# @dataclass_transform(frozen_default=True, kw_only_default=True)
-# class FrozenData(Struct, kw_only=True, frozen=True, gc=False): ...

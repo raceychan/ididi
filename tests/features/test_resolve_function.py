@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from ididi import Graph, Ignore
+from ididi import Graph, Ignore, Resource, use
 
 from ..test_data import Config, UserService
 
@@ -11,27 +11,52 @@ class User:
         self.role = role
 
 
-def get_user(config: Config) -> Ignore[User]:
+class Connection:
+    def __init__(self, config: Config):
+        self.config = config
+
+
+def get_conn(config: Config) -> Resource[Connection]:
+    conn = Connection(config)
+    yield conn
+
+
+def get_user(
+    conn: Annotated[Connection, use(get_conn)], config: Config
+) -> Ignore[User]:
+    assert isinstance(conn, Connection)
     assert isinstance(config, Config)
     return User("user", "admin")
 
 
 def validate_admin(
-    user: Annotated[User, get_user], service: UserService
+    user: Annotated[User, use(get_user)], service: UserService
 ) -> Ignore[str]:
     assert user.role == "admin"
     assert isinstance(service, UserService)
     return "ok"
 
 
+class Router:
+    def __init__(self, asd: Annotated[str, use(validate_admin)]):
+        assert asd == "ok"
+
+
 async def test_resolve_function():
     dg = Graph()
 
-    user = dg.resolve(get_user)
-    assert isinstance(user, User)
+    with dg.scope() as scope:
+        assert isinstance(scope.resolve(get_user), User)
 
 
 def test_dg_resolve_params():
     dg = Graph()
 
-    assert dg.resolve(validate_admin) == "ok"
+    with dg.scope() as scope:
+        assert scope.resolve(validate_admin) == "ok"
+
+
+def test_dg_resolve_cls_depends_on_function():
+    dg = Graph()
+    with dg.scope() as scope:
+        assert isinstance(scope.resolve(Router), Router)
