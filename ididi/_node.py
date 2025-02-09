@@ -134,12 +134,13 @@ class Dependency(FrozenSlot, Generic[T]):
     default: the default value of the param, 5, in this case.
     """
 
-    __slots__ = ("name", "param_type", "param_kind", "default")
+    __slots__ = ("name", "param_type", "param_kind", "default", "unresolvable")
 
     name: str
     param_type: IDependent[T]  # resolved_type
     param_kind: ParameterKind
     default: Maybe[T]
+    unresolvable: bool
 
     def __init__(
         self,
@@ -152,6 +153,7 @@ class Dependency(FrozenSlot, Generic[T]):
         object.__setattr__(self, "param_type", param_type)
         object.__setattr__(self, "param_kind", param_kind)
         object.__setattr__(self, "default", default)
+        object.__setattr__(self, "unresolvable", is_unsolvable_type(param_type))
 
     def __repr__(self) -> str:
         return f"Dependency({self.name}: {self.type_repr}={self.default!r})"
@@ -159,20 +161,6 @@ class Dependency(FrozenSlot, Generic[T]):
     @property
     def type_repr(self):
         return getattr(self.param_type, "__name__", f"{self.param_type}")
-
-    @property
-    def unresolvable(self) -> bool:
-        "if the param is variadic or is of builtin without default"
-        if self.param_kind in (
-            Parameter.VAR_POSITIONAL,
-            Parameter.VAR_KEYWORD,
-        ):
-            return True
-
-        if self.default is MISSING and is_unsolvable_type(self.param_type):
-            return True
-
-        return False
 
     def replace_type(self, param_type: type[T]) -> "Dependency[T]":
         return Dependency(
@@ -221,6 +209,9 @@ class Dependencies:
 
     def __getitem__(self, param_name: str) -> Dependency[Any]:
         return self._deps[param_name]
+
+    def __contains__(self, param_name: str):
+        return param_name in self._deps
 
     def __repr__(self):
         deps_repr = ", ".join(
@@ -291,16 +282,15 @@ class Dependencies:
                 default = param.default
 
             param_type = resolve_annotation(param_annotation)
+
             if get_origin(default) is Annotated:
                 param_type = resolve_annotation(default)
                 default = MISSING
 
             if get_origin(param_type) is Annotated:
                 annotate_meta = flatten_annotated(param_type)
-
                 if IDIDI_IGNORE_PARAM_MARK in annotate_meta:
                     continue
-
                 try:
                     idx = annotate_meta.index(IDIDI_USE_FACTORY_MARK)
                 except ValueError:
@@ -312,6 +302,12 @@ class Dependencies:
 
             if param_type is Unpack:
                 dependencies.update(unpack_to_deps(param_annotation))
+                continue
+
+            if is_unsolvable_type(param_type) and is_provided(default):
+                continue
+
+            if param.kind in (ParameterKind.VAR_POSITIONAL, ParameterKind.VAR_KEYWORD):
                 continue
 
             dep_param = Dependency(
@@ -439,8 +435,6 @@ class DependentNode(Generic[T]):
         )
         for param_name, param in filtered:
             param_type: IDependent[T] = param.param_type
-            if is_provided(param.default) and is_unsolvable_type(param_type):
-                continue
             param_pair = (param_name, param_type)
             unsolved_params.append(param_pair)
         return unsolved_params

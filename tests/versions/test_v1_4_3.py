@@ -17,9 +17,9 @@ class SyncScope:
 - create a default scope for each graph
 - rename `Graph.scope` to `Graph.create_scop`, reserve `Graph.scope` to the dfault scope
 
-- since we create node via `dg.node`, if a dependency in graph._ignore, we ignore those when create node.dependencies, so that we don't have to do this in `node.unsolved_params`
-
-- builtin types with default no longer considered as dependencies
+- *args , **kwargs without UnPack no longer considered as dependencies.
+- builtin types with provided default no longer considered as dependencies.
+- dependency.unresolvabale is now an attribute, instead of a property.
 """
 
 

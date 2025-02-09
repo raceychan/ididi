@@ -116,21 +116,22 @@ def test_node_signature_change_after_factory(dg: Graph):
         ):
             self.repo = repo
             self.auth = auth
+            self.name = name
 
     dg.analyze(UserService)
     node = dg.nodes[UserService]
     print(node.dependencies)
     print(node.dependencies.signature)
-    print(node.dependencies["name"])
+    assert "name" not in node.dependencies
 
-    assert len(node.dependencies) == 3
-
-    @dg.node
-    def user_service_factory(repo: UserRepository, auth: AuthService) -> UserService:
-        return UserService(repo, auth)
-
-    node = dg.nodes[UserService]
     assert len(node.dependencies) == 2
+
+    def user_service_factory(repo: UserRepository) -> UserService:
+        return UserService(repo, auth=AuthService(Database(Config())))
+
+    dg.node(user_service_factory)
+    node = dg.nodes[UserService]
+    assert len(node.dependencies) == 1
 
 
 def test_top_level_builtin_dependency(dg: Graph):

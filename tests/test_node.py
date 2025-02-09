@@ -60,17 +60,21 @@ def test_empty_init():
 
 
 def test_varidc_keyword_args():
-    class Service:
+    class ARGDep:
+        def __init__(self, *nums: int):
+            self.nums = nums
+
+    class KWDep:
         def __init__(self, **kwargs: int):
             self.kwargs = kwargs
 
-    node = DependentNode.from_node(Service)
-    assert node.dependencies["kwargs"].unresolvable
-    repr(node)
+    node = DependentNode.from_node(KWDep)
+    node2 = DependentNode.from_node(ARGDep)
+    assert not node.dependencies
+    assert not node2.dependencies
 
 
 def test_node_config_frozen():
-
     node = DependentNode.from_node(Service)
     with pytest.raises(AttributeError):
         node.config.reuse = False

@@ -1,4 +1,4 @@
-from typing import Any,  ForwardRef,  Mapping, TypeVar, Union
+from typing import Any, ForwardRef, Mapping, TypeVar, Union
 from typing import _eval_type as ty_eval_type  # type: ignore
 from typing import cast
 
@@ -8,7 +8,6 @@ T = TypeVar("T")
 R = TypeVar("R")
 P = ParamSpec("P")
 C = TypeVar("C", covariant=True)
-
 
 
 PrimitiveBuiltins = type[Union[int, float, complex, str, bool, bytes, bytearray]]
@@ -39,11 +38,10 @@ def is_builtin_type(
     typing.Any is also ignored at type resolving.
     """
 
-    # TODO: we might name this as 'is_unresolved_type' as corner cases increase.
     is_primitive = is_builtin_primitive(t)
     is_container = is_builtin_container(t)
     is_singleton = is_builtin_singleton(t)
-    return is_primitive or is_container or is_singleton or (t is Any)
+    return is_primitive or is_container or is_singleton
 
 
 def eval_type(

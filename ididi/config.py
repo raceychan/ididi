@@ -1,6 +1,6 @@
 # from dataclasses import FrozenInstanceError
 from dataclasses import FrozenInstanceError
-from typing import Any, Final, Iterable
+from typing import Any, Final, Iterable, Literal
 
 from .interfaces import GraphIgnore, GraphIgnoreConfig, NodeIgnore, NodeIgnoreConfig
 
@@ -85,3 +85,11 @@ class GraphConfig(FrozenSlot):
 
 DefaultConfig: Final[NodeConfig] = NodeConfig()
 CacheMax: Final[int] = 1024
+ExtraUnsolvableTypes: set[Any] = {Any, Literal}
+
+try:
+    from typing import TypeAliasType  # type: ignore
+except ImportError:
+    from typing_extensions import TypeAliasType
+
+ExtraUnsolvableTypes.add(TypeAliasType)

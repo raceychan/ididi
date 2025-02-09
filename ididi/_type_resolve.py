@@ -28,13 +28,13 @@ from typing import (
 
 from typing_extensions import TypeGuard, Unpack
 
-from .config import CacheMax
+from .config import CacheMax, ExtraUnsolvableTypes
 from .errors import (
     ForwardReferenceNotFoundError,
     GenericDependencyNotSupportedError,
     UnsolvableReturnTypeError,
 )
-from .interfaces import  IDependent, INode, P, T
+from .interfaces import IDependent, INode, P, T
 from .utils.typing_utils import T, actualize_strforward, eval_type, is_builtin_type
 
 if sys.version_info >= (3, 10):
@@ -64,15 +64,6 @@ ResolveOrder: dict[FactoryType, int] = {
 }
 # when merge graphs we need to make sure a node with default constructor
 # does not override a node with resource / function factory
-
-ExtraUnsolvableTypes: set[Any] = {Any, Literal}
-
-try:
-    from typing import TypeAliasType  # type: ignore
-except ImportError:
-    from typing_extensions import TypeAliasType
-
-ExtraUnsolvableTypes.add(TypeAliasType)
 
 
 class EmptyInitProtocol(Protocol): ...
@@ -178,7 +169,12 @@ def is_unsolvable_type(t: Any) -> bool:
     - builtin types
     """
 
-    return is_builtin_type(t) or t is Signature.empty or t in ExtraUnsolvableTypes
+    return (
+        is_builtin_type(t)
+        or t is Any
+        or t is Signature.empty
+        or t in ExtraUnsolvableTypes
+    )
 
 
 def is_actxmgr_cls(
