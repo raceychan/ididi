@@ -1,3 +1,5 @@
+from asyncio import get_running_loop
+from concurrent.futures.thread import ThreadPoolExecutor
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager, contextmanager
 from contextvars import ContextVar, Token
 from functools import lru_cache, partial, wraps
@@ -7,9 +9,9 @@ from typing import (
     Annotated,
     Any,
     AsyncContextManager,
-    Awaitable,
     Callable,
     ClassVar,
+    Container,
     ContextManager,
     Generic,
     Hashable,
@@ -36,7 +38,7 @@ from ._node import (
     resolve_use,
     should_override,
 )
-from ._type_resolve import (  # is_class,
+from ._type_resolve import (
     FactoryType,
     get_bases,
     get_typed_signature,
@@ -100,7 +102,7 @@ def register_dependent(
 
 
 def resolve_dfs(
-    graph: "Resolver",
+    resolver: "Resolver",
     nodes: GraphNodes[Any],
     cache: ResolvedSingletons[Any],
     ptype: IDependent[T],
@@ -109,16 +111,15 @@ def resolve_dfs(
     if resolution := cache.get(ptype):
         return resolution
 
-    pnode = nodes.get(ptype) or graph.analyze(ptype)
+    pnode = nodes.get(ptype) or resolver.analyze(ptype)
 
     params = overrides
     for name, param in pnode.dependencies:
         if name not in params:
-            params[name] = resolve_dfs(graph, nodes, cache, param.param_type, {})
+            params[name] = resolve_dfs(resolver, nodes, cache, param.param_type, {})
 
     instance = pnode.factory(**params)
-
-    result = graph.resolve_callback(
+    result = resolver.resolve_callback(
         resolved=instance,
         dependent=pnode.dependent,
         factory_type=pnode.factory_type,
@@ -144,7 +145,7 @@ async def aresolve_dfs(
         if name not in params:
             params[name] = await aresolve_dfs(graph, nodes, cache, param.param_type, {})
 
-    instance = pnode.factory(**(params | overrides))
+    instance = pnode.factory(**params)
     resolved = await graph.aresolve_callback(
         resolved=instance,
         dependent=pnode.dependent,
@@ -161,6 +162,7 @@ class SharedData(TypedDict):
     analyzed_nodes: dict[Hashable, DependentNode[Any]]
     type_registry: TypeRegistry
     ignore: GraphIgnore
+    workers: ThreadPoolExecutor
 
 
 SharedSlots: tuple[str, ...] = (
@@ -170,6 +172,7 @@ SharedSlots: tuple[str, ...] = (
     "_ignore",
     "_resolved_singletons",
     "_registered_singletons",
+    "_workers",
 )
 
 
@@ -186,6 +189,7 @@ class Resolver:
         self._analyzed_nodes = args["analyzed_nodes"]
         self._type_registry = args["type_registry"]
         self._ignore = args["ignore"]
+        self._workers = args["workers"]
 
         self._registered_singletons = registered_singletons
         self._resolved_singletons = resolved_singletons
@@ -297,7 +301,7 @@ class Resolver:
         dependent: INode[P, T],
         *,
         config: NodeConfig = DefaultConfig,
-        ignore: frozenset[str] = EmptyIgnore,
+        ignore: Container[str] = EmptyIgnore,
     ) -> DependentNode[T]:
         """
         Recursively analyze the type information of a dependency.
@@ -420,9 +424,6 @@ class Resolver:
         register_dependent(self._resolved_singletons, dependent_type, dependent)
         self._registered_singletons.add(dependent_type)
 
-    def get_resolve_cache(self, dependent: IFactory[P, T]) -> Maybe[T]:
-        return self._resolved_singletons.get(dependent, MISSING)
-
     def resolve_callback(
         self,
         resolved: Any,
@@ -478,7 +479,7 @@ class Resolver:
         if args:
             raise PositionalOverrideError(args)
 
-        if is_provided(resolution := self._resolved_singletons.get(dependent, MISSING)):
+        if resolution := self._resolved_singletons.get(dependent):
             return resolution
 
         provided_params = frozenset(overrides)
@@ -500,7 +501,7 @@ class Resolver:
         if args:
             raise PositionalOverrideError(args)
 
-        if is_provided(resolution := self._resolved_singletons.get(dependent, MISSING)):
+        if resolution := self._resolved_singletons.get(dependent):
             return resolution
 
         provided_params = frozenset(overrides)
@@ -581,6 +582,7 @@ class Resolver:
 
 
 ScopeSlots = ("_name", "_stack", "_pre", "_graph_resolutions", "_graph_singletons")
+AsyncScopeSlots = ScopeSlots + ("_loop", "_sync_stack")
 
 
 class ScopeBase(Generic[Stack]):
@@ -588,12 +590,10 @@ class ScopeBase(Generic[Stack]):
     _stack: Stack
     _name: Hashable
     _pre: Maybe[Union["SyncScope", "AsyncScope"]]
-
+    _workers: ThreadPoolExecutor
     _resolved_singletons: ResolvedSingletons[Any]
     _registered_singletons: set[type]
 
-    # from concurrent.futures.thread import ThreadPoolExecutor
-    # _worker_threads: ThreadPoolExecutor(thread_name_prefix='ididi')
     @property
     def name(self) -> Hashable:
         return self._name
@@ -603,6 +603,7 @@ class ScopeBase(Generic[Stack]):
 
     def enter_context(self, context: ContextManager[T]) -> T:
         # await self._worker_thread.submit(self._stack.enter_context, context)
+        # future = self._workers.submit(self._stack.enter_context, context)
         return self._stack.enter_context(context)
 
     def get_scope(self, name: Hashable) -> Self:
@@ -653,7 +654,7 @@ class SyncScope(ScopeBase[ExitStack], Resolver):
     @override
     def resolve_callback(
         self,
-        resolved: T,
+        resolved: ContextManager[T],
         dependent: IDependent[T],
         factory_type: FactoryType,
         is_reuse: bool,
@@ -666,14 +667,14 @@ class SyncScope(ScopeBase[ExitStack], Resolver):
         if factory_type == "aresource":
             raise AsyncResourceInSyncError(dependent)
         # enter_context_in_thead(self._worker_threads, self._stack, resolved)
-        instance = self.enter_context(cast(ContextManager[T], resolved))
+        instance = self.enter_context(resolved)
         if is_reuse:
             register_dependent(self._resolved_singletons, dependent, instance)
         return instance
 
 
 class AsyncScope(ScopeBase[AsyncExitStack], Resolver):
-    __slots__ = ScopeSlots + SharedSlots
+    __slots__ = AsyncScopeSlots + SharedSlots
 
     def __init__(
         self,
@@ -687,6 +688,8 @@ class AsyncScope(ScopeBase[AsyncExitStack], Resolver):
         self._name = name
         self._pre = pre
         self._stack = AsyncExitStack()
+        self._sync_stack = ExitStack()
+        self._loop = get_running_loop()
 
         super().__init__(
             **args,
@@ -703,7 +706,15 @@ class AsyncScope(ScopeBase[AsyncExitStack], Resolver):
         exc_value: Union[Exception, None],
         traceback: Union[TracebackType, None],
     ) -> None:
+        await self._loop.run_in_executor(
+            self._workers, self._sync_stack.__exit__, exc_type, exc_value, traceback
+        )
         await self._stack.__aexit__(exc_type, exc_value, traceback)
+
+    async def enter_sync_context_in_thread(self, resolved: ContextManager[T]):
+        return await self._loop.run_in_executor(
+            self._workers, self._sync_stack.enter_context, resolved
+        )
 
     async def enter_async_context(self, context: AsyncContextManager[T]) -> T:
         return await self._stack.enter_async_context(context)
@@ -724,7 +735,7 @@ class AsyncScope(ScopeBase[AsyncExitStack], Resolver):
     @override
     async def aresolve_callback(
         self,
-        resolved: Union[T, Awaitable[T]],
+        resolved: Union[ContextManager[T], AsyncContextManager[T]],
         dependent: IDependent[T],
         factory_type: FactoryType,
         is_reuse: bool,
@@ -736,11 +747,11 @@ class AsyncScope(ScopeBase[AsyncExitStack], Resolver):
             return cast(T, instance)
 
         if factory_type == "resource":
-            instance = self.enter_context(cast(ContextManager[T], resolved))
+            resolved = cast(ContextManager[T], resolved)
+            instance = await self.enter_sync_context_in_thread(resolved)
         else:
-            instance = await self.enter_async_context(
-                cast(AsyncContextManager[T], resolved)
-            )
+            resolved = cast(AsyncContextManager[T], resolved)
+            instance = await self.enter_async_context(resolved)
 
         if is_reuse:
             register_dependent(self._resolved_singletons, dependent, instance)
@@ -773,7 +784,7 @@ class Graph(Resolver):
     ```
     """
 
-    __slots__ = SharedSlots + ("_token", "_default_scope")
+    __slots__ = SharedSlots + ("_token",)
 
     _scope_context: ClassVar[ScopeContext] = ContextVar("idid_scope_ctx")
 
@@ -789,7 +800,11 @@ class Graph(Resolver):
     "Types that are menually added singletons "
 
     def __init__(
-        self, *, self_inject: bool = True, ignore: GraphIgnoreConfig = EmptyIgnore
+        self,
+        *,
+        self_inject: bool = True,
+        ignore: GraphIgnoreConfig = EmptyIgnore,
+        workers: Union[ThreadPoolExecutor, None] = None,
     ):
         """
         - self_inject:
@@ -824,13 +839,14 @@ class Graph(Resolver):
             resolved_singletons=dict(),
             registered_singletons=set(),
             ignore=config.ignore,
+            workers=workers or ThreadPoolExecutor(thread_name_prefix="ididi"),
         )
 
         if self_inject:
             self.register_singleton(self)
 
-        self._default_scope = self._create_scope(DefaultScopeName)
-        self._token = self._scope_context.set(self._default_scope)
+        default_scope = self._create_scope(DefaultScopeName)
+        self._token = self._scope_context.set(default_scope)
 
     def __repr__(self) -> str:
         return (
@@ -968,6 +984,7 @@ class Graph(Resolver):
             analyzed_nodes=self._analyzed_nodes,
             type_registry=self._type_registry,
             ignore=self._ignore,
+            workers=self._workers,
         )
         scope = SyncScope(
             registered_singletons=self._registered_singletons.copy(),
@@ -986,6 +1003,7 @@ class Graph(Resolver):
             analyzed_nodes=self._analyzed_nodes,
             type_registry=self._type_registry,
             ignore=self._ignore,
+            workers=self._workers,
         )
         scope = AsyncScope(
             registered_singletons=self._registered_singletons.copy(),
@@ -1059,7 +1077,7 @@ class Graph(Resolver):
         pure typing helper, ignored at runtime
         """
         scope = self._scope_context.get()
-        if name != scope.name:
+        if name and name != scope.name:
             return scope.get_scope(name)
         return scope
 

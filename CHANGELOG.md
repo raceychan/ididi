@@ -1018,6 +1018,10 @@ Note that since `get_user` returns `Ignore[User]` instead of `User`, it won't be
 
 ## version 1.4.3
 
+Improvements:
+
+50% performance boost for `Graph.resolve/aresolve/entry`
+
 Features:
 
 - using threadpool in scoped sync function.
@@ -1033,9 +1037,10 @@ class SyncScope:
 ```
 
 
-- create a default scope for each graph
-- rename `Graph.scope` to `Graph.create_scope`, reserve `Graph.scope` to the default scope
+- `Graph` now create a default scope, `Graph.use_scope` should always returns a scope.
 
-- since we create node via `dg.node`, if a dependency in graph._ignore, we ignore those when create node.dependencies, so that we don't have to do this in `node.unsolved_params`
+- split `Graph.scope` to `Graph.scope` and `Graph.ascope`.
 
-- builtin types with provided default no longer considered as dependencies
+- *args , **kwargs without UnPack no longer considered as dependencies.
+- builtin types with provided default no longer considered as dependencies.
+- dependency.unresolvabale is now an attribute, instead of a property.

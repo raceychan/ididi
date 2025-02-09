@@ -391,9 +391,6 @@ async def test_async_nested_scope_with_context_scope():
 
     test_two()
 
-    with pytest.raises(OutOfScopeError):
-        dg.use_scope()
-
     assert dg.use_scope(DefaultScopeName)
 
 

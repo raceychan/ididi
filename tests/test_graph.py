@@ -8,7 +8,7 @@ from unittest import mock
 
 import pytest
 
-from ididi import Graph
+from ididi import Graph, use
 from ididi.errors import (
     ABCNotImplementedError,
     AsyncResourceInSyncError,
@@ -771,3 +771,25 @@ def test_remove_new_type():
 
     dg.remove_dependent(UserId)
     assert dg.search_node("UserId") is None
+
+
+def test_graph_analyze_nested_annt():
+    dg = Graph()
+
+    class User: ...
+
+    def hello() -> User: ...
+
+    def build_user() -> ty.Annotated[User, use(hello)]:
+        return User()
+
+    dg.analyze(build_user)
+
+    class Aloha:
+        ...
+
+    annt = ty.Annotated[Aloha, ty.Annotated[User, "hello"]]
+
+
+    dg.analyze(annt)
+    assert Aloha in dg

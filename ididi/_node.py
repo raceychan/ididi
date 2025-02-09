@@ -7,6 +7,7 @@ from inspect import isasyncgenfunction, isgeneratorfunction
 from typing import (
     Annotated,
     Any,
+    Container,
     ForwardRef,
     Generator,
     Generic,
@@ -398,7 +399,7 @@ class DependentNode(Generic[T]):
         return self.factory_type in ("resource", "aresource")
 
     def analyze_unsolved_params(
-        self, ignore: frozenset[str] = EmptyIgnore
+        self, ignore: Container[str] = EmptyIgnore
     ) -> Generator[Dependency[T], None, None]:
         "params that needs to be statically resolved"
 

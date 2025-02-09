@@ -36,7 +36,7 @@ scope is like Graph, but for resouces.
 you can pass them around as you need,
 
 ```py
-async with dg.scope() as scope:
+async with dg.ascope() as scope:
     conn = await scope.resolve(Connection)
     await exec_sql(conn)
 ```
@@ -51,7 +51,7 @@ app = FastAPI()
 dg = Graph()
 
 def auth_service_factory() -> AuthService:
-    async with dg.scope() as scope
+    async with dg.ascope() as scope
         yield dg.resolve(AuthService)
 
 Service = ty.Annotated[AuthService, Depends(auth_service_factory)]
@@ -108,7 +108,7 @@ class UserRoute(APIRoute):
             dg = Graph()
             request.scope["dg"] = dg
 
-            async with dg.scope() as user_scope:
+            async with dg.ascope() as user_scope:
                 response = await original_route_handler(request)
                 return response
 

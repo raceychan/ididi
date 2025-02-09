@@ -86,7 +86,7 @@ from ididi import Graph
 
 dg = Graph()
 
-async with dg.scope():
+async with dg.ascope():
     conn = await scope.resolve(conn_factory)
 ```
 
@@ -256,7 +256,7 @@ with dg.scope() as scope:
     resource = scope.resolve(Resource)
 
 # For async generator
-async with dg.scope() as scope:
+async with dg.ascope() as scope:
     resource = await scope.resolve(AsyncResource)
 ```
 
@@ -271,7 +271,7 @@ access the scope without passing it around, e.g.
 
 ```python
 async def service_factory():
-    async with dg.scope() as scope:
+    async with dg.ascope() as scope:
         service = scope.resolve(Service)
         yield service
 
@@ -298,7 +298,7 @@ You can create infinite level of scopes by assigning hashable name to scopes
 
 ```python
 # at the top most entry of a request
-async with dg.scope(request_id) as scope:
+async with dg.ascope(request_id) as scope:
     ...
 ```
 
@@ -314,11 +314,11 @@ Two or more scopes with the same name would follow most recent rule.
 #### Nested Nmaed Scope
 
 ```python
-async with dg.scope(app_name) as app_scope:
-    async with dg.scope(router_name) as router_scope:
-        async with dg.scope(endpoint_name) as endpoint_scope:
-            async with dg.scope(user_id) as user_scope:
-                async with dg.scope(request_id) as request_scope:
+async with dg.ascope(app_name) as app_scope:
+    async with dg.ascope(router_name) as router_scope:
+        async with dg.ascope(endpoint_name) as endpoint_scope:
+            async with dg.ascope(user_id) as user_scope:
+                async with dg.ascope(request_id) as request_scope:
                     ...
 ```
 

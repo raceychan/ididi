@@ -39,7 +39,7 @@ class UserRoute(APIRoute):
             dg = Graph()
             request.scope["dg"] = dg
 
-            async with dg.scope() as user_scope:
+            async with dg.ascope() as user_scope:
                 response = await original_route_handler(request)
                 return response
 

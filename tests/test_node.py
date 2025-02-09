@@ -1,3 +1,5 @@
+from typing import Annotated
+
 import pytest
 
 from ididi import DependentNode
@@ -47,7 +49,9 @@ def test_typed_annotation():
         def __init__(self, nums: list[int]):
             self.nums = nums
 
-    DependentNode.from_node(ServiceA)
+    node = DependentNode.from_node(ServiceA)
+    ser_dep = node.dependencies["nums"]
+    print(ser_dep)
 
 
 def test_empty_init():
@@ -78,3 +82,11 @@ def test_node_config_frozen():
     node = DependentNode.from_node(Service)
     with pytest.raises(AttributeError):
         node.config.reuse = False
+
+
+def test_node_from_annotated():
+    def hello() -> Annotated[str, "hello"]:
+        return "hello"
+
+    node = DependentNode.from_node(hello)
+    assert node.dependent is str
