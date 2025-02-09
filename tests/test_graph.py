@@ -208,7 +208,7 @@ def test_multiple_implementations_with_factory(dg: Graph):
     assert isinstance(repo, Repo1)
 
 
-def test_analyze_factory(dg: Graph):
+def test_static_resolve_factory(dg: Graph):
     class Repository(ABC):
         def __init__(self):
             pass
@@ -271,7 +271,7 @@ async def test_resource_cleanup(dg: Graph):
         with dg.scope() as scope:
             instance = scope.resolve(Resource2)
 
-    async with dg.scope() as scope:
+    async with dg.ascope() as scope:
         instance = await scope.resolve(Resource2)
         assert isinstance(instance, Resource2)
 
@@ -505,7 +505,7 @@ def test_type_mapping_cleanup(dg: Graph):
 
 
 @pytest.mark.asyncio
-async def test_graph_without_analyze(dg: Graph):
+async def test_graph_without_static_resolve(dg: Graph):
     # This test specifically needs a new dag instance
     dg = Graph()
 
@@ -655,7 +655,7 @@ def test_graph_merge_with_error():
             dg.merge(dg2)
 
 
-def test_graph_analyzed_should_override():
+def test_graph_static_resolved_should_override():
 
     from .test_data import ComplianceChecker, DatabaseConfig
 
@@ -677,7 +677,7 @@ def test_graph_analyzed_should_override():
     assert d1 is d
 
 
-def test_graph_analyzed_should_not_override():
+def test_graph_static_resolved_should_not_override():
 
     from .test_data import ComplianceChecker, DatabaseConfig
 

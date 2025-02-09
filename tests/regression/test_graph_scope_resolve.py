@@ -49,12 +49,10 @@ async def test_shared_registered_singleton():
     singleton = Service("service", 1)
     dg.register_singleton(singleton)
 
-    scope_mng = dg.scope()
-
-    with scope_mng as scope:
+    with dg.scope() as scope:
         service1 = scope.resolve(Service)
 
-    async with scope_mng as ascope:
+    async with dg.ascope() as ascope:
         service2 = await ascope.resolve(Service)
 
     assert service1 is singleton

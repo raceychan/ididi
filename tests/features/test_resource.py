@@ -37,7 +37,7 @@ async def test_resource():
 @pytest.mark.asyncio
 async def test_graph_context_manager():
 
-    async with dag.scope() as scope:
+    async with dag.ascope() as scope:
         resource = await scope.resolve(ArbitraryResource)
         async with resource:
             assert not resource.is_closed

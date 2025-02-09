@@ -187,7 +187,7 @@ async def test_scope_repeat_resolve():
         assert resource.is_opened
         assert resource is sec_resource
 
-    async with dg.scope() as scope:
+    async with dg.ascope() as scope:
         resource = await scope.resolve(AsyncResource)
         sec_resource = await scope.resolve(AsyncResource)
         assert resource.is_opened
@@ -212,7 +212,7 @@ async def test_resource_shared_within_scope():
 
     assert dg.should_be_scoped(FirstResource)
 
-    async with dg.scope() as scope:
+    async with dg.ascope() as scope:
         first_resource = await scope.resolve(FirstResource)
         second_resource = await scope.resolve(SecondResource)
 
@@ -287,7 +287,7 @@ async def test_context_scope():
     with pytest.raises(ResourceOutsideScopeError):
         await dg.aresolve(Resource)
 
-    async with dg.scope():
+    async with dg.ascope():
 
         aresource = await dg.use_scope(as_async=True).resolve(AsyncResource)
         assert aresource.is_opened
@@ -299,7 +299,7 @@ async def test_context_scope():
             return local
 
         async def new_scope():
-            async with dg.scope() as new_scope:
+            async with dg.ascope() as new_scope:
                 await new_scope.resolve(Resource)
                 new = await new_scope.resolve(AsyncResource)
                 assert local is not new
@@ -361,7 +361,7 @@ async def test_async_nested_scope_with_context_scope():
         def __init__(self, name: str = "normal"):
             self.name = name
 
-    async with dg.scope() as dg1:
+    async with dg.ascope() as dg1:
         await dg1.__aenter__()
         with dg.scope() as dg2:
 
@@ -370,7 +370,7 @@ async def test_async_nested_scope_with_context_scope():
             assert normal.name == "normal"
             assert normal is normal2
 
-            async with dg.scope() as dg3:
+            async with dg.ascope() as dg3:
                 local = dg.use_scope(as_async=True)
                 assert dg1 is not dg2
                 assert dg2 is not dg3
@@ -390,8 +390,7 @@ async def test_async_nested_scope_with_context_scope():
 
     test_two()
 
-    with pytest.raises(OutOfScopeError):
-        dg.use_scope()
+    dg.use_scope()
 
 
 async def test_db_exec():
@@ -451,7 +450,7 @@ async def test_scope_different_across_context():
 async def test_use_scope_create_on_miss():
     dg = Graph()
 
-    dg.use_scope(create_on_miss=True)
+    dg.use_scope()
 
 
 async def test_share_single_pattern():
@@ -461,8 +460,3 @@ async def test_share_single_pattern():
         g = scope.resolve(Graph)
 
         assert g is dg
-
-
-
-
-

@@ -56,3 +56,21 @@ def test_node_dpes_ignore_builtin_with_default():
 #     dg = Graph()
 
 #     dg.resolve(main)
+
+from typing import Any, NewType
+
+
+class Request: ...
+
+
+RequestParams = NewType("RequestParams", dict[str, Any])
+
+
+# async def test_resolve_request():
+#     dg = Graph()
+
+#     async def resolve_request(r: Request) -> RequestParams:
+#         return RequestParams({"a": 1})
+
+#     dg.node(resolve_request)
+#     await dg.resolve(resolve_request, r=Request())

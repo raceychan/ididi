@@ -42,9 +42,9 @@ async def test_graph_resolve_complex_factory():
         yield u
 
     with pytest.raises(TypeError):
-        async with dg.scope() as scope:
-            u = await scope.resolve(user_factory)
+        async with dg.ascope() as scope:
+            user = await scope.resolve(user_factory)
 
-    async with dg.scope() as scope:
+    async with dg.ascope() as scope:
         u = await scope.resolve(user_factory, address="a")
         assert u.address == "a"

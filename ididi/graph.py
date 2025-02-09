@@ -1,4 +1,4 @@
-from contextlib import AsyncExitStack, ExitStack
+from contextlib import AsyncExitStack, ExitStack, asynccontextmanager, contextmanager
 from contextvars import ContextVar, Token
 from functools import lru_cache, partial, wraps
 from inspect import isawaitable, iscoroutinefunction
@@ -47,7 +47,7 @@ from ._type_resolve import (  # is_class,
     resolve_factory,
     resolve_node_type,
 )
-from .config import CacheMax, EmptyIgnore, GraphConfig
+from .config import CacheMax, DefaultScopeName, EmptyIgnore, GraphConfig
 from .errors import (
     AsyncResourceInSyncError,
     CircularDependencyDetectedError,
@@ -100,17 +100,21 @@ def register_dependent(
 
 
 def resolve_dfs(
-    graph: "Resolver", ptype: IDependent[T], overrides: dict[str, Any]
+    graph: "Resolver",
+    nodes: GraphNodes[Any],
+    # cache: ResolvedSingletons[Any],
+    ptype: IDependent[T],
+    overrides: dict[str, Any],
 ) -> T:
     if resolution := graph.get_resolve_cache(ptype):
         return resolution
 
-    pnode = graph._nodes.get(ptype) or graph.analyze(ptype)
+    pnode = nodes.get(ptype) or graph.analyze(ptype)
 
     params = overrides
     for name, param in pnode.dependencies:
         if name not in params:
-            params[name] = resolve_dfs(graph, param.param_type, {})
+            params[name] = resolve_dfs(graph, nodes, param.param_type, {})
 
     instance = pnode.factory(**(params))
 
@@ -124,17 +128,21 @@ def resolve_dfs(
 
 
 async def aresolve_dfs(
-    graph: "Resolver", ptype: IDependent[T], overrides: dict[str, Any]
+    graph: "Resolver",
+    nodes: GraphNodes[Any],
+    # cache: ResolvedSingletons[Any],
+    ptype: IDependent[T],
+    overrides: dict[str, Any],
 ) -> T:
     if resolution := graph.get_resolve_cache(ptype):
         return resolution
 
-    pnode = graph._nodes.get(ptype) or graph.analyze(ptype)
+    pnode = nodes.get(ptype) or graph.analyze(ptype)
 
     params = overrides
     for name, param in pnode.dependencies:
         if name not in params:
-            params[name] = await aresolve_dfs(graph, param.param_type, {})
+            params[name] = await aresolve_dfs(graph, nodes, param.param_type, {})
 
     instance = pnode.factory(**(params | overrides))
     resolved = await graph.aresolve_callback(
@@ -475,7 +483,7 @@ class Resolver:
 
         provided_params = frozenset(overrides)
         node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
-        return resolve_dfs(self, node.dependent, overrides)
+        return resolve_dfs(self, self._nodes, node.dependent, overrides)
 
     async def aresolve(
         self,
@@ -495,7 +503,7 @@ class Resolver:
 
         provided_params = frozenset(overrides)
         node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
-        return await aresolve_dfs(self, node.dependent, overrides)
+        return await aresolve_dfs(self, self._nodes, node.dependent, overrides)
 
     def _node(
         self, dependent: INode[P, T], config: NodeConfig = DefaultConfig
@@ -579,8 +587,12 @@ class ScopeBase(Generic[Stack]):
 
     _resolved_singletons: ResolvedSingletons[Any]
     _registered_singletons: set[type]
+
     # from concurrent.futures.thread import ThreadPoolExecutor
     # _worker_threads: ThreadPoolExecutor(thread_name_prefix='ididi')
+    @property
+    def name(self) -> Hashable:
+        return self._name
 
     def __repr__(self):
         return f"{self.__class__.__name__}(id={self._name})"
@@ -757,7 +769,7 @@ class Graph(Resolver):
     ```
     """
 
-    __slots__ = SharedSlots
+    __slots__ = SharedSlots + ("_token", "_default_scope")
 
     _scope_context: ClassVar[ScopeContext] = ContextVar("idid_scope_ctx")
 
@@ -812,6 +824,9 @@ class Graph(Resolver):
 
         if self_inject:
             self.register_singleton(self)
+
+        self._default_scope = self.create_scope(DefaultScopeName)
+        self._token = self._scope_context.set(self._default_scope)
 
     def __repr__(self) -> str:
         return (
@@ -890,11 +905,12 @@ class Graph(Resolver):
 
         for other in others:
             try:
-                other._scope_context.get()
+                other_scope = other._scope_context.get()
             except LookupError:
                 pass
             else:
-                raise MergeWithScopeStartedError()
+                if other_scope.name is not DefaultScopeName:
+                    raise MergeWithScopeStartedError()
 
             self._merge_nodes(other)
 
@@ -944,97 +960,83 @@ class Graph(Resolver):
             if dep.__name__ == dep_name:
                 return node
 
-    def create_scope(self, previous_scope: Maybe[AnyScope]):
+    def create_scope(
+        self, name: Hashable = "", pre: Maybe[AnyScope] = MISSING
+    ) -> SyncScope:
         shared_data = SharedData(
             nodes=self._nodes,
             analyzed_nodes=self._analyzed_nodes,
             type_registry=self._type_registry,
             ignore=self._ignore,
         )
-
         scope = SyncScope(
             registered_singletons=self._registered_singletons.copy(),
             resolved_singletons=self._resolved_singletons.copy(),
-            name=self.name,
-            pre=previous_scope,
+            name=name,
+            pre=pre,
             **shared_data,
         )
-        self._token = self._scope_context.set(_scope)
-        yield scope
-        scope.__exit__(exc_type, exc_value, traceback)
-        if is_provided(self._token):
-            self._scope_context.reset(self._token)
+        return scope
 
-    async def create_ascope(self, previous_scope: Maybe[AnyScope]):
+    def create_ascope(
+        self, name: Hashable = "", pre: Maybe[AnyScope] = MISSING
+    ) -> AsyncScope:
         shared_data = SharedData(
             nodes=self._nodes,
             analyzed_nodes=self._analyzed_nodes,
             type_registry=self._type_registry,
             ignore=self._ignore,
         )
-
-        ascope = AsyncScope(
+        scope = AsyncScope(
             registered_singletons=self._registered_singletons.copy(),
             resolved_singletons=self._resolved_singletons.copy(),
-            name=self.name,
-            pre=previous_scope,
+            name=name,
+            pre=pre,
             **shared_data,
         )
-        yield ascope
+        return scope
 
-        await ascope.__aexit__(exc_type, exc_value, traceback)
-        if is_provided(self._token):
-            self._scope_context.reset(self._token)
+    @contextmanager
+    def scope(self, name: Hashable = ""):
+        previous_scope = self._scope_context.get()
+        scope = self.create_scope(name, previous_scope)
+        token = self._scope_context.set(scope)
 
-    # def __enter__(self) -> "SyncScope":
-    #     try:
-    #         pre = self._scope_context.get()
-    #     except LookupError:
-    #         pre = MISSING
+        exc_type, exc, tb = None, None, None
 
-    #     self._scope = self.create_scope(previous_scope=pre)
-    #     self._token = self._scope_context.set(self._scope)
-    #     return self._scope
+        try:
+            yield scope
+        except Exception as e:
+            exc_type, exc, tb = type(e), e, e.__traceback__
+            raise
+        finally:
+            scope.__exit__(exc_type, exc, tb)
+            if is_provided(self._token):
+                self._scope_context.reset(token)
 
-    # async def __aenter__(self) -> "AsyncScope":
-    #     try:
-    #         pre = cast(AsyncScope, self._scope_context.get())
-    #     except LookupError:
-    #         pre = MISSING
+    @asynccontextmanager
+    async def ascope(self, name: Hashable = ""):
+        previous_scope = self._scope_context.get()
+        ascope = self.create_ascope(name, previous_scope)
+        token = self._scope_context.set(ascope)
 
-    #     self._scope = self.create_ascope(previous_scope=pre)
-    #     self._token = self._scope_context.set(self._scope)
-    #     return self._scope
+        exc_type, exc, tb = None, None, None
 
-    # def scope(self, name: Maybe[Hashable] = MISSING) -> "ScopeManager":
-    #     """
-    #     create a scope for resource,
-    #     resources resolved wihtin the scope would be
-
-    #     scope_name: give a iditifier to the scope so that you can get it with
-    #     dg.get_scope(scope_name)
-    #     """
-    #     shared_data = SharedData(
-    #         nodes=self._nodes,
-    #         analyzed_nodes=self._analyzed_nodes,
-    #         type_registry=self._type_registry,
-    #         ignore=self._ignore,
-    #     )
-
-    #     return ScopeManager(
-    #         name=name,
-    #         scope_ctx=self._scope_context,
-    #         graph_resolutions=self._resolved_singletons.copy(),
-    #         graph_singletons=self._registered_singletons.copy(),
-    #         shared_data=shared_data,
-    #     )
+        try:
+            yield ascope
+        except Exception as e:
+            exc_type, exc, tb = type(e), e, e.__traceback__
+            raise
+        finally:
+            await ascope.__aexit__(exc_type, exc, tb)
+            if is_provided(self._token):
+                self._scope_context.reset(token)
 
     @overload
     def use_scope(
         self,
         name: Maybe[Hashable] = MISSING,
         *,
-        create_on_miss: bool = False,
         as_async: Literal[False] = False,
     ) -> "SyncScope": ...
 
@@ -1043,7 +1045,6 @@ class Graph(Resolver):
         self,
         name: Maybe[Hashable] = MISSING,
         *,
-        create_on_miss: bool = False,
         as_async: Literal[True],
     ) -> "AsyncScope": ...
 
@@ -1051,7 +1052,6 @@ class Graph(Resolver):
         self,
         name: Maybe[Hashable] = MISSING,
         *,
-        create_on_miss: bool = False,
         as_async: bool = False,
     ) -> Union["SyncScope", "AsyncScope"]:
         """
@@ -1063,8 +1063,6 @@ class Graph(Resolver):
         try:
             scope = self._scope_context.get()
         except LookupError as le:
-            if create_on_miss:
-                return cast(Union[SyncScope, AsyncScope], self.scope(name))
             raise OutOfScopeError() from le
 
         if is_provided(name):
@@ -1142,7 +1140,7 @@ class Graph(Resolver):
 
                 @wraps(func)
                 async def _async_scoped_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-                    context_scope = self.scope()
+                    context_scope = self.ascope()
                     async with context_scope as scope:
                         for param_name, param_type in unresolved:
                             if param_name in kwargs:

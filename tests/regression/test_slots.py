@@ -9,18 +9,15 @@ async def test_graph_ds_slots():
     with pytest.raises(AttributeError):
         dg.__dict__
 
-    sm = dg.scope()
+    sc = dg.create_scope()
 
     with pytest.raises(AttributeError):
-        sm.__dict__
+        sc.__dict__
 
-    async with sm as asc:
-        with pytest.raises(AttributeError):
-            asc.__dict__
+    asc = dg.create_ascope()
 
-    with sm as sc:
-        with pytest.raises(AttributeError):
-            sc.__dict__
+    with pytest.raises(AttributeError):
+        asc.__dict__
 
 
 def test_node_ds_slots():

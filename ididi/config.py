@@ -93,3 +93,5 @@ except ImportError:
     from typing_extensions import TypeAliasType
 
 ExtraUnsolvableTypes.add(TypeAliasType)
+
+DefaultScopeName: Final[str] = "__ididi_default_scope__"

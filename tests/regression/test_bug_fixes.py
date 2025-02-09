@@ -221,10 +221,10 @@ async def test_resource_across_scope():
 
     dg = Graph()
 
-    async with dg.scope() as scope1:
+    async with dg.ascope() as scope1:
         s1 = await scope1.resolve(Service)
 
-    async with dg.scope() as scope2:
+    async with dg.ascope() as scope2:
         s2 = await scope2.resolve(Service)
 
     assert s1 is not s2
