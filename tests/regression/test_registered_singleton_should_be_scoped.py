@@ -1,4 +1,4 @@
-from ididi import DependencyGraph
+from ididi import Graph
 
 
 class Time:
@@ -17,7 +17,7 @@ def test_registered_singleton():
     """
     timer = Time("1")
 
-    dg = DependencyGraph()
+    dg = Graph()
 
     dg.register_singleton(timer)
 

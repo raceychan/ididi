@@ -1015,3 +1015,26 @@ assert dg.resolve(validate_admin) == "ok"
 ```
 
 Note that since `get_user` returns `Ignore[User]` instead of `User`, it won't be used as factory to resolve `User`.
+
+## version 1.4.3
+
+Features:
+
+- separate overrides and resolved, carry resolved to sub dependencies.
+- using threadpool in scoped sync function.
+
+```python
+class SyncScope:
+    def enter_context(self):
+        self._thread_pool.execute(self.statck.enter_context, context)
+
+    def __exit__(self):
+        # use thread pool executor
+        ...
+```
+
+
+- create a default scope for each graph
+- rename `Graph.scope` to `Graph.create_scop`, reserve `Graph.scope` to the dfault scope
+
+- since we create node via `dg.node`, if a dependency in graph._ignore, we ignore those when create node.dependencies, so that we don't have to do this in `node.unsolved_params`

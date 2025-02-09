@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from ididi.graph import DependencyGraph
+from ididi.graph import Graph
 from ididi.visual import Visualizer
 
 
@@ -31,11 +31,11 @@ class AuthService:
 
 @pytest.fixture
 def dag():
-    return DependencyGraph()
+    return Graph()
 
 
 def test_visualizer():
-    dag = DependencyGraph()
+    dag = Graph()
     dag.node(AuthService)
     vis = Visualizer(dag)
     vis.make_graph()
@@ -43,7 +43,7 @@ def test_visualizer():
 
 
 def test_complex_graph(tmp_path: Path):
-    dg = DependencyGraph()
+    dg = Graph()
     vs = Visualizer(dg)
 
     class ConfigService:

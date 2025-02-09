@@ -2,7 +2,7 @@
 test override dependencies
 """
 
-from ididi import DependencyGraph
+from ididi import Graph
 
 
 class DataBase: ...
@@ -21,7 +21,7 @@ def db_factory() -> DataBase:
 
 
 def test_resolve():
-    dg = DependencyGraph()
+    dg = Graph()
     dg.node(reuse=False)(UserRepository)
     assert isinstance(dg.resolve(UserRepository).db, DataBase)
 

@@ -1,6 +1,6 @@
 import pytest
 
-from ididi import DependencyGraph
+from ididi import Graph
 from ididi.errors import CircularDependencyDetectedError
 
 
@@ -15,7 +15,7 @@ class CircleServiceB:
 
 
 def test_cycle_detection():
-    dag = DependencyGraph()
+    dag = Graph()
     with pytest.raises(CircularDependencyDetectedError) as e:
         dag.resolve(CircleServiceA)
 
@@ -46,7 +46,7 @@ def test_advanced_cycle_detection():
     """
     DependentNode.resolve_forward_dependency
     """
-    dag = DependencyGraph()
+    dag = Graph()
 
     with pytest.raises(CircularDependencyDetectedError) as exc_info:
         dag.analyze(A)

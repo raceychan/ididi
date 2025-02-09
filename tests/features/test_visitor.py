@@ -1,6 +1,6 @@
 import pytest
 
-from ididi import DependencyGraph
+from ididi import Graph
 
 
 class B1: ...
@@ -47,7 +47,7 @@ class A:
 
 
 def test_visitor():
-    dg = DependencyGraph()
+    dg = Graph()
     dg.analyze(A)
 
     assert len(dg.visitor.get_dependencies(A, recursive=False)) == 3
@@ -71,7 +71,7 @@ class ServiceB:
 
 
 def test_initialization_order():
-    dg = DependencyGraph()
+    dg = Graph()
 
     dg.analyze(ServiceA)
     order: list[type] = dg.visitor.top_sorted_dependencies()

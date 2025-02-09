@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Annotated
 
-from ididi import DependencyGraph, Graph, Ignore, use
+from ididi import Graph, Graph, Ignore, use
 
 from ..test_data import AuthenticationService, Database, DatabaseConfig, UserService
 
@@ -11,7 +11,7 @@ def test_ignore_param():
         def __init__(self, name: Ignore[str]):
             self.name = name
 
-    dg = DependencyGraph()
+    dg = Graph()
 
     dg.analyze(User)
     node = dg.nodes[User]
@@ -21,9 +21,9 @@ def test_ignore_param():
 
 
 def test_resolve():
-    dg = DependencyGraph()
+    dg = Graph()
 
-    def db_fact(dg: DependencyGraph) -> Database:
+    def db_fact(dg: Graph) -> Database:
         return Database(config=dg.resolve(DatabaseConfig))
 
     def service_factory(
@@ -35,7 +35,7 @@ def test_resolve():
 
 
 def test_graph_ignore_name():
-    dg = DependencyGraph(ignore="name")
+    dg = Graph(ignore="name")
 
     def create_db(name: str) -> Database:
         return Database(1)
@@ -47,7 +47,7 @@ def test_graph_ignore_name():
 def test_graph_ignore_many_names():
     from datetime import datetime
 
-    dg = DependencyGraph(ignore=("name", "age", datetime))
+    dg = Graph(ignore=("name", "age", datetime))
 
     def create_db(name: str, age: int, dt: datetime) -> Database:
         return Database(1)
@@ -56,7 +56,7 @@ def test_graph_ignore_many_names():
 
 
 def test_node_with_many_ignore():
-    dg = DependencyGraph()
+    dg = Graph()
 
     dg.node(ignore="config")(Database)
 

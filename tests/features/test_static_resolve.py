@@ -1,7 +1,7 @@
 import pytest
 
 from ididi.errors import ForwardReferenceNotFoundError, UnsolvableDependencyError
-from ididi.graph import DependencyGraph
+from ididi.graph import Graph
 
 # Create test classes with various dependency patterns
 
@@ -50,17 +50,17 @@ class EmailService:
 
 
 @pytest.fixture(scope="function")
-def dg() -> DependencyGraph:
-    return DependencyGraph()
+def dg() -> Graph:
+    return Graph()
 
 
-def test_static_resolve(dg: DependencyGraph):
+def test_static_resolve(dg: Graph):
     _ = dg.analyze(EmailService)
     assert len(dg.nodes) == 7
     assert len(dg.resolved_nodes) == 7
 
 
-def test_static_resolve_equal_resolve(dg: DependencyGraph):
+def test_static_resolve_equal_resolve(dg: Graph):
     _ = dg.analyze(EmailService)
     assert len(dg.nodes) == 7
     assert len(dg.resolved_nodes) == 7
@@ -87,7 +87,7 @@ class ForwardConfig:
     pass
 
 
-def test_forward_dependency(dg: DependencyGraph):
+def test_forward_dependency(dg: Graph):
     _ = dg.analyze(ForwardService)
     assert len(dg.nodes) == 3
     assert len(dg.resolved_nodes) == 3
@@ -98,7 +98,7 @@ def test_forward_dependency(dg: DependencyGraph):
 
 
 @pytest.mark.asyncio
-async def test_async_enter(dg: DependencyGraph):
+async def test_async_enter(dg: Graph):
     @dg.node(reuse=False)
     class AsyncService:
         pass
@@ -107,7 +107,7 @@ async def test_async_enter(dg: DependencyGraph):
 
 
 def test_forward_ref_in_local_scope():
-    dag = DependencyGraph()
+    dag = Graph()
 
     class ServiceA:
         def __init__(self, b: "ServiceB"):
@@ -121,7 +121,7 @@ def test_forward_ref_in_local_scope():
         dag.analyze(ServiceA)
 
 
-def test_static_resolve_would_raise_error(dg: DependencyGraph):
+def test_static_resolve_would_raise_error(dg: Graph):
     class DataBase:
         def __init__(self, engine: int):
             self.engine = engine
@@ -138,7 +138,7 @@ def test_static_resolve_would_raise_error(dg: DependencyGraph):
         dg.analyze(UserService)
 
 
-async def test_static_resolve_a_factory(dg: DependencyGraph):
+async def test_static_resolve_a_factory(dg: Graph):
     class DataBase:
         def __init__(self, engine: str):
             self.engine = engine
@@ -158,7 +158,7 @@ async def test_static_resolve_a_factory(dg: DependencyGraph):
 
 
 def test_sr_false():
-    dg = DependencyGraph()
+    dg = Graph()
 
     class DataBase:
         def __init__(self, engine: str):
@@ -175,7 +175,7 @@ def test_sr_false():
 
 
 def test_sr_pre_resolved():
-    dg = DependencyGraph()
+    dg = Graph()
 
     class DataBase:
         def __init__(self, engine: str):
@@ -194,7 +194,7 @@ def test_sr_pre_resolved():
 
 
 def test_ignore():
-    dg = DependencyGraph()
+    dg = Graph()
 
     @dg.node(ignore=(0, str, "c"))
     class Item:

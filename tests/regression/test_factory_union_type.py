@@ -1,8 +1,8 @@
 import typing as ty
 
-from ididi import DependencyGraph
+from ididi import Graph
 
-dg = DependencyGraph()
+dg = Graph()
 
 
 class TokenBucketFactory:

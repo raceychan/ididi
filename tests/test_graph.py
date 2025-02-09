@@ -8,7 +8,7 @@ from unittest import mock
 
 import pytest
 
-from ididi import DependencyGraph
+from ididi import Graph
 from ididi.errors import (
     ABCNotImplementedError,
     AsyncResourceInSyncError,
@@ -41,7 +41,7 @@ def test_import_graphviz_failure():
 # Replace global dag with a fixture
 @pytest.fixture(scope="module")
 def dg():
-    return DependencyGraph()
+    return Graph()
 
 
 class Config:
@@ -80,7 +80,7 @@ def auth_service_factory(database: Database) -> AuthService:
     return AuthService(db=database)
 
 
-def test_dag_resolve(dg: DependencyGraph):
+def test_dag_resolve(dg: Graph):
     @dg.node(reuse=False)
     class UserService:
         def __init__(self, repo: UserRepository, auth: AuthService, name: str = "user"):
@@ -93,20 +93,20 @@ def test_dag_resolve(dg: DependencyGraph):
     assert isinstance(service.auth.db, Database)
 
 
-def test_get_dependency_types(dg: DependencyGraph):
+def test_get_dependency_types(dg: Graph):
     database_dependencies = dg.visitor.get_dependencies(Database)
     assert len(database_dependencies) == 1
     assert Config in database_dependencies
 
 
-def test_get_dependent_types(dg: DependencyGraph):
+def test_get_dependent_types(dg: Graph):
     database_dependents = dg.visitor.get_dependents(Database)
     assert len(database_dependents) == 2
     assert UserRepository in database_dependents
     assert AuthService in database_dependents
 
 
-def test_node_signature_change_after_factory(dg: DependencyGraph):
+def test_node_signature_change_after_factory(dg: Graph):
     class UserService:
         def __init__(
             self,
@@ -133,12 +133,12 @@ def test_node_signature_change_after_factory(dg: DependencyGraph):
     assert len(node.dependencies) == 2
 
 
-def test_top_level_builtin_dependency(dg: DependencyGraph):
+def test_top_level_builtin_dependency(dg: Graph):
     with pytest.raises(TopLevelBulitinTypeError):
         dg.resolve(int)
 
 
-def test_missing_implementation(dg: DependencyGraph):
+def test_missing_implementation(dg: Graph):
     class Repository(ABC):
         def __init__(self):
             pass
@@ -152,7 +152,7 @@ def test_missing_implementation(dg: DependencyGraph):
         dg.resolve(Repository)
 
 
-def test_multiple_implementations(dg: DependencyGraph):
+def test_multiple_implementations(dg: Graph):
     dg.reset(clear_nodes=True)
 
     class Repository(ABC):
@@ -177,7 +177,7 @@ def test_multiple_implementations(dg: DependencyGraph):
     dg.resolve(Repository)
 
 
-def test_multiple_implementations_with_factory(dg: DependencyGraph):
+def test_multiple_implementations_with_factory(dg: Graph):
     class Repository(ABC):
         def __init__(self):
             pass
@@ -207,7 +207,7 @@ def test_multiple_implementations_with_factory(dg: DependencyGraph):
     assert isinstance(repo, Repo1)
 
 
-def test_static_resolve_factory(dg: DependencyGraph):
+def test_static_resolve_factory(dg: Graph):
     class Repository(ABC):
         def __init__(self):
             pass
@@ -237,7 +237,7 @@ def test_static_resolve_factory(dg: DependencyGraph):
     assert Repository in dg.type_registry[Repository]
 
 
-async def test_resource_cleanup(dg: DependencyGraph):
+async def test_resource_cleanup(dg: Graph):
     closed_resources: set[str] = set()
 
     @dg.node
@@ -277,7 +277,7 @@ async def test_resource_cleanup(dg: DependencyGraph):
     assert closed_resources == {"resource1", "resource2"}
 
 
-# def test_node_removal(dg: DependencyGraph):
+# def test_node_removal(dg: Graph):
 #     @dg.node
 #     class Service:
 #         pass
@@ -290,7 +290,7 @@ async def test_resource_cleanup(dg: DependencyGraph):
 #     dg.resolve(Service)
 
 
-def test_graph_reset(dg: DependencyGraph):
+def test_graph_reset(dg: Graph):
     @dg.node
     class Service:
         def __init__(self, name: str = "test"):
@@ -308,7 +308,7 @@ def test_graph_reset(dg: DependencyGraph):
     assert instance1 is not instance2
 
 
-def test_node_removal_cleanup(dg: DependencyGraph):
+def test_node_removal_cleanup(dg: Graph):
     dg.reset(clear_nodes=True)
 
     @dg.node
@@ -333,7 +333,7 @@ def test_node_removal_cleanup(dg: DependencyGraph):
     assert Dependency not in dg.resolved_nodes
 
 
-def test_facwry_override(dg: DependencyGraph):
+def test_facwry_override(dg: Graph):
     @dg.node
     class Service:
         def __init__(self, name: str = "default"):
@@ -361,7 +361,7 @@ def test_facwry_override(dg: DependencyGraph):
     assert service2.name == "overridden"
 
 
-def test_factory_registration(dg: DependencyGraph):
+def test_factory_registration(dg: Graph):
     # First register class
     @dg.node
     class Service:
@@ -387,7 +387,7 @@ def test_factory_registration(dg: DependencyGraph):
     assert service.name == "factory_1", "Factory-created instance should be used"
 
 
-def test_unsupported_annotation(dg: DependencyGraph):
+def test_unsupported_annotation(dg: Graph):
     @dg.node
     class BadService:
         def __init__(self, bad: None):  # object is not a proper annotation
@@ -413,7 +413,7 @@ def test_unsupported_annotation(dg: DependencyGraph):
         dg.resolve(New)
 
 
-def test_dependency_override(dg: DependencyGraph):
+def test_dependency_override(dg: Graph):
     @dg.node
     class Service:
         def __init__(self, name: str = "default"):
@@ -424,7 +424,7 @@ def test_dependency_override(dg: DependencyGraph):
     assert instance.name == "overridden"
 
 
-def test_nested_dependency_override(dg: DependencyGraph):
+def test_nested_dependency_override(dg: Graph):
     @dg.node
     class Inner:
         def __init__(self, value: str = "inner"):
@@ -440,8 +440,8 @@ def test_nested_dependency_override(dg: DependencyGraph):
     assert instance.inner.value == "overridden"
 
 
-def test_abstract_base_resolution(dg: DependencyGraph):
-    dg = DependencyGraph()
+def test_abstract_base_resolution(dg: Graph):
+    dg = Graph()
 
     class AbstractService(ABC):
         @abstractmethod
@@ -458,7 +458,7 @@ def test_abstract_base_resolution(dg: DependencyGraph):
     assert instance.get_name() == "concrete"
 
 
-def test_multiple_dependency_paths(dg: DependencyGraph):
+def test_multiple_dependency_paths(dg: Graph):
     class Shared:
         def __init__(self, value: str = "shared"):
             self.value = value
@@ -484,7 +484,7 @@ def test_multiple_dependency_paths(dg: DependencyGraph):
     assert instance.s1.shared2.value == instance.s2.shared1.value == "shared"
 
 
-def test_type_mapping_cleanup(dg: DependencyGraph):
+def test_type_mapping_cleanup(dg: Graph):
     class Interface(ABC):
         pass
 
@@ -504,9 +504,9 @@ def test_type_mapping_cleanup(dg: DependencyGraph):
 
 
 @pytest.mark.asyncio
-async def test_graph_without_static_resolve(dg: DependencyGraph):
+async def test_graph_without_static_resolve(dg: Graph):
     # This test specifically needs a new dag instance
-    dg = DependencyGraph()
+    dg = Graph()
 
     @dg.node(reuse=False)
     class UserService:
@@ -532,7 +532,7 @@ async def test_graph_without_static_resolve(dg: DependencyGraph):
 
 
 def test_remove_old_node():
-    dg = DependencyGraph()
+    dg = Graph()
 
     class IUser: ...
 
@@ -553,7 +553,7 @@ def test_remove_old_node():
 
 
 def test_resolve_node_without_annotation():
-    dag = DependencyGraph()
+    dag = Graph()
 
     class Config:
         def __init__(self, a):
@@ -580,12 +580,12 @@ class GenericService(ty.Generic[T]):
         self.item = item
 
 
-def test_generic_service_not_supported(dg: DependencyGraph):
+def test_generic_service_not_supported(dg: Graph):
     with pytest.raises(GenericDependencyNotSupportedError):
         dg.resolve(GenericService[str])
 
 
-def test_generic_service_with_default(dg: DependencyGraph):
+def test_generic_service_with_default(dg: Graph):
     class GenericService(ty.Generic[T]):
         def __init__(self, item: T = "5"):
             self.item = item
@@ -597,7 +597,7 @@ def test_generic_service_with_default(dg: DependencyGraph):
     repr(dg)
 
 
-def test_node_config_non_transitive(dg: DependencyGraph):
+def test_node_config_non_transitive(dg: Graph):
     class Base:
         def __init__(self, name: str = "base"): ...
 
@@ -610,7 +610,7 @@ def test_node_config_non_transitive(dg: DependencyGraph):
     assert dg.nodes[Base].config.reuse == True
 
 
-def test_partial_node(dg: DependencyGraph):
+def test_partial_node(dg: Graph):
     class Base:
         def __init__(self, name: str = "base"): ...
 
@@ -632,22 +632,22 @@ def test_partial_node(dg: DependencyGraph):
 
 
 def test_empty_graph_merge():
-    dg1 = DependencyGraph()
-    dg2 = DependencyGraph()
+    dg1 = Graph()
+    dg2 = Graph()
     dg1.merge(dg2)
 
 
 def test_empty_multiple_merge():
-    dg1 = DependencyGraph()
-    dg2 = DependencyGraph()
-    dg3 = DependencyGraph()
+    dg1 = Graph()
+    dg2 = Graph()
+    dg3 = Graph()
     dg1.merge([dg2, dg3])
 
 
 def test_graph_merge_with_error():
-    dg = DependencyGraph()
+    dg = Graph()
 
-    dg2 = DependencyGraph()
+    dg2 = Graph()
 
     with pytest.raises(MergeWithScopeStartedError):
         with dg2.scope():
@@ -658,8 +658,8 @@ def test_graph_static_resolved_should_override():
 
     from .test_data import ComplianceChecker, DatabaseConfig
 
-    dg = DependencyGraph()
-    dg2 = DependencyGraph()
+    dg = Graph()
+    dg2 = Graph()
 
     dg.analyze(ComplianceChecker)
     c = dg.resolve(ComplianceChecker)
@@ -680,8 +680,8 @@ def test_graph_static_resolved_should_not_override():
 
     from .test_data import ComplianceChecker, DatabaseConfig
 
-    dg = DependencyGraph()
-    dg2 = DependencyGraph()
+    dg = Graph()
+    dg2 = Graph()
 
     def checker_factory() -> ComplianceChecker: ...
 
@@ -696,7 +696,7 @@ def test_graph_static_resolved_should_not_override():
 
 
 def test_factory_override_default_value():
-    dg = DependencyGraph()
+    dg = Graph()
 
     class Database: ...
 
@@ -727,7 +727,7 @@ def test_graph_ignore():
         def __init__(self, d: datetime):
             self._d = d
 
-    dg = DependencyGraph(ignore=datetime)
+    dg = Graph(ignore=datetime)
     with pytest.raises(TypeError):
         dg.resolve(Timer)
 
@@ -735,13 +735,13 @@ def test_graph_ignore():
 def test_remove_dependent():
     class Database: ...
 
-    dg = DependencyGraph()
+    dg = Graph()
 
     dg.remove_dependent(Database)
 
 
 def test_remove_dependent_with_factory():
-    dg = DependencyGraph()
+    dg = Graph()
 
     class Service: ...
 
@@ -755,7 +755,7 @@ def test_remove_dependent_with_factory():
 
 
 def test_remove_new_type():
-    dg = DependencyGraph()
+    dg = Graph()
 
     UserId = ty.NewType("UserId", str)
 

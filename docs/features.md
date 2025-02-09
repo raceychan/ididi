@@ -11,9 +11,9 @@ NOTE:
 2. async resource in a sync dependent is not supported, but sync resource in a async dependent is supported.  
 
 ```python
-from ididi import DependencyGraph
+from ididi import Graph
 
-dg = DependencyGraph()
+dg = Graph()
 
 @dg.node
 async def get_db(client: Client) -> ty.AsyncGenerator[DataBase, None]:
@@ -150,8 +150,8 @@ def write_notification(scope: SyncScope, email: str, message=""):
 
 ### Menually register a singleton
 
-If you have an object built without DependencyGraph, yet want it to be injected elsewhere
-use `DependencyGraph.register_singleton`
+If you have an object built without Graph, yet want it to be injected elsewhere
+use `Graph.register_singleton`
 
 ```py
 
@@ -160,7 +160,7 @@ class Singleton:
 
 singleton = Singleton()
 
-dg = DependencyGraph.register_singleton(singleton)
+dg = Graph.register_singleton(singleton)
 
 assert dg.resolve(Singleton) is singleton
 ```
@@ -197,20 +197,20 @@ def test_advanced_cycle_detection():
     """
     DependentNode.resolve_forward_dependency
     """
-    dag = DependencyGraph()
+    dag = Graph()
 
     with pytest.raises(CircularDependencyDetectedError) as exc_info:
         dag.analyze(A)
     assert exc_info.value.cycle_path == [A, B, C, D, A]
 ```
 
-You can call `DependencyGraph.analyze_all` on app start to statically resolve all
+You can call `Graph.analyze_all` on app start to statically resolve all
 your noded classes, and let ididi get ready for resolve them at upcoming calls.
 
 ### Runtime override
 
 ```python
-dg = DependencyGraph()
+dg = Graph()
 
 class Inner:
     def __init__(self, value: str = "inner"):
@@ -232,8 +232,8 @@ assert instance.inner.value == "overridden"
 
 
 ```python
-from ididi import DependencyGraph, Visualizer
-dg = DependencyGraph()
+from ididi import Graph, Visualizer
+dg = Graph()
 
 class ConfigService:
     def __init__(self, env: str = "test"):

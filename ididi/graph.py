@@ -80,6 +80,7 @@ from .utils.typing_utils import P, T
 Stack = TypeVar("Stack", ExitStack, AsyncExitStack)
 ScopeContext = ContextVar[Union["SyncScope", "AsyncScope"]]
 ScopeToken = Token[Union["SyncScope", "AsyncScope"]]
+Resolved = Maybe[dict[str, Any]]
 
 
 def register_dependent(
@@ -185,7 +186,7 @@ class Resolver:
         if resolved_node.is_resource:
             return True
 
-        unsolved_params = resolved_node.unsolved_params(ignore=self._ignore)
+        unsolved_params = resolved_node.unsolved_params()
         contain_resource = any(
             self.should_be_scoped(param_type) for _, param_type in unsolved_params
         )
@@ -250,9 +251,8 @@ class Resolver:
             raise TopLevelBulitinTypeError(dependent_type)
 
         current_path: list[IDependent[T]] = []
-        ignore = (ignore | self._ignore) if ignore else self._ignore
 
-        def dfs(dep: IDependent[T], dignore: GraphIgnore) -> DependentNode[T]:
+        def dfs(dep: IDependent[T]) -> DependentNode[T]:
             # when we register a concrete node we also register its bases to type_registry
             if dep in self._analyzed_nodes:
                 return self._analyzed_nodes[dep]
@@ -266,7 +266,7 @@ class Resolver:
                 return node
 
             current_path.append(dep)
-            for param in node.analyze_unsolved_params(dignore):
+            for param in node.analyze_unsolved_params(ignore):
                 if (param_type := param.param_type) in self._analyzed_nodes:
                     continue
 
@@ -293,7 +293,7 @@ class Resolver:
                     )
 
                 try:
-                    pnode = dfs(param_type, EmptyIgnore)
+                    pnode = dfs(param_type)
                 except UnsolvableNodeError as une:
                     une.add_context(node.dependent, param.name, param.param_type)
                     raise
@@ -305,7 +305,7 @@ class Resolver:
             self._analyzed_nodes[dep] = node
             return node
 
-        return dfs(dependent_type, ignore)
+        return dfs(dependent_type)
 
     def analyze_params(
         self, func: Callable[P, T], config: NodeConfig = DefaultConfig
@@ -316,7 +316,7 @@ class Resolver:
         depends_on_resource: bool = False
         unresolved: list[tuple[str, Callable[..., Any]]] = []
 
-        for name, dep in deps.filter_ignore(self._ignore):
+        for name, dep in deps:
             param_type = dep.param_type
 
             if is_unsolvable_type(param_type):
@@ -407,26 +407,6 @@ class Resolver:
         *args: P.args,
         **overrides: P.kwargs,
     ) -> T:
-        """
-        Resolves a dependent, builds all its dependencies, injects them into its factory, and returns the instance.
-
-        ### Resolve Priority:
-        1. Override: Any dependencies provided via keyword arguments will take priority.
-        2. Factory: If no override is provided, the factory's resolution will be used.
-        3. Default Value: If neither an override nor a factory is available, the default value is used.
-        4. __init__: build dependencies according to the `__init__` method of the dependent type
-
-        ### Example:
-
-        Resolve a dependent with overrides and a specific scope
-
-        ```python
-        instance = dependency_graph.resolve(my_factory, scope=my_scope, my_override=override_value)
-        ```
-
-        ### Notes:
-        - Ensure that any overrides are passed as keyword arguments, not positional.
-        """
         if args:
             raise PositionalOverrideError(args)
 
@@ -434,8 +414,12 @@ class Resolver:
             return resolution
 
         provided_params = frozenset(overrides)
+
+        # we should resolev this in a nested `_dfs` function
+        # where we use a local dict to replace `self.get_resolve_cache``
+        # sub node can be retrived by `self._analyzed_node[dependent]` as well
         node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
-        unsolved_params = node.unsolved_params(self._ignore | provided_params)
+        unsolved_params = node.unsolved_params(provided_params)
 
         params = overrides
         for param_name, param_type in unsolved_params:
@@ -467,7 +451,7 @@ class Resolver:
 
         provided_params = frozenset(overrides)
         node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
-        unsolved_params = node.unsolved_params(self._ignore | provided_params)
+        unsolved_params = node.unsolved_params(provided_params)
 
         params = overrides
         for param_name, param_type in unsolved_params:
@@ -484,7 +468,10 @@ class Resolver:
     def _node(
         self, dependent: INode[P, T], config: NodeConfig = DefaultConfig
     ) -> DependentNode[T]:
-        node = DependentNode[T].from_node(dependent, config=config)
+        merged_config = NodeConfig(
+            reuse=config.reuse, ignore=self._ignore | config.ignore
+        )
+        node = DependentNode[T].from_node(dependent, config=merged_config)
         if node.function_dependent:
             return node
 
@@ -525,7 +512,7 @@ class Resolver:
         #### Register a class:
 
         ```python
-        dg = DependencyGraph()
+        dg = Graph()
 
         @dg.node
         class AuthService: ...
@@ -563,7 +550,7 @@ class Graph(Resolver):
     ---
     ```python
     from typing import AsyncGenerator
-    from ididi import DependencyGraph, use, entry, AsyncResource
+    from ididi import Graph, use, entry, AsyncResource
 
     async def conn_factory(engine: AsyncEngine) -> AsyncGenerator[Repository, None]:
         async with engine.begin() as conn:
@@ -600,7 +587,7 @@ class Graph(Resolver):
         """
         - self_inject:
 
-          - If True, the current instance of the `DependencyGraph` will be injected into any dependency that requires it.
+          - If True, the current instance of the `Graph` will be injected into any dependency that requires it.
 
         - ignore:
 
@@ -611,14 +598,14 @@ class Graph(Resolver):
 
 
         ### Example:
-        - Creating a DependencyGraph with self-injection enabled, ignoring 'str' type dependencies, and allowing partial resolution.
+        - Creating a Graph with self-injection enabled, ignoring 'str' type dependencies, and allowing partial resolution.
 
             ```python
-            graph = DependencyGraph(self_inject=False, ignore=('name', str))
+            graph = Graph(self_inject=False, ignore=('name', str))
             ```
 
         ### Notes:
-        - `self_inject` is useful when you have a dependency that requires current instance of `DependencyGraph` as its dependency.
+        - `self_inject` is useful when you have a dependency that requires current instance of `Graph` as its dependency.
         - `ignore` is a flexible configuration to skip over specific dependencies during resolution.
         """
         config = GraphConfig(self_inject=self_inject, ignore=ignore)
@@ -972,11 +959,14 @@ class ScopeBase(Generic[Stack]):
 
     _resolved_singletons: ResolvedSingletons[Any]
     _registered_singletons: set[type]
+    # from concurrent.futures.thread import ThreadPoolExecutor
+    # _worker_threads: ThreadPoolExecutor(thread_name_prefix='ididi')
 
     def __repr__(self):
         return f"{self.__class__.__name__}(id={self._name})"
 
     def enter_context(self, context: ContextManager[T]) -> T:
+        # await self._worker_thread.submit(self._stack.enter_context, context)
         return self._stack.enter_context(context)
 
     def get_scope(self, name: Hashable) -> Self:
@@ -1039,7 +1029,7 @@ class SyncScope(ScopeBase[ExitStack], Resolver):
 
         if factory_type == "aresource":
             raise AsyncResourceInSyncError(dependent)
-
+        # enter_context_in_thead(self._worker_threads, self._stack, resolved)
         instance = self.enter_context(cast(ContextManager[T], resolved))
         if is_reuse:
             register_dependent(self._resolved_singletons, dependent, instance)
@@ -1209,6 +1199,3 @@ class ScopeManager:
         await cast(AsyncScope, self._scope).__aexit__(exc_type, exc_value, traceback)
         if is_provided(self._token):
             self.scope_ctx.reset(self._token)
-
-
-DependencyGraph = Graph

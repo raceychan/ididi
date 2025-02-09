@@ -3,7 +3,7 @@ import typing as ty
 
 import pytest
 
-from ididi import DependencyGraph
+from ididi import Graph
 from ididi.errors import (
     ABCNotImplementedError,
     ForwardReferenceNotFoundError,
@@ -11,7 +11,7 @@ from ididi.errors import (
     UnsolvableDependencyError,
 )
 
-dg = DependencyGraph()
+dg = Graph()
 
 
 def test_protocols():
@@ -86,7 +86,7 @@ def test_forward_ref_in_local_scope():
     """
     Test that defining forward reference in local scope raises ForwardReferenceNotFoundError
     """
-    dag = DependencyGraph()
+    dag = Graph()
 
     class ServiceA:
         def __init__(self, b: "ServiceB"):
@@ -190,7 +190,7 @@ def test_not_supported_type():
     dg.resolve(AnyService)
 
 
-from ididi import AsyncResource, DependencyGraph, use
+from ididi import AsyncResource, Graph, use
 
 
 async def test_resource_across_scope():
@@ -219,7 +219,7 @@ async def test_resource_across_scope():
         def __init__(self, conn: Connection = use(conn_factory)):
             self._conn = conn
 
-    dg = DependencyGraph()
+    dg = Graph()
 
     async with dg.scope() as scope1:
         s1 = await scope1.resolve(Service)

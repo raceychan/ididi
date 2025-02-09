@@ -4,7 +4,6 @@ from typing import (
     AsyncGenerator,
     Awaitable,
     Callable,
-    Coroutine,
     Generator,
     Iterable,
     Protocol,

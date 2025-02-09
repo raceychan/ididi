@@ -3,11 +3,11 @@ import typing as ty
 from fastapi.routing import APIRoute, APIRouter
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from ididi import DependencyGraph
+from ididi import Graph
 
 
 class GraphedScope(ty.TypedDict):
-    dg: DependencyGraph
+    dg: Graph
 
 
 # ========== global state =========
@@ -15,7 +15,7 @@ class GraphedScope(ty.TypedDict):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI | None = None) -> ty.AsyncIterator[GraphedScope]:
-    async with DependencyGraph() as dg:
+    async with Graph() as dg:
         yield {"dg": dg}
 
 
@@ -36,7 +36,7 @@ class UserRoute(APIRoute):
 
         async def custom_route_handler(request: Request) -> Response:
 
-            dg = DependencyGraph()
+            dg = Graph()
             request.scope["dg"] = dg
 
             async with dg.scope() as user_scope:
@@ -53,7 +53,7 @@ user_router = APIRouter(route_class=UserRoute)
 
 
 class GraphedMiddleware:
-    def __init__(self, app, dg: DependencyGraph):
+    def __init__(self, app, dg: Graph):
         self.app = app
         self.dg = dg
 

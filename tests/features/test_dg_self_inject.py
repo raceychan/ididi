@@ -1,4 +1,4 @@
-from ididi import DependencyGraph, Resource
+from ididi import Graph, Resource
 
 # from ididi._itypes import Resource
 
@@ -17,17 +17,17 @@ def get_db() -> Resource[DataBase]:
 class UserService: ...
 
 
-def get_service(dg: DependencyGraph) -> UserService:
+def get_service(dg: Graph) -> UserService:
     return dg
 
 
 def test_dg_self_inject():
-    dg = DependencyGraph()
+    dg = Graph()
     assert dg is dg.resolve(get_service)
 
 
 def test_dg_register_dependent():
-    dg = DependencyGraph()
+    dg = Graph()
     service = UserService()
 
     dg.register_singleton(service)
@@ -35,7 +35,7 @@ def test_dg_register_dependent():
 
 
 def test_dg_register_resource_dependent():
-    dg = DependencyGraph()
+    dg = Graph()
     db = DataBase()
     dg.node(get_db)
     with dg.scope() as scope:

@@ -32,7 +32,6 @@ from ._type_resolve import (
     is_class_or_method,
     is_class_with_empty_init,
     is_ctxmgr_cls,
-    is_function,
     is_unsolvable_type,
     isasyncgenfunction,
     isgeneratorfunction,
@@ -210,6 +209,9 @@ class Dependencies:
     ):
         self._deps = deps
         self._sig = sig
+
+    def __bool__(self) -> bool:
+        return bool(self._deps)
 
     def __iter__(self) -> Iterator[tuple[str, Dependency[Any]]]:
         return iter(self._deps.items())
@@ -411,11 +413,13 @@ class DependentNode(Generic[T]):
         return self.factory_type in ("resource", "aresource")
 
     def analyze_unsolved_params(
-        self, ignore: NodeIgnore
+        self, ignore: Union[NodeIgnore, None] = None
     ) -> Generator[Dependency[T], None, None]:
         "params that needs to be statically resolved"
-
-        for param_name, param in self.dependencies.filter_ignore(ignore):
+        filtered = (
+            self.dependencies.filter_ignore(ignore) if ignore else self.dependencies
+        )
+        for param_name, param in filtered:
             param_type = cast(Union[IDependent[T], ForwardRef], param.param_type)
             if isinstance(param_type, ForwardRef):
                 new_type = resolve_forwardref(self.dependent, param_type)
@@ -425,10 +429,15 @@ class DependentNode(Generic[T]):
                 self.dependencies.update(param_name, param)
 
     @lru_cache(CacheMax)
-    def unsolved_params(self, ignore: NodeIgnore) -> list[tuple[str, IDependent[T]]]:
+    def unsolved_params(
+        self, ignore: Union[NodeIgnore, None] = None
+    ) -> list[tuple[str, IDependent[T]]]:
         "yield dependencies that needs to be resolved"
         unsolved_params: list[tuple[str, IDependent[T]]] = []
-        for param_name, param in self.dependencies.filter_ignore(ignore=ignore):
+        filtered = (
+            self.dependencies.filter_ignore(ignore) if ignore else self.dependencies
+        )
+        for param_name, param in filtered:
             param_type: IDependent[T] = param.param_type
             if is_provided(param.default) and is_unsolvable_type(param_type):
                 continue

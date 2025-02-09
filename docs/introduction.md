@@ -18,7 +18,7 @@
 
 `entry`: a special type of node, where it has no dependents and its factory is itself.
 
-`dg`: an instance of the DependencyGraph class.
+`dg`: an instance of the Graph class.
 
 ## What and why
 

@@ -2,10 +2,10 @@ import sys
 
 import pytest
 
-from ididi import DependencyGraph
+from ididi import Graph
 from ididi.errors import MissingAnnotationError
 
-dg = DependencyGraph()
+dg = Graph()
 
 
 class Config:

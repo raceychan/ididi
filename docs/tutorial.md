@@ -9,7 +9,7 @@ In most cases, you will only need these two primitive method for buliding your d
 you can either resolve a dependent class
 
 ```py
-dg = DependencyGraph()
+dg = Graph()
 
 dg.resolve(UserService)
 ```
@@ -32,7 +32,7 @@ def get_user_service() -> UserService:
 
 - `dg.scope`
 
-scope is like DependencyGraph, but for resouces.
+scope is like Graph, but for resouces.
 you can pass them around as you need,
 
 ```py
@@ -45,10 +45,10 @@ async with dg.scope() as scope:
 
 ```python title="app.py"
 from fastapi import FastAPI
-from ididi import DependencyGraph
+from ididi import Graph
 
 app = FastAPI()
-dg = DependencyGraph()
+dg = Graph()
 
 def auth_service_factory() -> AuthService:
     async with dg.scope() as scope
@@ -61,12 +61,12 @@ def get_service(service: Service):
     return service
 ```
 
->[!NOTE] DependencyGraph does NOT have to be a global singleton
+>[!NOTE] Graph does NOT have to be a global singleton
 
-Although we use `dg` extensively to represent an instance of DependencyGraph for the convenience of explaination,
+Although we use `dg` extensively to represent an instance of Graph for the convenience of explaination,
 it **DOES NOT** mean it has to be a *global singleton*. These are some examples you might inject it into your fastapi app at different levels.
 
-### DependencyGraph as an app-level instance
+### Graph as an app-level instance
 
 ```py
 import typing as ty
@@ -74,16 +74,16 @@ import typing as ty
 from fastapi.routing import APIRoute, APIRouter
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from ididi import DependencyGraph
+from ididi import Graph
 
 
 class GraphedScope(ty.TypedDict):
-    dg: DependencyGraph
+    dg: Graph
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI | None = None) -> ty.AsyncIterator[GraphedScope]:
-    async with DependencyGraph() as dg:
+    async with Graph() as dg:
         yield {"dg": dg}
 
 
@@ -96,7 +96,7 @@ async def signup_user(request: Request):
 
 ```
 
-#### Injecting DependencyGraph at route level
+#### Injecting Graph at route level
 
 ```py
 class UserRoute(APIRoute):
@@ -105,7 +105,7 @@ class UserRoute(APIRoute):
 
         async def custom_route_handler(request: Request) -> Response:
 
-            dg = DependencyGraph()
+            dg = Graph()
             request.scope["dg"] = dg
 
             async with dg.scope() as user_scope:
@@ -117,11 +117,11 @@ class UserRoute(APIRoute):
 user_router = APIRouter(route_class=UserRoute)
 ```
 
-#### Injecting DependencyGraph at request level
+#### Injecting Graph at request level
 
 ```py
 class GraphedMiddleware:
-    def __init__(self, app, dg: DependencyGraph):
+    def __init__(self, app, dg: Graph):
         self.app = app
         self.dg = dg
 
@@ -136,7 +136,7 @@ class GraphedMiddleware:
         await self.app(scope, receive, send)
 
 
-app.add_middleware(GraphedMiddleware, dg=DependencyGraph)
+app.add_middleware(GraphedMiddleware, dg=Graph)
 ```
 
 
@@ -200,4 +200,4 @@ def storage_factory(config: Config) -> Storage:
 
 > This works for ABC, typing.Protocol, as well as plain classes.
 
-**`DependencyGraph.node` accepts a wide arrange of types, such as dependent class, sync/async facotry, sync/async resource factory, with typing support.**
+**`Graph.node` accepts a wide arrange of types, such as dependent class, sync/async facotry, sync/async resource factory, with typing support.**

@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from ididi import DependencyGraph, entry, resolve
+from ididi import Graph, entry, resolve
 
 
 class Config:
@@ -110,7 +110,7 @@ async def test_entry_with_ignore():
 
 
 async def test_dg_entry_with_override():
-    dg = DependencyGraph()
+    dg = Graph()
 
     @dg.entry(ignore=CreateUser)
     async def func4(
@@ -139,7 +139,7 @@ class Session:
 
 
 async def test_dg_entry_with_acm():
-    dg = DependencyGraph()
+    dg = Graph()
 
     @dg.entry(ignore=CreateUser)
     async def func4(
@@ -157,7 +157,7 @@ async def test_dg_entry_with_acm():
 
 
 def test_sync_entry_with_override():
-    dg = DependencyGraph()
+    dg = Graph()
 
     @dg.entry(ignore=CreateUser)
     def func4(
@@ -175,7 +175,7 @@ def test_sync_entry_with_override():
 
 
 def test_entry_reuse():
-    dg = DependencyGraph()
+    dg = Graph()
 
     rounds = 100
     dg.reset()
@@ -206,7 +206,7 @@ def test_entry_reuse():
 
 
 async def test_entry_replace():
-    dg = DependencyGraph()
+    dg = Graph()
 
     async def create_user(
         user_name: str, user_email: str, service: UserService
@@ -231,7 +231,7 @@ async def test_entry_replace():
 
 
 async def test_entry_override_with_factory():
-    dg = DependencyGraph()
+    dg = Graph()
 
     @dg.entry
     async def create_user(
@@ -250,7 +250,7 @@ async def test_entry_override_with_factory():
 
 
 async def test_entry_override_with_override():
-    dg = DependencyGraph()
+    dg = Graph()
 
     @dg.entry
     async def create_user(

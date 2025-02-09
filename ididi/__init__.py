@@ -25,7 +25,6 @@ from ._node import use as use
 from .api import entry as entry
 from .api import resolve as resolve
 from .graph import AsyncScope as AsyncScope
-from .graph import DependencyGraph as DependencyGraph
 from .graph import Graph as Graph
 from .graph import SyncScope as SyncScope
 from .interfaces import AsyncResource as AsyncResource

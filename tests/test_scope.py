@@ -2,7 +2,7 @@ import typing as ty
 
 import pytest
 
-from ididi import AsyncResource, DependencyGraph
+from ididi import AsyncResource, Graph
 from ididi.errors import (
     AsyncResourceInSyncError,
     OutOfScopeError,
@@ -114,7 +114,7 @@ def get_db(client: Client) -> ty.Generator[DataBase, None, None]:
 
 
 async def test_async_gen_factory():
-    dg = DependencyGraph()
+    dg = Graph()
 
     dg.node(async_get_client)
     dg.node(async_get_db)
@@ -128,7 +128,7 @@ async def test_async_gen_factory():
 
 
 def test_gen_factory():
-    dg = DependencyGraph()
+    dg = Graph()
 
     dg.node(get_client)
     dg.node(get_db)
@@ -142,7 +142,7 @@ def test_gen_factory():
 
 
 def test_sync_func_requires_async_factory():
-    dg = DependencyGraph()
+    dg = Graph()
 
     class AsyncResource(AsyncResourceBase): ...
 
@@ -161,7 +161,7 @@ def test_sync_func_requires_async_factory():
 
 
 async def test_scope_repeat_resolve():
-    dg = DependencyGraph()
+    dg = Graph()
 
     class Resource(ResourceBase):
         def __init__(self):
@@ -195,7 +195,7 @@ async def test_scope_repeat_resolve():
 
 
 async def test_resource_shared_within_scope():
-    dg = DependencyGraph()
+    dg = Graph()
 
     dg.node(get_db)
     dg.node(get_client)
@@ -223,7 +223,7 @@ async def test_resource_shared_within_scope():
 
 
 async def test_nested_scope():
-    dg = DependencyGraph()
+    dg = Graph()
 
     class Resource(ResourceBase):
         def __init__(self):
@@ -262,7 +262,7 @@ async def test_nested_scope():
 
 
 async def test_context_scope():
-    dg = DependencyGraph()
+    dg = Graph()
 
     class Resource(ResourceBase):
         def __init__(self):
@@ -316,7 +316,7 @@ async def test_context_scope():
 
 
 def test_non_reuse_resource():
-    dg = DependencyGraph()
+    dg = Graph()
 
     class Resource(ResourceBase):
         def __init__(self):
@@ -342,7 +342,7 @@ def test_non_reuse_resource():
 
 
 def test_nested_scope_with_context_scope():
-    dg = DependencyGraph()
+    dg = Graph()
 
     with dg.scope() as dg1:
         dg1.__enter__()
@@ -355,7 +355,7 @@ def test_nested_scope_with_context_scope():
 
 
 async def test_async_nested_scope_with_context_scope():
-    dg = DependencyGraph()
+    dg = Graph()
 
     class Normal:
         def __init__(self, name: str = "normal"):
@@ -396,7 +396,7 @@ async def test_async_nested_scope_with_context_scope():
 
 async def test_db_exec():
 
-    dg = DependencyGraph()
+    dg = Graph()
     dg.node(async_get_client)
     dg.node(async_get_db)
 
@@ -411,7 +411,7 @@ async def test_db_exec():
 
 @pytest.mark.asyncio
 async def test_scope_different_across_context():
-    dg = DependencyGraph()
+    dg = Graph()
 
     class Normal:
         def __init__(self, name: str = "normal"):
@@ -449,16 +449,16 @@ async def test_scope_different_across_context():
 
 
 async def test_use_scope_create_on_miss():
-    dg = DependencyGraph()
+    dg = Graph()
 
     dg.use_scope(create_on_miss=True)
 
 
 async def test_share_single_pattern():
-    dg = DependencyGraph()
+    dg = Graph()
 
     with dg.scope() as scope:
-        g = scope.resolve(DependencyGraph)
+        g = scope.resolve(Graph)
 
         assert g is dg
 

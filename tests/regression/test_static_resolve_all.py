@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from ididi import DependencyGraph
+from ididi import Graph
 from ididi.errors import TopLevelBulitinTypeError, UnsolvableReturnTypeError
 
 
@@ -43,7 +43,7 @@ class UserService:
 
 
 def test_static_resolve_all():
-    dg = DependencyGraph()
+    dg = Graph()
     dg.node(UserService)
     with pytest.raises(UnsolvableReturnTypeError):
         dg.node(update_user)
@@ -53,7 +53,7 @@ def test_static_resolve_all():
 
 
 def test_dg_node_builtin():
-    dg = DependencyGraph()
+    dg = Graph()
 
     with pytest.raises(TopLevelBulitinTypeError):
         dg.node(int)

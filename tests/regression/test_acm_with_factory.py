@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 
 import pytest
 
-from ididi import AsyncResource, DependencyGraph
+from ididi import AsyncResource, Graph
 from ididi.errors import ResourceOutsideScopeError
 
 
@@ -18,14 +18,14 @@ class ACM:
 
 
 async def test_resolve_acm():
-    dg = DependencyGraph()
+    dg = Graph()
 
     with pytest.raises(ResourceOutsideScopeError):
         acm = await dg.aresolve(ACM)
 
 
 async def test_resolve_with_factory():
-    dg = DependencyGraph()
+    dg = Graph()
 
     async def acm_factory() -> ACM:
         return ACM()
@@ -53,7 +53,7 @@ async def test_user_defined_acm():
         acm = ACM()
         yield acm
 
-    dg = DependencyGraph()
+    dg = Graph()
     dg.analyze(acm_factory)
     acm_node = dg.nodes[ACM]
     assert acm_node.factory is acm_factory

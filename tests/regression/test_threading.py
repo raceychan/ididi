@@ -2,7 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from ididi import DependencyGraph
+from ididi import Graph
 
 
 class Config:
@@ -27,7 +27,7 @@ class AuthService:
 
 @pytest.fixture(scope="function")
 def dg():
-    return DependencyGraph()
+    return Graph()
 
 
 @pytest.fixture
@@ -40,13 +40,13 @@ def pool(max_workers: int):
     return ThreadPoolExecutor(max_workers)
 
 
-def test_repeat_resolve(dg: DependencyGraph):
+def test_repeat_resolve(dg: Graph):
     instances: list[object] = []
 
     dg.node(reuse=False)(AuthService)
     dg.analyze(AuthService)
 
-    def resolve(dg: DependencyGraph):
+    def resolve(dg: Graph):
         obj = dg.resolve(AuthService)
         instances.append(id(obj))
         return obj
@@ -57,7 +57,7 @@ def test_repeat_resolve(dg: DependencyGraph):
 
 
 def test_threading_resolve_non_reuse(
-    dg: DependencyGraph, pool: ThreadPoolExecutor, max_workers: int
+    dg: Graph, pool: ThreadPoolExecutor, max_workers: int
 ):
 
     # Create a thread pool executor
@@ -66,7 +66,7 @@ def test_threading_resolve_non_reuse(
     dg.node(reuse=False)(AuthService)
     dg.analyze(AuthService)
 
-    def resolve(dg: DependencyGraph):
+    def resolve(dg: Graph):
         obj = dg.resolve(AuthService)
         results.append(obj)
         return id(obj)
@@ -81,7 +81,7 @@ def test_threading_resolve_non_reuse(
 
 
 def test_threading_resolve_reuse(
-    dg: DependencyGraph, pool: ThreadPoolExecutor, max_workers: int
+    dg: Graph, pool: ThreadPoolExecutor, max_workers: int
 ):
 
     # Create a thread pool executor
@@ -89,7 +89,7 @@ def test_threading_resolve_reuse(
 
     dg.node(reuse=True)(AuthService)
 
-    def resolve(dg: DependencyGraph):
+    def resolve(dg: Graph):
         return id(dg.resolve(AuthService))
 
     with pool as executor:

@@ -3,7 +3,7 @@ from time import perf_counter
 
 import pytest
 
-from ididi import DependencyGraph
+from ididi import Graph
 
 from .test_data import CLASSES, UserService, user_service_factory
 
@@ -17,12 +17,12 @@ def dependents() -> ty.Sequence[type]:
 
 
 @pytest.fixture(scope="module")
-def dg() -> DependencyGraph:
-    return DependencyGraph()
+def dg() -> Graph:
+    return Graph()
 
 
 @pytest.mark.benchmark
-def test_register(dg: DependencyGraph, dependents: ty.Sequence[type]):
+def test_register(dg: Graph, dependents: ty.Sequence[type]):
     pre = perf_counter()
     for dep in dependents:
         dg.node(dep)
@@ -32,7 +32,7 @@ def test_register(dg: DependencyGraph, dependents: ty.Sequence[type]):
 
 
 @pytest.mark.benchmark
-def test_static_resolve(dg: DependencyGraph):
+def test_static_resolve(dg: Graph):
     pre = perf_counter()
     dg.analyze_nodes()
     aft = perf_counter()
@@ -41,7 +41,7 @@ def test_static_resolve(dg: DependencyGraph):
 
 
 @pytest.mark.benchmark
-def test_resolve_instances(dg: DependencyGraph, dependents: list[type]):
+def test_resolve_instances(dg: Graph, dependents: list[type]):
     total = 0
 
     for _ in range(ROUNDS):
@@ -60,7 +60,7 @@ def test_resolve_instances(dg: DependencyGraph, dependents: list[type]):
 
 
 @pytest.mark.benchmark
-def test_entry(dg: DependencyGraph, dependents: list[type]):
+def test_entry(dg: Graph, dependents: list[type]):
     rounds = ROUNDS * 1
     dg.reset(clear_nodes=True)
 

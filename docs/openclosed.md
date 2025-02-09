@@ -18,35 +18,35 @@ In short: don't modify existing software entiies, add new software entities with
 
 Example:
 
-In the core of my lib ididi, is a class `DependencyGraph`, where user use it likethis
+In the core of my lib ididi, is a class `Graph`, where user use it likethis
 
 `factory.py`
 
 ```python
-from ididi import DependencyGraph
+from ididi import Graph
 
-dg = DependencyGraph()
+dg = Graph()
 ```
 
-Since users are now dependent on DependencyGraph, it is considered as `closed`.
-We should no longer modify the existing interface of `DependencyGraph` that as it might create breaking changes.
+Since users are now dependent on Graph, it is considered as `closed`.
+We should no longer modify the existing interface of `Graph` that as it might create breaking changes.
 
 e.g.
 
 ```python
-class DependencyGraph:
+class Graph:
     def __init__(self, name: str): ...
 
 
     def get_name(self) -> str: return self.name
 ```
 
-Now this breaks the client code that calls `DependencyGraph()`, since it now requires a `name` parameter.
+Now this breaks the client code that calls `Graph()`, since it now requires a `name` parameter.
 
-what we should do instead, it create a new subclass inherit from `DependencyGraph`, with changes needed.
+what we should do instead, it create a new subclass inherit from `Graph`, with changes needed.
 
 ```python
-class NamedGraph(DependencyGraph):
+class NamedGraph(Graph):
     def __init__(self, name: str): ...
 
     def get_name(self) -> str: return self.name
@@ -62,6 +62,6 @@ During the 1990s, the open–closed principle became popularly redefined to refe
 In contrast to Meyer's usage, this definition advocates inheritance from abstract base classes. Interface specifications can be reused through inheritance but implementation need not be. The existing interface is closed to modifications and new implementations must, at a minimum, implement that interface.
 
 ```python
-class AbstractDependencyGraph:
+class AbstractGraph:
     def get_name(self) -> str: ...
 ```

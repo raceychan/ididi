@@ -2,7 +2,7 @@
 
 ididi is very efficient and performant, with average time complexity of O(n)
 
-#### `DependencyGraph.statical_resolve` (type analysis on each class, can be done at import time)
+#### `Graph.statical_resolve` (type analysis on each class, can be done at import time)
 
 Time Complexity: O(n) - O(n**2)
 
@@ -16,7 +16,7 @@ As a reference:
 
 tests/test_benchmark.py 0.003801 seoncds to statically resolve 122 classes
 
-#### `DependencyGraph.resolve` (inject dependencies and build the dependent instance)
+#### `Graph.resolve` (inject dependencies and build the dependent instance)
 
 Time Complexity: O(n)
 

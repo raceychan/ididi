@@ -1,11 +1,11 @@
 import typing as ty
 
-from ididi import DependencyGraph
+from ididi import Graph
 
 # import pytest
 
 
-dg = DependencyGraph()
+dg = Graph()
 
 
 @dg.node

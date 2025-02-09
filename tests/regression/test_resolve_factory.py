@@ -2,7 +2,7 @@ import typing as ty
 
 import pytest
 
-from ididi import DependencyGraph
+from ididi import Graph
 
 
 def test_graph_resolve_factory():
@@ -15,7 +15,7 @@ def test_graph_resolve_factory():
         u = User(1, "test")
         yield u
 
-    dg = DependencyGraph()
+    dg = Graph()
 
     dg.analyze(user_factory)
     with dg.scope() as scope:
@@ -27,7 +27,7 @@ def test_graph_resolve_factory():
 
 @pytest.mark.asyncio
 async def test_graph_resolve_complex_factory():
-    dg = DependencyGraph()
+    dg = Graph()
 
     class User:
         def __init__(self, age: int, address: str):

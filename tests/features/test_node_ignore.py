@@ -1,6 +1,6 @@
 import pytest
 
-from ididi import DependencyGraph, Ignore
+from ididi import Graph, Ignore
 from ididi.errors import UnsolvableDependencyError
 
 
@@ -11,14 +11,14 @@ class IgnoreNode:
 
 
 def test_direct_resolve_fail():
-    dg = DependencyGraph()
+    dg = Graph()
     dg.node(IgnoreNode)
     with pytest.raises(UnsolvableDependencyError):
         dg.analyze(IgnoreNode)
 
 
 def test_resolve_fail_with_partial_ignore():
-    dg = DependencyGraph()
+    dg = Graph()
 
     dg.node(ignore=("name",))(IgnoreNode)
     with pytest.raises(UnsolvableDependencyError):
@@ -26,13 +26,13 @@ def test_resolve_fail_with_partial_ignore():
 
 
 def test_resolve_with_ignore():
-    dg = DependencyGraph()
+    dg = Graph()
     dg.node(ignore=("name", int))(IgnoreNode)
     dg.analyze(IgnoreNode)
 
 
 def test_resolve_without_ignore():
-    dg = DependencyGraph()
+    dg = Graph()
     dg.node(ignore=("name", int))(IgnoreNode)
     with pytest.raises(TypeError):
         dg.resolve(IgnoreNode)
@@ -43,7 +43,7 @@ def test_resolve_without_ignore():
 
 
 def test_resolve_with_positinoal_ignore():
-    dg = DependencyGraph()
+    dg = Graph()
     dg.node(ignore=(0, "age"))(IgnoreNode)
     assert len(dg.nodes[IgnoreNode].dependencies) == 0
 
@@ -52,7 +52,7 @@ def test_resolve_with_positinoal_ignore():
 
 
 def test_ignore_dependences():
-    dg = DependencyGraph()
+    dg = Graph()
 
     class User:
         def __init__(self, name: Ignore[str]): ...

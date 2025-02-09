@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Annotated
 
-from ididi import DependencyGraph, entry, use
+from ididi import Graph, entry, use
 from tests.test_data import UserService
 
 
@@ -51,7 +51,7 @@ def test_resolve_timer():
         def __init__(self, time: UTC_DATETIME):
             self.time = time
 
-    dg = DependencyGraph()
+    dg = Graph()
 
     dg.analyze(Timer)
     assert dg.nodes[datetime].factory is utc_factory
@@ -65,7 +65,7 @@ def test_plain_annotated():
         def __init__(self, time: Annotated[datetime, "aloha"]):
             self._time = time
 
-    dg = DependencyGraph()
+    dg = Graph()
     dg.analyze(Clock)
 
 
@@ -95,7 +95,7 @@ class C:
 
 
 def test_nested_inject():
-    dg = DependencyGraph()
+    dg = Graph()
     cream = dg.resolve(C)
 
     assert cream.berry.age == 5
@@ -104,12 +104,12 @@ def test_nested_inject():
 
 
 def test_self_inject():
-    dg = DependencyGraph()
+    dg = Graph()
 
-    def user_factory(dg: DependencyGraph) -> DependencyGraph:
+    def user_factory(dg: Graph) -> Graph:
         return dg
 
     g = dg.resolve(user_factory)
     assert g is dg
 
-    dg.remove_singleton(DependencyGraph)
+    dg.remove_singleton(Graph)

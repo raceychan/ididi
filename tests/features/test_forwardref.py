@@ -1,8 +1,8 @@
 import pytest
 
-from ididi.graph import DependencyGraph
+from ididi.graph import Graph
 
-dag = DependencyGraph()
+dag = Graph()
 
 
 class ServiceA:

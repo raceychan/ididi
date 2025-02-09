@@ -33,12 +33,27 @@ pip install ididi[graphviz]
 ```
 
 ## Features
+- **Powerful**: Ididi does what alternatives do, and also provides features that others don't.
 - **Performant**: almost as fast as hard-coded factories, one of the fastest dependency injection framework available.
 - **Noninvasive**: No / minial changes to your existing code
 - **Smart**: inject dependency based on type hints, with strong support to `typing` module.
-- **Powerful**: Ididi does what others do, and also provides features that others don't.
 - **Correct**, strictly typed, well-organized exceptions, well-formatted and detail-rich error messages
 
+### TypingSupport
+
+ididi has strong support to `typing` module, includes:
+
+- TypedDict
+- Unpack
+- NewType
+- Annotated
+- Literal
+- Optional
+- Union
+
+...and more.
+
+Check out `tests/features/test_typing_support.py` for examples.
 
 ## Usage
 
@@ -139,7 +154,7 @@ class Clock:
 
 ### Function dependency
 
-Declear a function is dependency using `Ignore` to annotate its return type
+Declear a function as a dependency by using `Ignore` to annotate its return type.
 
 ```python
 @dataclass
@@ -151,18 +166,22 @@ def get_user(config: Config) -> Ignore[User]:
     assert isinstance(config, Config)
     return User("user", "admin")
 
-
 def validate_admin(
-    user: Annotated[User, get_user], service: UserService
+    user: Annotated[User, use(get_user)], service: UserService
 ) -> Ignore[str]:
     assert user.role == "admin"
     assert isinstance(service, UserService)
     return "ok"
 
+class Route:
+    def __init__(self, validte_permission: Annotated[str, use(validate_admin)]):
+        assert validte_permission == "ok"
+
 assert dg.resolve(validate_admin) == "ok"
+assert isinstance(dg.resolve(Route), Route)
 ```
 
-Note that since `get_user` returns `Ignore[User]` instead of `User`, it won't be used as factory to resolve `User`.
+Since `get_user` returns `Ignore[User]` instead of `User`, it won't be used as factory to resolve `User`.
 
 ### Dependency factory 
 
@@ -190,21 +209,6 @@ assert user.created_at.tzinfo == timezone.utc
 
 > [!TIP]
 > **`Graph.node` accepts a wide arrange of types, such as dependent class, sync/async facotry, sync/async resource factory, with typing support.**
-
-### TypingSupport
-
-ididi has strong support to `typing` module, includes:
-
-- Optional
-- Union
-- Annotated
-- Literal
-- NewType
-- TypedDict
-
-...and more.
-
-Check out `tests/features/test_typing_support.py` for examples.
 
 ### Scope
 

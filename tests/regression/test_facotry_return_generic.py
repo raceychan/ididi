@@ -2,14 +2,14 @@ from typing import Generic, TypeVar
 
 import pytest
 
-from ididi import DependencyGraph, Ignore
+from ididi import Graph, Ignore
 from ididi.errors import (
     ForwardReferenceNotFoundError,
     UnsolvableDependencyError,
     UnsolvableReturnTypeError,
 )
 
-dg = DependencyGraph()
+dg = Graph()
 # Define a generic type variable
 T = TypeVar("T")
 
@@ -75,7 +75,7 @@ def animal_factory(animal_type: str) -> Animal[str]:
 
 
 def test_direct_resolve_with_override():
-    dg = DependencyGraph()
+    dg = Graph()
     # this should not raise ididi.errors.UnsolvableDependencyError
     # since animal_type is provided, we should not care about resolvability
     with pytest.raises(UnsolvableDependencyError):

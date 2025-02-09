@@ -31,7 +31,7 @@ class Visualizer:
         node_attr: dict[str, str] = {"color": "black"},
         edge_attr: dict[str, str] = {"color": "black"},
     ) -> "Visualizer":
-        """Converting DependencyGraph to Graphviz visualization
+        """Converting Graph to Graphviz visualization
 
         Args:
             node_attr (dict[str, str], optional): Node attributes. Defaults to {"color": "black"}.

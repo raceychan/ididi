@@ -37,9 +37,9 @@ def validate_admin(
     return "ok"
 
 
-class Router:
-    def __init__(self, asd: Annotated[str, use(validate_admin)]):
-        assert asd == "ok"
+class Route:
+    def __init__(self, validte_permission: Annotated[str, use(validate_admin)]):
+        assert validte_permission == "ok"
 
 
 async def test_resolve_function():
@@ -59,4 +59,4 @@ def test_dg_resolve_params():
 def test_dg_resolve_cls_depends_on_function():
     dg = Graph()
     with dg.scope() as scope:
-        assert isinstance(scope.resolve(Router), Router)
+        assert isinstance(scope.resolve(Route), Route)

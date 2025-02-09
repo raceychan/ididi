@@ -1,6 +1,6 @@
-from ididi import DependencyGraph, use
+from ididi import Graph, use
 
-dg = DependencyGraph()
+dg = Graph()
 
 
 class Config:
@@ -9,7 +9,7 @@ class Config:
 
 
 def test_config_eq():
-    ng = DependencyGraph()
+    ng = Graph()
     ng.node(Config)
     c1 = ng.nodes[Config].config
     ng.remove_dependent(Config)
@@ -24,7 +24,7 @@ def test_remove_annotated():
 
     def config_factory() -> Config: ...
 
-    dg = DependencyGraph()
+    dg = Graph()
     dg.node(config_factory)
     dg.remove_dependent(use(config_factory))
 

@@ -1,9 +1,9 @@
 import pytest
 
 from ididi.errors import ResourceOutsideScopeError
-from ididi.graph import DependencyGraph
+from ididi.graph import Graph
 
-dag = DependencyGraph()
+dag = Graph()
 
 
 class ArbitraryResource:

@@ -3,11 +3,11 @@ import typing as ty
 
 import pytest
 
-from ididi import DependencyGraph
+from ididi import Graph
 
 
 def test_subclass_of_protocol():
-    dg = DependencyGraph()
+    dg = Graph()
 
     class Uow: ...
 
@@ -30,7 +30,7 @@ def test_subclass_of_protocol():
 
 
 def test_double_protocol():
-    dg = DependencyGraph()
+    dg = Graph()
 
     class UserRepo(ty.Protocol): ...
 
@@ -54,7 +54,7 @@ def test_double_protocol():
         session = scope.resolve(SessionApp)
         assert user.repo is session.repo
 
-    dg = DependencyGraph()
+    dg = Graph()
     dg.node(BothRepo)
     user = dg.resolve(UserApp)
     session = dg.resolve(SessionApp)

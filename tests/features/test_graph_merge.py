@@ -1,4 +1,4 @@
-from ididi import DependencyGraph
+from ididi import Graph
 from tests.features.services import UserService
 
 
@@ -7,8 +7,8 @@ def service_factory() -> UserService:
 
 
 def test_graph_merge():
-    dg1 = DependencyGraph()
-    dg2 = DependencyGraph()
+    dg1 = Graph()
+    dg2 = Graph()
 
     dg1.node(service_factory)
     dg2.node(UserService)
