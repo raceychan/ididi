@@ -1024,23 +1024,24 @@ Improvements:
 
 Features:
 
-- using threadpool in scoped sync function.
+- `Graph` now receives `workers: concurrent.futures.ThreadPoolExecutor` in constructor
+
+- send entering and exiting of `contextmanager` in a diffrent thread when using `AsyncScope`, to avoid blocking.
 
 ```python
-class SyncScope:
-    def enter_context(self):
-        self._thread_pool.execute(self.statck.enter_context, context)
+def get_session() -> Generator[Session, None, None]:
+    session = Session()
+    with session.begin():
+        yield session
 
-    def __exit__(self):
-        # use thread pool executor
-        ...
+async with dg.ascope() as scope:
+    ss = await scope.resolve(get_session)
 ```
-
+Here, entering and exiting `get_session` will be executed in a different thread.
 
 - `Graph` now create a default scope, `Graph.use_scope` should always returns a scope.
-
-- split `Graph.scope` to `Graph.scope` and `Graph.ascope`.
-
-- *args , **kwargs without UnPack no longer considered as dependencies.
-- builtin types with provided default no longer considered as dependencies.
-- dependency.unresolvabale is now an attribute, instead of a property.
+- Split `Graph.scope` to `Graph.scope` and `Graph.ascope`.
+- Deprecate `DependencyGraph`, `DependencyGraph.static_resolve`, `DependencyGraph.static_resolve_all`
+- variadic arguments, such as `*args` or `**kwargs` without `typing.UnPack`, are no longer considered as dependencies.
+- Builtin types with provided default are no longer considered as dependencies.
+- `Dependency.unresolvabale` is now an attribute, instead of a property.
