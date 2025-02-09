@@ -43,7 +43,7 @@ Since there is no way to tell if the unsolvable dependency is being provided wit
 In the near future, dg.node will only create a node without recursively resolving its sub dependencies,
 it only resolve the dependent and the dependencies of the dependent, nothing more.
 
-Node would be fully resolved when `dg.static_resolve` is called.
+Node would be fully resolved when `dg.analyze` is called.
 
 ## version 1.0.0
 

@@ -1035,7 +1035,7 @@ class SyncScope:
 
 
 - create a default scope for each graph
-- rename `Graph.scope` to `Graph.create_scop`, reserve `Graph.scope` to the dfault scope
+- rename `Graph.scope` to `Graph.create_scope`, reserve `Graph.scope` to the default scope
 
 - since we create node via `dg.node`, if a dependency in graph._ignore, we ignore those when create node.dependencies, so that we don't have to do this in `node.unsolved_params`
 

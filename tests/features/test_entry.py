@@ -97,7 +97,6 @@ class CreateUser:
     user_email: str
 
 
-@pytest.mark.debug
 async def test_entry_with_ignore():
 
     @entry(ignore=CreateUser)

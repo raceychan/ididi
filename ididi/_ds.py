@@ -70,9 +70,9 @@ class Visitor:
 
     def _visit(
         self,
-        start_types: Union[list[Callable[..., Any]], Callable[..., Any]],
-        pre_visit: Union[Callable[[Callable[..., Any]], None], None] = None,
-        post_visit: Union[Callable[[Callable[..., Any]], None], None] = None,
+        start_types: Union[list[IDependent[Any]], IDependent[Any]],
+        pre_visit: Union[Callable[[IDependent[Any]], None], None] = None,
+        post_visit: Union[Callable[[IDependent[Any]], None], None] = None,
     ) -> None:
         """Generic DFS traversal with customizable visit callbacks.
 
@@ -84,9 +84,9 @@ class Visitor:
         if isinstance(start_types, type) or isinstance(start_types, FunctionType):
             start_types = [start_types]
 
-        visited = set[Callable[..., Any]]()
+        visited = set[IDependent[Any]]()
 
-        def _get_deps(node_type: Callable[..., Any]) -> list[Callable[..., Any]]:
+        def _get_deps(node_type: IDependent[Any]) -> list[IDependent[Any]]:
             node = self._nodes[node_type]
             return [
                 p.param_type
@@ -94,7 +94,7 @@ class Visitor:
                 if p.param_type in self._nodes
             ]
 
-        def dfs(node_type: Callable[..., Any]):
+        def dfs(node_type: IDependent[Any]):
             if node_type in visited:
                 return
             visited.add(node_type)
@@ -108,15 +108,15 @@ class Visitor:
             if post_visit:
                 post_visit(node_type)
 
-        for node_type in cast(list[Callable[..., Any]], start_types):
+        for node_type in cast(list[IDependent[Any]], start_types):
             dfs(node_type)
 
     def get_dependents(
-        self, dependency: Callable[..., Any]
-    ) -> list[Callable[..., Any]]:
-        dependents: list[Callable[..., Any]] = []
+        self, dependency: IDependent[Any]
+    ) -> list[IDependent[Any]]:
+        dependents: list[IDependent[Any]] = []
 
-        def collect_dependent(node_type: Callable[..., Any]):
+        def collect_dependent(node_type: IDependent[Any]):
             node = self._nodes[node_type]
             if any(p.param_type is dependency for _, p in node.dependencies):
                 dependents.append(node_type)
@@ -125,24 +125,24 @@ class Visitor:
         return dependents
 
     def get_dependencies(
-        self, dependent: Callable[..., Any], recursive: bool = False
-    ) -> list[Callable[..., Any]]:
+        self, dependent: IDependent[Any], recursive: bool = False
+    ) -> list[IDependent[Any]]:
         if not recursive:
             return [p.param_type for _, p in self._nodes[dependent].dependencies]
 
-        def collect_dependencies(t: Callable[..., Any]):
+        def collect_dependencies(t: IDependent[Any]):
             if t != dependent:
                 dependencies.append(t)
 
-        dependencies: list[Callable[..., Any]] = []
+        dependencies: list[IDependent[Any]] = []
         self._visit(
             dependent,
             post_visit=collect_dependencies,
         )
         return dependencies
 
-    def top_sorted_dependencies(self) -> list[Callable[..., Any]]:
+    def top_sorted_dependencies(self) -> list[IDependent[Any]]:
         "Sort the whole graph, from lowest dependencies to toppest dependents"
-        order: list[Callable[..., Any]] = []
+        order: list[IDependent[Any]] = []
         self._visit(list(self._nodes), post_visit=order.append)
         return order

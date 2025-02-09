@@ -28,10 +28,10 @@ IResourceFactory = IFactory[P, Generator[R, None, None]]
 IAsyncResourceFactory = Callable[P, AsyncGenerator[R, None]]
 
 INodeAnyFactory = Union[
-    Callable[..., R],
-    Callable[..., Awaitable[R]],
-    Callable[..., Generator[R, None, None]],
-    Callable[..., AsyncGenerator[R, None]],
+    IDependent[R],
+    IDependent[Awaitable[R]],
+    IDependent[Generator[R, None, None]],
+    IDependent[AsyncGenerator[R, None]],
 ]
 INodeFactory = Union[
     IFactory[P, R],

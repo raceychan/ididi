@@ -14,7 +14,6 @@ from typing import (
     Any,
     AsyncContextManager,
     Awaitable,
-    Callable,
     ContextManager,
     ForwardRef,
     Literal,
@@ -50,7 +49,6 @@ AsyncResource = Union[AsyncContextManager[Any]]
 
 IDIDI_USE_FACTORY_MARK = "__ididi_use_factory__"
 IDIDI_IGNORE_PARAM_MARK = "__ididi_ignore_param__"
-# IDIDI_UNTYPE_DEP_MARK = "__ididi_untyped_dep__"
 
 FactoryType = Literal["default", "function", "resource", "aresource"]
 # carry this information in node so that resolve does not have to do
@@ -198,7 +196,7 @@ def is_function(obj: Any):
 
 
 def is_class(
-    obj: Union[type[T], Callable[..., Union[T, Awaitable[T]]]]
+    obj: Union[type[T], IDependent[Union[T, Awaitable[T]]]]
 ) -> TypeGuard[type[T]]:
     """
     check if obj is a class, since inspect only checks if obj is a class type.
@@ -246,7 +244,6 @@ check TypeAlias:
 type C = str
 
 type(C) is TypeAliasType
-
 """
 
 

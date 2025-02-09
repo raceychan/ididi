@@ -152,7 +152,7 @@ class Resolver:
         """
 
         dep_type = node.dependent
-        dependent: Callable[..., Any] = get_origin(dep_type) or dep_type
+        dependent: IDependent[Any] = get_origin(dep_type) or dep_type
         if dependent in self._nodes:
             return
 
@@ -186,9 +186,9 @@ class Resolver:
         if resolved_node.is_resource:
             return True
 
-        unsolved_params = resolved_node.unsolved_params()
         contain_resource = any(
-            self.should_be_scoped(param_type) for _, param_type in unsolved_params
+            self.should_be_scoped(param.param_type)
+            for _, param in resolved_node.dependencies
         )
         return contain_resource
 
@@ -237,7 +237,7 @@ class Resolver:
         dependent: INode[P, T],
         *,
         config: NodeConfig = DefaultConfig,
-        ignore: Union[GraphIgnore, None] = None,
+        ignore: frozenset[str] = EmptyIgnore,
     ) -> DependentNode[T]:
         """
         Recursively analyze the type information of a dependency.
@@ -266,19 +266,26 @@ class Resolver:
                 return node
 
             current_path.append(dep)
+
             for param in node.analyze_unsolved_params(ignore):
                 if (param_type := param.param_type) in self._analyzed_nodes:
                     continue
 
                 self.check_param_conflict(param_type, current_path)
-
                 if get_origin(param_type) is Annotated:
                     if inject_node := resolve_use(param_type):
-                        self._node(inject_node.factory)
+                        inode = self._node(inject_node.factory)
+                        node.dependencies.update(
+                            param.name, param.replace_type(inode.dependent)
+                        )
+                        # breakpoint()
                         continue
                 elif is_function(param_type):
-                    pnode = DependentNode.from_node(param_type, config=config)
-                    self._nodes[param_type] = pnode
+                    fnode = DependentNode.from_node(param_type, config=config)
+                    self._nodes[param_type] = fnode
+                    node.dependencies.update(
+                        param.name, param.replace_type(fnode.dependent)
+                    )
                     continue
 
                 if is_provided(param.default):
@@ -293,13 +300,13 @@ class Resolver:
                     )
 
                 try:
-                    pnode = dfs(param_type)
+                    fnode = dfs(param_type)
                 except UnsolvableNodeError as une:
                     une.add_context(node.dependent, param.name, param.param_type)
                     raise
 
-                self._register_node(pnode)
-                self._analyzed_nodes[param_type] = pnode
+                self._register_node(fnode)
+                self._analyzed_nodes[param_type] = fnode
 
             current_path.pop()
             self._analyzed_nodes[dep] = node
@@ -309,12 +316,12 @@ class Resolver:
 
     def analyze_params(
         self, func: Callable[P, T], config: NodeConfig = DefaultConfig
-    ) -> tuple[bool, list[tuple[str, Callable[..., Any]]]]:
+    ) -> tuple[bool, list[tuple[str, IDependent[Any]]]]:
         deps = Dependencies.from_signature(
             signature=get_typed_signature(func), function=func, config=config
         )
         depends_on_resource: bool = False
-        unresolved: list[tuple[str, Callable[..., Any]]] = []
+        unresolved: list[tuple[str, IDependent[Any]]] = []
 
         for name, dep in deps:
             param_type = dep.param_type
@@ -335,7 +342,7 @@ class Resolver:
         return depends_on_resource, unresolved
 
     def analyze_nodes(self) -> None:
-        unsolved_nodes: set[Callable[..., Any]] = (
+        unsolved_nodes: set[IDependent[Any]] = (
             self._nodes.keys() - self._analyzed_nodes.keys()
         )
         for node_type in unsolved_nodes:
@@ -400,6 +407,39 @@ class Resolver:
         **overrides: P.kwargs,
     ) -> T: ...
 
+    # def resolve(
+    #     self,
+    #     dependent: IFactory[P, T],
+    #     /,
+    #     *args: P.args,
+    #     **overrides: P.kwargs,
+    # ) -> T:
+    #     if args:
+    #         raise PositionalOverrideError(args)
+
+    #     if is_provided(resolution := self.get_resolve_cache(dependent)):
+    #         return resolution
+
+    #     provided_params = frozenset(overrides)
+
+    #     # we should resolev this in a nested `_dfs` function
+    #     # where we use a local dict to replace `self.get_resolve_cache``
+    #     # sub node can be retrived by `self._analyzed_node[dependent]` as well
+    #     node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
+    #     unsolved_params = node.unsolved_params(provided_params)
+
+    #     params = overrides
+    #     for param_name, param_type in unsolved_params:
+    #         params[param_name] = self.resolve(param_type)
+
+    #     resolved = node.factory(**params)
+    #     return self.resolve_callback(
+    #         resolved=resolved,
+    #         dependent=node.dependent,
+    #         factory_type=node.factory_type,
+    #         is_reuse=node.config.reuse,
+    #     )
+
     def resolve(
         self,
         dependent: IFactory[P, T],
@@ -414,25 +454,74 @@ class Resolver:
             return resolution
 
         provided_params = frozenset(overrides)
-
-        # we should resolev this in a nested `_dfs` function
-        # where we use a local dict to replace `self.get_resolve_cache``
-        # sub node can be retrived by `self._analyzed_node[dependent]` as well
         node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
-        unsolved_params = node.unsolved_params(provided_params)
 
-        params = overrides
-        for param_name, param_type in unsolved_params:
-            params[param_name] = self.resolve(param_type)
+        def dfs(ptype: IDependent[T]) -> T:
+            if resolution := self.get_resolve_cache(ptype):
+                return resolution
 
-        resolved = node.factory(**params)
-        return self.resolve_callback(
-            resolved=resolved,
+            if not (pnode := self._nodes.get(ptype)):
+                pnode = self.analyze(ptype)
+
+            params = {
+                param_name: dfs(param.param_type)
+                for param_name, param in pnode.dependencies
+            }
+
+            instance = pnode.factory(**params)
+            resolved = self.resolve_callback(
+                resolved=instance,
+                dependent=pnode.dependent,
+                factory_type=pnode.factory_type,
+                is_reuse=pnode.config.reuse,
+            )
+            return resolved
+
+        node_params = {
+            pname: dfs(param.param_type)
+            for pname, param in node.dependencies
+            if pname not in overrides
+        }
+        instance = node.factory(**node_params | overrides)
+        resolved = self.resolve_callback(
+            resolved=instance,
             dependent=node.dependent,
             factory_type=node.factory_type,
             is_reuse=node.config.reuse,
         )
+        return resolved
 
+    # async def aresolve(
+    #     self,
+    #     dependent: IFactory[P, T],
+    #     /,
+    #     *args: P.args,
+    #     **overrides: P.kwargs,
+    # ) -> T:
+    #     """
+    #     Async version of resolve that handles async context managers and coroutines.
+    #     """
+    #     if args:
+    #         raise PositionalOverrideError(args)
+
+    #     if is_provided(resolution := self.get_resolve_cache(dependent)):
+    #         return resolution
+
+    #     provided_params = frozenset(overrides)
+    #     node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
+    #     unsolved_params = node.unsolved_params(provided_params)
+
+    #     params = overrides
+    #     for param_name, param_type in unsolved_params:
+    #         params[param_name] = await self.aresolve(param_type)
+
+    #     resolved = node.factory(**params)
+    #     return await self.aresolve_callback(
+    #         resolved=resolved,
+    #         dependent=node.dependent,
+    #         factory_type=node.factory_type,
+    #         is_reuse=node.config.reuse,
+    #     )
     async def aresolve(
         self,
         dependent: IFactory[P, T],
@@ -451,19 +540,41 @@ class Resolver:
 
         provided_params = frozenset(overrides)
         node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
-        unsolved_params = node.unsolved_params(provided_params)
 
-        params = overrides
-        for param_name, param_type in unsolved_params:
-            params[param_name] = await self.aresolve(param_type)
+        async def dfs(ptype: IDependent[T]) -> T:
+            if resolution := self.get_resolve_cache(ptype):
+                return resolution
 
-        resolved = node.factory(**params)
-        return await self.aresolve_callback(
-            resolved=resolved,
+            if not (pnode := self._nodes.get(ptype)):
+                pnode = self.analyze(ptype)
+
+            params = {
+                param_name: await dfs(param.param_type)
+                for param_name, param in pnode.dependencies
+            }
+
+            instance = pnode.factory(**params)
+            resolved = await self.aresolve_callback(
+                resolved=instance,
+                dependent=pnode.dependent,
+                factory_type=pnode.factory_type,
+                is_reuse=pnode.config.reuse,
+            )
+            return resolved
+
+        node_params = {
+            pname: await dfs(param.param_type)
+            for pname, param in node.dependencies
+            if pname not in overrides
+        }
+        instance = node.factory(**node_params | overrides)
+        resolved = await self.aresolve_callback(
+            resolved=instance,
             dependent=node.dependent,
             factory_type=node.factory_type,
             is_reuse=node.config.reuse,
         )
+        return resolved
 
     def _node(
         self, dependent: INode[P, T], config: NodeConfig = DefaultConfig
@@ -535,9 +646,6 @@ class Resolver:
 
         self._node(dependent, config=NodeConfig(**config))
         return dependent
-
-    static_resolve = analyze
-    static_resolve_all = analyze_nodes
 
 
 @final

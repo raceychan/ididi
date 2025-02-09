@@ -32,7 +32,7 @@ def test_register(dg: Graph, dependents: ty.Sequence[type]):
 
 
 @pytest.mark.benchmark
-def test_static_resolve(dg: Graph):
+def test_analyze_nodes(dg: Graph):
     pre = perf_counter()
     dg.analyze_nodes()
     aft = perf_counter()

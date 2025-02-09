@@ -54,13 +54,13 @@ def dg() -> Graph:
     return Graph()
 
 
-def test_static_resolve(dg: Graph):
+def test_analyze(dg: Graph):
     _ = dg.analyze(EmailService)
     assert len(dg.nodes) == 7
     assert len(dg.resolved_nodes) == 7
 
 
-def test_static_resolve_equal_resolve(dg: Graph):
+def test_analyze_equal_resolve(dg: Graph):
     _ = dg.analyze(EmailService)
     assert len(dg.nodes) == 7
     assert len(dg.resolved_nodes) == 7
@@ -121,7 +121,7 @@ def test_forward_ref_in_local_scope():
         dag.analyze(ServiceA)
 
 
-def test_static_resolve_would_raise_error(dg: Graph):
+def test_analyze_would_raise_error(dg: Graph):
     class DataBase:
         def __init__(self, engine: int):
             self.engine = engine
@@ -138,7 +138,7 @@ def test_static_resolve_would_raise_error(dg: Graph):
         dg.analyze(UserService)
 
 
-async def test_static_resolve_a_factory(dg: Graph):
+async def test_analyze_a_factory(dg: Graph):
     class DataBase:
         def __init__(self, engine: str):
             self.engine = engine

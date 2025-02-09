@@ -1,4 +1,4 @@
-from ididi import Graph
+from ididi import Graph, Ignore, use
 
 """
 - separate overrides and resolved, carry resolved to sub dependencies.
@@ -44,3 +44,11 @@ def test_node_dpes_ignore_builtin_with_default():
 
     dg.node(User)
     assert not dg.nodes[User].dependencies
+
+
+# def test_reuse_resolved():
+#     def dependency(a: int) -> Ignore[int]:
+#         return a
+
+#     def main(a: int, b: int, c: int = use(dependency)) -> float:
+#         return a + b + c

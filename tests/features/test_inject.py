@@ -45,6 +45,7 @@ def utc_factory() -> datetime:
 
 UTC_DATETIME = Annotated[datetime, use(utc_factory)]
 
+import pytest
 
 def test_resolve_timer():
     class Timer:
@@ -93,7 +94,7 @@ class C:
     def __init__(self, b: B = use(b_f)):
         self.berry = b
 
-
+@pytest.mark.debug
 def test_nested_inject():
     dg = Graph()
     cream = dg.resolve(C)

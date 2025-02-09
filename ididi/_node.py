@@ -38,7 +38,7 @@ from ._type_resolve import (
     resolve_annotation,
     resolve_forwardref,
 )
-from .config import CacheMax, DefaultConfig, FrozenSlot, NodeConfig
+from .config import CacheMax, DefaultConfig, EmptyIgnore, FrozenSlot, NodeConfig
 from .errors import (
     ABCNotImplementedError,
     MissingAnnotationError,
@@ -52,7 +52,6 @@ from .interfaces import (
     INodeAnyFactory,
     INodeConfig,
     INodeFactory,
-    NodeIgnore,
 )
 from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import P, T
@@ -162,7 +161,7 @@ class Dependency(FrozenSlot, Generic[T]):
     def type_repr(self):
         return getattr(self.param_type, "__name__", f"{self.param_type}")
 
-    def replace_type(self, param_type: type[T]) -> "Dependency[T]":
+    def replace_type(self, param_type: IDependent[T]) -> "Dependency[T]":
         return Dependency(
             name=self.name,
             param_kind=self.param_kind,
@@ -224,7 +223,6 @@ class Dependencies:
         """
         dynamically generate signature based on current params,
         """
-
         if self._sig is None:
             self._sig = Signature(
                 parameters=[
@@ -241,14 +239,6 @@ class Dependencies:
 
     def update(self, param_name: str, param_val: Dependency[Any]):
         self._deps[param_name] = param_val
-
-    def filter_ignore(
-        self, ignore: NodeIgnore
-    ) -> Generator[tuple[str, Dependency[Any]], None, None]:
-        for param_name, param in self._deps.items():
-            if (param_name in ignore) or (param.param_type in ignore):
-                continue
-            yield param_name, param
 
     @classmethod
     def from_signature(
@@ -388,7 +378,6 @@ class DependentNode(Generic[T]):
         dependencies: Dependencies,
         config: NodeConfig,
     ):
-
         self.dependent = dependent
         self.factory = factory
         self.factory_type: FactoryType = factory_type
@@ -409,13 +398,13 @@ class DependentNode(Generic[T]):
         return self.factory_type in ("resource", "aresource")
 
     def analyze_unsolved_params(
-        self, ignore: Union[NodeIgnore, None] = None
+        self, ignore: frozenset[str] = EmptyIgnore
     ) -> Generator[Dependency[T], None, None]:
         "params that needs to be statically resolved"
-        filtered = (
-            self.dependencies.filter_ignore(ignore) if ignore else self.dependencies
-        )
-        for param_name, param in filtered:
+
+        for param_name, param in self.dependencies:
+            if param_name in ignore:
+                continue
             param_type = cast(Union[IDependent[T], ForwardRef], param.param_type)
             if isinstance(param_type, ForwardRef):
                 new_type = resolve_forwardref(self.dependent, param_type)
@@ -423,21 +412,6 @@ class DependentNode(Generic[T]):
             yield param
             if param.param_type != param_type:
                 self.dependencies.update(param_name, param)
-
-    @lru_cache(CacheMax)
-    def unsolved_params(
-        self, ignore: Union[NodeIgnore, None] = None
-    ) -> list[tuple[str, IDependent[T]]]:
-        "yield dependencies that needs to be resolved"
-        unsolved_params: list[tuple[str, IDependent[T]]] = []
-        filtered = (
-            self.dependencies.filter_ignore(ignore) if ignore else self.dependencies
-        )
-        for param_name, param in filtered:
-            param_type: IDependent[T] = param.param_type
-            param_pair = (param_name, param_type)
-            unsolved_params.append(param_pair)
-        return unsolved_params
 
     def check_for_implementations(self) -> None:
         if isinstance(self.factory, type):

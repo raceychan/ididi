@@ -42,13 +42,12 @@ class UserService:
         return "goodbye"
 
 
-def test_static_resolve_all():
+def test_analyze_nodes():
     dg = Graph()
     dg.node(UserService)
     with pytest.raises(UnsolvableReturnTypeError):
         dg.node(update_user)
 
-    dg.static_resolve_all()
     dg.analyze_nodes()
 
 
