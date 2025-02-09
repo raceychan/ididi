@@ -78,9 +78,9 @@ from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import P, T
 
 Stack = TypeVar("Stack", ExitStack, AsyncExitStack)
-ScopeContext = ContextVar[Union["SyncScope", "AsyncScope"]]
 AnyScope = Union["SyncScope", "AsyncScope"]
 ScopeToken = Token[AnyScope]
+ScopeContext = ContextVar[AnyScope]
 Resolved = Maybe[dict[str, Any]]
 
 
@@ -102,11 +102,11 @@ def register_dependent(
 def resolve_dfs(
     graph: "Resolver",
     nodes: GraphNodes[Any],
-    # cache: ResolvedSingletons[Any],
+    cache: ResolvedSingletons[Any],
     ptype: IDependent[T],
     overrides: dict[str, Any],
 ) -> T:
-    if resolution := graph.get_resolve_cache(ptype):
+    if resolution := cache.get(ptype):
         return resolution
 
     pnode = nodes.get(ptype) or graph.analyze(ptype)
@@ -114,9 +114,9 @@ def resolve_dfs(
     params = overrides
     for name, param in pnode.dependencies:
         if name not in params:
-            params[name] = resolve_dfs(graph, nodes, param.param_type, {})
+            params[name] = resolve_dfs(graph, nodes, cache, param.param_type, {})
 
-    instance = pnode.factory(**(params))
+    instance = pnode.factory(**params)
 
     result = graph.resolve_callback(
         resolved=instance,
@@ -130,11 +130,11 @@ def resolve_dfs(
 async def aresolve_dfs(
     graph: "Resolver",
     nodes: GraphNodes[Any],
-    # cache: ResolvedSingletons[Any],
+    cache: ResolvedSingletons[Any],
     ptype: IDependent[T],
     overrides: dict[str, Any],
 ) -> T:
-    if resolution := graph.get_resolve_cache(ptype):
+    if resolution := cache.get(ptype):
         return resolution
 
     pnode = nodes.get(ptype) or graph.analyze(ptype)
@@ -142,7 +142,7 @@ async def aresolve_dfs(
     params = overrides
     for name, param in pnode.dependencies:
         if name not in params:
-            params[name] = await aresolve_dfs(graph, nodes, param.param_type, {})
+            params[name] = await aresolve_dfs(graph, nodes, cache, param.param_type, {})
 
     instance = pnode.factory(**(params | overrides))
     resolved = await graph.aresolve_callback(
@@ -478,12 +478,14 @@ class Resolver:
         if args:
             raise PositionalOverrideError(args)
 
-        if is_provided(resolution := self.get_resolve_cache(dependent)):
+        if is_provided(resolution := self._resolved_singletons.get(dependent, MISSING)):
             return resolution
 
         provided_params = frozenset(overrides)
         node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
-        return resolve_dfs(self, self._nodes, node.dependent, overrides)
+        return resolve_dfs(
+            self, self._nodes, self._resolved_singletons, node.dependent, overrides
+        )
 
     async def aresolve(
         self,
@@ -498,12 +500,14 @@ class Resolver:
         if args:
             raise PositionalOverrideError(args)
 
-        if is_provided(resolution := self.get_resolve_cache(dependent)):
+        if is_provided(resolution := self._resolved_singletons.get(dependent, MISSING)):
             return resolution
 
         provided_params = frozenset(overrides)
         node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
-        return await aresolve_dfs(self, self._nodes, node.dependent, overrides)
+        return await aresolve_dfs(
+            self, self._nodes, self._resolved_singletons, node.dependent, overrides
+        )
 
     def _node(
         self, dependent: INode[P, T], config: NodeConfig = DefaultConfig
@@ -825,7 +829,7 @@ class Graph(Resolver):
         if self_inject:
             self.register_singleton(self)
 
-        self._default_scope = self.create_scope(DefaultScopeName)
+        self._default_scope = self._create_scope(DefaultScopeName)
         self._token = self._scope_context.set(self._default_scope)
 
     def __repr__(self) -> str:
@@ -904,13 +908,9 @@ class Graph(Resolver):
             others = other
 
         for other in others:
-            try:
-                other_scope = other._scope_context.get()
-            except LookupError:
-                pass
-            else:
-                if other_scope.name is not DefaultScopeName:
-                    raise MergeWithScopeStartedError()
+            other_scope = other._scope_context.get()
+            if other_scope.name is not DefaultScopeName:
+                raise MergeWithScopeStartedError()
 
             self._merge_nodes(other)
 
@@ -960,7 +960,7 @@ class Graph(Resolver):
             if dep.__name__ == dep_name:
                 return node
 
-    def create_scope(
+    def _create_scope(
         self, name: Hashable = "", pre: Maybe[AnyScope] = MISSING
     ) -> SyncScope:
         shared_data = SharedData(
@@ -978,7 +978,7 @@ class Graph(Resolver):
         )
         return scope
 
-    def create_ascope(
+    def _create_ascope(
         self, name: Hashable = "", pre: Maybe[AnyScope] = MISSING
     ) -> AsyncScope:
         shared_data = SharedData(
@@ -999,7 +999,7 @@ class Graph(Resolver):
     @contextmanager
     def scope(self, name: Hashable = ""):
         previous_scope = self._scope_context.get()
-        scope = self.create_scope(name, previous_scope)
+        scope = self._create_scope(name, previous_scope)
         token = self._scope_context.set(scope)
 
         exc_type, exc, tb = None, None, None
@@ -1011,13 +1011,12 @@ class Graph(Resolver):
             raise
         finally:
             scope.__exit__(exc_type, exc, tb)
-            if is_provided(self._token):
-                self._scope_context.reset(token)
+            self._scope_context.reset(token)
 
     @asynccontextmanager
     async def ascope(self, name: Hashable = ""):
         previous_scope = self._scope_context.get()
-        ascope = self.create_ascope(name, previous_scope)
+        ascope = self._create_ascope(name, previous_scope)
         token = self._scope_context.set(ascope)
 
         exc_type, exc, tb = None, None, None
@@ -1029,13 +1028,12 @@ class Graph(Resolver):
             raise
         finally:
             await ascope.__aexit__(exc_type, exc, tb)
-            if is_provided(self._token):
-                self._scope_context.reset(token)
+            self._scope_context.reset(token)
 
     @overload
     def use_scope(
         self,
-        name: Maybe[Hashable] = MISSING,
+        name: Hashable = "",
         *,
         as_async: Literal[False] = False,
     ) -> "SyncScope": ...
@@ -1043,14 +1041,14 @@ class Graph(Resolver):
     @overload
     def use_scope(
         self,
-        name: Maybe[Hashable] = MISSING,
+        name: Hashable = "",
         *,
         as_async: Literal[True],
     ) -> "AsyncScope": ...
 
     def use_scope(
         self,
-        name: Maybe[Hashable] = MISSING,
+        name: Hashable = "",
         *,
         as_async: bool = False,
     ) -> Union["SyncScope", "AsyncScope"]:
@@ -1060,12 +1058,8 @@ class Graph(Resolver):
         as_async: bool
         pure typing helper, ignored at runtime
         """
-        try:
-            scope = self._scope_context.get()
-        except LookupError as le:
-            raise OutOfScopeError() from le
-
-        if is_provided(name):
+        scope = self._scope_context.get()
+        if name != scope.name:
             return scope.get_scope(name)
         return scope
 

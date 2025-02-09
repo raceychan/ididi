@@ -2,7 +2,8 @@ import typing as ty
 
 import pytest
 
-from ididi import AsyncResource, Graph
+from ididi import Graph
+from ididi.config import DefaultScopeName
 from ididi.errors import (
     AsyncResourceInSyncError,
     OutOfScopeError,
@@ -390,7 +391,10 @@ async def test_async_nested_scope_with_context_scope():
 
     test_two()
 
-    dg.use_scope()
+    with pytest.raises(OutOfScopeError):
+        dg.use_scope()
+
+    assert dg.use_scope(DefaultScopeName)
 
 
 async def test_db_exec():
@@ -447,10 +451,10 @@ async def test_scope_different_across_context():
             func2()
 
 
-async def test_use_scope_create_on_miss():
+async def test_dg_create_default_scope():
     dg = Graph()
 
-    dg.use_scope()
+    assert dg.use_scope(DefaultScopeName)
 
 
 async def test_share_single_pattern():

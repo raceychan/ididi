@@ -9,12 +9,12 @@ async def test_graph_ds_slots():
     with pytest.raises(AttributeError):
         dg.__dict__
 
-    sc = dg.create_scope()
+    sc = dg.scope().__enter__()
 
     with pytest.raises(AttributeError):
         sc.__dict__
 
-    asc = dg.create_ascope()
+    asc = await dg.ascope().__aenter__()
 
     with pytest.raises(AttributeError):
         asc.__dict__

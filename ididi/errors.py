@@ -187,11 +187,7 @@ class GraphError(IDIDIError):
 
 class OutOfScopeError(GraphError):
     def __init__(self, name: Hashable = ""):
-        if name:
-            msg = f"scope with {name=} not found in current context"
-        else:
-            msg = "scope not found in current context"
-
+        msg = f"scope with {name=} not found in current context"
         super().__init__(msg)
 
 
