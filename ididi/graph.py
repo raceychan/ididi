@@ -98,6 +98,53 @@ def register_dependent(
     mapping[dependent_type] = instance
 
 
+def resolve_dfs(
+    graph: "Resolver", ptype: IDependent[T], overrides: dict[str, Any]
+) -> T:
+    if resolution := graph.get_resolve_cache(ptype):
+        return resolution
+
+    pnode = graph.nodes.get(ptype) or graph.analyze(ptype)
+
+    params = overrides
+    for name, param in pnode.dependencies:
+        if name not in params:
+            params[name] = resolve_dfs(graph, param.param_type, {})
+
+    instance = pnode.factory(**(params))
+
+    result = graph.resolve_callback(
+        resolved=instance,
+        dependent=pnode.dependent,
+        factory_type=pnode.factory_type,
+        is_reuse=pnode.config.reuse,
+    )
+    return result
+
+
+async def aresolve_dfs(
+    graph: "Resolver", ptype: IDependent[T], overrides: dict[str, Any]
+) -> T:
+    if resolution := graph.get_resolve_cache(ptype):
+        return resolution
+
+    pnode = graph.nodes.get(ptype) or graph.analyze(ptype)
+
+    params = overrides
+    for name, param in pnode.dependencies:
+        if name not in params:
+            params[name] = await aresolve_dfs(graph, param.param_type, {})
+
+    instance = pnode.factory(**(params | overrides))
+    resolved = await graph.aresolve_callback(
+        resolved=instance,
+        dependent=pnode.dependent,
+        factory_type=pnode.factory_type,
+        is_reuse=pnode.config.reuse,
+    )
+    return resolved
+
+
 class SharedData(TypedDict):
     "Data shared between graph and scope"
 
@@ -133,6 +180,10 @@ class Resolver:
 
         self._registered_singletons = registered_singletons
         self._resolved_singletons = resolved_singletons
+
+    @property
+    def nodes(self) -> GraphNodesView[Any]:
+        return MappingProxyType(self._nodes)
 
     def _remove_node(self, node: DependentNode[Any]) -> None:
         """
@@ -278,7 +329,7 @@ class Resolver:
                         node.dependencies.update(
                             param.name, param.replace_type(inode.dependent)
                         )
-                        # breakpoint()
+                        self.analyze(inode.factory)
                         continue
                 elif is_function(param_type):
                     fnode = DependentNode.from_node(param_type, config=config)
@@ -286,6 +337,7 @@ class Resolver:
                     node.dependencies.update(
                         param.name, param.replace_type(fnode.dependent)
                     )
+                    self.analyze(fnode.factory)
                     continue
 
                 if is_provided(param.default):
@@ -407,39 +459,6 @@ class Resolver:
         **overrides: P.kwargs,
     ) -> T: ...
 
-    # def resolve(
-    #     self,
-    #     dependent: IFactory[P, T],
-    #     /,
-    #     *args: P.args,
-    #     **overrides: P.kwargs,
-    # ) -> T:
-    #     if args:
-    #         raise PositionalOverrideError(args)
-
-    #     if is_provided(resolution := self.get_resolve_cache(dependent)):
-    #         return resolution
-
-    #     provided_params = frozenset(overrides)
-
-    #     # we should resolev this in a nested `_dfs` function
-    #     # where we use a local dict to replace `self.get_resolve_cache``
-    #     # sub node can be retrived by `self._analyzed_node[dependent]` as well
-    #     node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
-    #     unsolved_params = node.unsolved_params(provided_params)
-
-    #     params = overrides
-    #     for param_name, param_type in unsolved_params:
-    #         params[param_name] = self.resolve(param_type)
-
-    #     resolved = node.factory(**params)
-    #     return self.resolve_callback(
-    #         resolved=resolved,
-    #         dependent=node.dependent,
-    #         factory_type=node.factory_type,
-    #         is_reuse=node.config.reuse,
-    #     )
-
     def resolve(
         self,
         dependent: IFactory[P, T],
@@ -455,73 +474,8 @@ class Resolver:
 
         provided_params = frozenset(overrides)
         node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
+        return resolve_dfs(self, node.dependent, overrides)
 
-        def dfs(ptype: IDependent[T]) -> T:
-            if resolution := self.get_resolve_cache(ptype):
-                return resolution
-
-            if not (pnode := self._nodes.get(ptype)):
-                pnode = self.analyze(ptype)
-
-            params = {
-                param_name: dfs(param.param_type)
-                for param_name, param in pnode.dependencies
-            }
-
-            instance = pnode.factory(**params)
-            resolved = self.resolve_callback(
-                resolved=instance,
-                dependent=pnode.dependent,
-                factory_type=pnode.factory_type,
-                is_reuse=pnode.config.reuse,
-            )
-            return resolved
-
-        node_params = {
-            pname: dfs(param.param_type)
-            for pname, param in node.dependencies
-            if pname not in overrides
-        }
-        instance = node.factory(**node_params | overrides)
-        resolved = self.resolve_callback(
-            resolved=instance,
-            dependent=node.dependent,
-            factory_type=node.factory_type,
-            is_reuse=node.config.reuse,
-        )
-        return resolved
-
-    # async def aresolve(
-    #     self,
-    #     dependent: IFactory[P, T],
-    #     /,
-    #     *args: P.args,
-    #     **overrides: P.kwargs,
-    # ) -> T:
-    #     """
-    #     Async version of resolve that handles async context managers and coroutines.
-    #     """
-    #     if args:
-    #         raise PositionalOverrideError(args)
-
-    #     if is_provided(resolution := self.get_resolve_cache(dependent)):
-    #         return resolution
-
-    #     provided_params = frozenset(overrides)
-    #     node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
-    #     unsolved_params = node.unsolved_params(provided_params)
-
-    #     params = overrides
-    #     for param_name, param_type in unsolved_params:
-    #         params[param_name] = await self.aresolve(param_type)
-
-    #     resolved = node.factory(**params)
-    #     return await self.aresolve_callback(
-    #         resolved=resolved,
-    #         dependent=node.dependent,
-    #         factory_type=node.factory_type,
-    #         is_reuse=node.config.reuse,
-    #     )
     async def aresolve(
         self,
         dependent: IFactory[P, T],
@@ -540,41 +494,7 @@ class Resolver:
 
         provided_params = frozenset(overrides)
         node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
-
-        async def dfs(ptype: IDependent[T]) -> T:
-            if resolution := self.get_resolve_cache(ptype):
-                return resolution
-
-            if not (pnode := self._nodes.get(ptype)):
-                pnode = self.analyze(ptype)
-
-            params = {
-                param_name: await dfs(param.param_type)
-                for param_name, param in pnode.dependencies
-            }
-
-            instance = pnode.factory(**params)
-            resolved = await self.aresolve_callback(
-                resolved=instance,
-                dependent=pnode.dependent,
-                factory_type=pnode.factory_type,
-                is_reuse=pnode.config.reuse,
-            )
-            return resolved
-
-        node_params = {
-            pname: await dfs(param.param_type)
-            for pname, param in node.dependencies
-            if pname not in overrides
-        }
-        instance = node.factory(**node_params | overrides)
-        resolved = await self.aresolve_callback(
-            resolved=instance,
-            dependent=node.dependent,
-            factory_type=node.factory_type,
-            is_reuse=node.config.reuse,
-        )
-        return resolved
+        return await aresolve_dfs(self, node.dependent, overrides)
 
     def _node(
         self, dependent: INode[P, T], config: NodeConfig = DefaultConfig
@@ -589,7 +509,6 @@ class Resolver:
         if ori_node := self._nodes.get(node.dependent):
             if should_override(node, ori_node):
                 self._remove_node(ori_node)
-
         self._register_node(node)
         return node
 
@@ -740,9 +659,9 @@ class Graph(Resolver):
     def __contains__(self, item: INode[P, T]) -> bool:
         return resolve_node_type(item) in self._nodes
 
-    @property
-    def nodes(self) -> GraphNodesView[Any]:
-        return MappingProxyType(self._nodes)
+    # @property
+    # def nodes(self) -> GraphNodesView[Any]:
+    #     return MappingProxyType(self._nodes)
 
     @property
     def resolution_registry(self) -> ResolvedSingletons[Any]:
