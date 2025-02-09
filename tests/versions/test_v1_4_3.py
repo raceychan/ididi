@@ -50,5 +50,9 @@ def test_node_dpes_ignore_builtin_with_default():
 #     def dependency(a: int) -> Ignore[int]:
 #         return a
 
-#     def main(a: int, b: int, c: int = use(dependency)) -> float:
+#     def main(a: int, b: int, c: int = use(dependency)) -> Ignore[float]:
 #         return a + b + c
+
+#     dg = Graph()
+
+#     dg.resolve(main)

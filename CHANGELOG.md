@@ -1020,7 +1020,6 @@ Note that since `get_user` returns `Ignore[User]` instead of `User`, it won't be
 
 Features:
 
-- separate overrides and resolved, carry resolved to sub dependencies.
 - using threadpool in scoped sync function.
 
 ```python

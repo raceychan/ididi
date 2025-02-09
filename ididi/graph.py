@@ -79,7 +79,8 @@ from .utils.typing_utils import P, T
 
 Stack = TypeVar("Stack", ExitStack, AsyncExitStack)
 ScopeContext = ContextVar[Union["SyncScope", "AsyncScope"]]
-ScopeToken = Token[Union["SyncScope", "AsyncScope"]]
+AnyScope = Union["SyncScope", "AsyncScope"]
+ScopeToken = Token[AnyScope]
 Resolved = Maybe[dict[str, Any]]
 
 
@@ -104,7 +105,7 @@ def resolve_dfs(
     if resolution := graph.get_resolve_cache(ptype):
         return resolution
 
-    pnode = graph.nodes.get(ptype) or graph.analyze(ptype)
+    pnode = graph._nodes.get(ptype) or graph.analyze(ptype)
 
     params = overrides
     for name, param in pnode.dependencies:
@@ -128,7 +129,7 @@ async def aresolve_dfs(
     if resolution := graph.get_resolve_cache(ptype):
         return resolution
 
-    pnode = graph.nodes.get(ptype) or graph.analyze(ptype)
+    pnode = graph._nodes.get(ptype) or graph.analyze(ptype)
 
     params = overrides
     for name, param in pnode.dependencies:
@@ -567,6 +568,169 @@ class Resolver:
         return dependent
 
 
+ScopeSlots = ("_name", "_stack", "_pre", "_graph_resolutions", "_graph_singletons")
+
+
+class ScopeBase(Generic[Stack]):
+    __slots__ = ()
+    _stack: Stack
+    _name: Hashable
+    _pre: Maybe[Union["SyncScope", "AsyncScope"]]
+
+    _resolved_singletons: ResolvedSingletons[Any]
+    _registered_singletons: set[type]
+    # from concurrent.futures.thread import ThreadPoolExecutor
+    # _worker_threads: ThreadPoolExecutor(thread_name_prefix='ididi')
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(id={self._name})"
+
+    def enter_context(self, context: ContextManager[T]) -> T:
+        # await self._worker_thread.submit(self._stack.enter_context, context)
+        return self._stack.enter_context(context)
+
+    def get_scope(self, name: Hashable) -> Self:
+        if name == self._name:
+            return self
+
+        ptr = self
+        while is_provided(ptr._pre):
+            if ptr._pre._name == name:
+                return cast(Self, ptr._pre)
+            ptr = ptr._pre
+        else:
+            raise OutOfScopeError(name)
+
+
+class SyncScope(ScopeBase[ExitStack], Resolver):
+    __slots__ = ScopeSlots + SharedSlots
+
+    def __init__(
+        self,
+        *,
+        resolved_singletons: ResolvedSingletons[Any],
+        registered_singletons: set[type],
+        name: Maybe[Hashable] = MISSING,
+        pre: Maybe[Union["SyncScope", "AsyncScope"]] = MISSING,
+        **args: Unpack[SharedData],
+    ):
+        self._name = name
+        self._pre = pre
+        self._stack = ExitStack()
+        super().__init__(
+            **args,
+            resolved_singletons=resolved_singletons,
+            registered_singletons=registered_singletons,
+        )
+
+    def __enter__(self) -> "SyncScope":
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Union[type[Exception], None],
+        exc_value: Union[Exception, None],
+        traceback: Union[TracebackType, None],
+    ) -> None:
+        self._stack.__exit__(exc_type, exc_value, traceback)
+
+    @override
+    def resolve_callback(
+        self,
+        resolved: T,
+        dependent: IDependent[T],
+        factory_type: FactoryType,
+        is_reuse: bool,
+    ):
+        if factory_type in ("default", "function"):
+            if is_reuse:
+                register_dependent(self._resolved_singletons, dependent, resolved)
+            return resolved
+
+        if factory_type == "aresource":
+            raise AsyncResourceInSyncError(dependent)
+        # enter_context_in_thead(self._worker_threads, self._stack, resolved)
+        instance = self.enter_context(cast(ContextManager[T], resolved))
+        if is_reuse:
+            register_dependent(self._resolved_singletons, dependent, instance)
+        return instance
+
+
+class AsyncScope(ScopeBase[AsyncExitStack], Resolver):
+    __slots__ = ScopeSlots + SharedSlots
+
+    def __init__(
+        self,
+        *,
+        resolved_singletons: ResolvedSingletons[Any],
+        registered_singletons: set[type],
+        name: Maybe[Hashable] = MISSING,
+        pre: Maybe[Union["SyncScope", "AsyncScope"]] = MISSING,
+        **args: Unpack[SharedData],
+    ):
+        self._name = name
+        self._pre = pre
+        self._stack = AsyncExitStack()
+
+        super().__init__(
+            **args,
+            resolved_singletons=resolved_singletons,
+            registered_singletons=registered_singletons,
+        )
+
+    async def __aenter__(self) -> "AsyncScope":
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: Union[type[Exception], None],
+        exc_value: Union[Exception, None],
+        traceback: Union[TracebackType, None],
+    ) -> None:
+        await self._stack.__aexit__(exc_type, exc_value, traceback)
+
+    async def enter_async_context(self, context: AsyncContextManager[T]) -> T:
+        return await self._stack.enter_async_context(context)
+
+    @overload
+    async def resolve(self, dependent: IDependent[T], /) -> T: ...
+
+    @overload
+    async def resolve(
+        self, dependent: IFactory[P, T], /, *args: P.args, **kwargs: P.kwargs
+    ) -> T: ...
+
+    async def resolve(
+        self, dependent: IFactory[P, T], /, *args: P.args, **kwargs: P.kwargs
+    ) -> T:
+        return await super().aresolve(dependent, *args, **kwargs)
+
+    @override
+    async def aresolve_callback(
+        self,
+        resolved: Union[T, Awaitable[T]],
+        dependent: IDependent[T],
+        factory_type: FactoryType,
+        is_reuse: bool,
+    ) -> T:
+        if factory_type in ("default", "function"):
+            instance = await resolved if isawaitable(resolved) else resolved
+            if is_reuse:
+                register_dependent(self._resolved_singletons, dependent, instance)
+            return cast(T, instance)
+
+        if factory_type == "resource":
+            instance = self.enter_context(cast(ContextManager[T], resolved))
+        else:
+            instance = await self.enter_async_context(
+                cast(AsyncContextManager[T], resolved)
+            )
+
+        if is_reuse:
+            register_dependent(self._resolved_singletons, dependent, instance)
+        return instance
+
+
 @final
 class Graph(Resolver):
     """
@@ -658,10 +822,6 @@ class Graph(Resolver):
 
     def __contains__(self, item: INode[P, T]) -> bool:
         return resolve_node_type(item) in self._nodes
-
-    # @property
-    # def nodes(self) -> GraphNodesView[Any]:
-    #     return MappingProxyType(self._nodes)
 
     @property
     def resolution_registry(self) -> ResolvedSingletons[Any]:
@@ -784,14 +944,7 @@ class Graph(Resolver):
             if dep.__name__ == dep_name:
                 return node
 
-    def scope(self, name: Maybe[Hashable] = MISSING) -> "ScopeManager":
-        """
-        create a scope for resource,
-        resources resolved wihtin the scope would be
-
-        scope_name: give a iditifier to the scope so that you can get it with
-        dg.get_scope(scope_name)
-        """
+    def create_scope(self, previous_scope: Maybe[AnyScope]):
         shared_data = SharedData(
             nodes=self._nodes,
             analyzed_nodes=self._analyzed_nodes,
@@ -799,13 +952,82 @@ class Graph(Resolver):
             ignore=self._ignore,
         )
 
-        return ScopeManager(
-            name=name,
-            scope_ctx=self._scope_context,
-            graph_resolutions=self._resolved_singletons.copy(),
-            graph_singletons=self._registered_singletons.copy(),
-            shared_data=shared_data,
+        scope = SyncScope(
+            registered_singletons=self._registered_singletons.copy(),
+            resolved_singletons=self._resolved_singletons.copy(),
+            name=self.name,
+            pre=previous_scope,
+            **shared_data,
         )
+        self._token = self._scope_context.set(_scope)
+        yield scope
+        scope.__exit__(exc_type, exc_value, traceback)
+        if is_provided(self._token):
+            self._scope_context.reset(self._token)
+
+    async def create_ascope(self, previous_scope: Maybe[AnyScope]):
+        shared_data = SharedData(
+            nodes=self._nodes,
+            analyzed_nodes=self._analyzed_nodes,
+            type_registry=self._type_registry,
+            ignore=self._ignore,
+        )
+
+        ascope = AsyncScope(
+            registered_singletons=self._registered_singletons.copy(),
+            resolved_singletons=self._resolved_singletons.copy(),
+            name=self.name,
+            pre=previous_scope,
+            **shared_data,
+        )
+        yield ascope
+
+        await ascope.__aexit__(exc_type, exc_value, traceback)
+        if is_provided(self._token):
+            self._scope_context.reset(self._token)
+
+    # def __enter__(self) -> "SyncScope":
+    #     try:
+    #         pre = self._scope_context.get()
+    #     except LookupError:
+    #         pre = MISSING
+
+    #     self._scope = self.create_scope(previous_scope=pre)
+    #     self._token = self._scope_context.set(self._scope)
+    #     return self._scope
+
+    # async def __aenter__(self) -> "AsyncScope":
+    #     try:
+    #         pre = cast(AsyncScope, self._scope_context.get())
+    #     except LookupError:
+    #         pre = MISSING
+
+    #     self._scope = self.create_ascope(previous_scope=pre)
+    #     self._token = self._scope_context.set(self._scope)
+    #     return self._scope
+
+    # def scope(self, name: Maybe[Hashable] = MISSING) -> "ScopeManager":
+    #     """
+    #     create a scope for resource,
+    #     resources resolved wihtin the scope would be
+
+    #     scope_name: give a iditifier to the scope so that you can get it with
+    #     dg.get_scope(scope_name)
+    #     """
+    #     shared_data = SharedData(
+    #         nodes=self._nodes,
+    #         analyzed_nodes=self._analyzed_nodes,
+    #         type_registry=self._type_registry,
+    #         ignore=self._ignore,
+    #     )
+
+    #     return ScopeManager(
+    #         name=name,
+    #         scope_ctx=self._scope_context,
+    #         graph_resolutions=self._resolved_singletons.copy(),
+    #         graph_singletons=self._registered_singletons.copy(),
+    #         shared_data=shared_data,
+    #     )
 
     @overload
     def use_scope(
@@ -973,256 +1195,3 @@ class Graph(Resolver):
 
         setattr(f, replace.__name__, replace)
         return cast(EntryFunc[P, T], f)
-
-
-ScopeSlots = ("_name", "_stack", "_pre", "_graph_resolutions", "_graph_singletons")
-
-
-class ScopeBase(Generic[Stack]):
-    __slots__ = ()
-    _stack: Stack
-    _name: Hashable
-    _pre: Maybe[Union["SyncScope", "AsyncScope"]]
-
-    _resolved_singletons: ResolvedSingletons[Any]
-    _registered_singletons: set[type]
-    # from concurrent.futures.thread import ThreadPoolExecutor
-    # _worker_threads: ThreadPoolExecutor(thread_name_prefix='ididi')
-
-    def __repr__(self):
-        return f"{self.__class__.__name__}(id={self._name})"
-
-    def enter_context(self, context: ContextManager[T]) -> T:
-        # await self._worker_thread.submit(self._stack.enter_context, context)
-        return self._stack.enter_context(context)
-
-    def get_scope(self, name: Hashable) -> Self:
-        if name == self._name:
-            return self
-
-        ptr = self
-        while is_provided(ptr._pre):
-            if ptr._pre._name == name:
-                return cast(Self, ptr._pre)
-            ptr = ptr._pre
-        else:
-            raise OutOfScopeError(name)
-
-
-class SyncScope(ScopeBase[ExitStack], Resolver):
-    __slots__ = ScopeSlots + SharedSlots
-
-    def __init__(
-        self,
-        *,
-        resolved_singletons: ResolvedSingletons[Any],
-        registered_singletons: set[type],
-        name: Maybe[Hashable] = MISSING,
-        pre: Maybe[Union["SyncScope", "AsyncScope"]] = MISSING,
-        **args: Unpack[SharedData],
-    ):
-        self._name = name
-        self._pre = pre
-        self._stack = ExitStack()
-        super().__init__(
-            **args,
-            resolved_singletons=resolved_singletons,
-            registered_singletons=registered_singletons,
-        )
-
-    def __enter__(self) -> "SyncScope":
-        return self
-
-    def __exit__(
-        self,
-        exc_type: Union[type[Exception], None],
-        exc_value: Union[Exception, None],
-        traceback: Union[TracebackType, None],
-    ) -> None:
-        self._stack.__exit__(exc_type, exc_value, traceback)
-
-    @override
-    def resolve_callback(
-        self,
-        resolved: T,
-        dependent: IDependent[T],
-        factory_type: FactoryType,
-        is_reuse: bool,
-    ):
-        if factory_type in ("default", "function"):
-            if is_reuse:
-                register_dependent(self._resolved_singletons, dependent, resolved)
-            return resolved
-
-        if factory_type == "aresource":
-            raise AsyncResourceInSyncError(dependent)
-        # enter_context_in_thead(self._worker_threads, self._stack, resolved)
-        instance = self.enter_context(cast(ContextManager[T], resolved))
-        if is_reuse:
-            register_dependent(self._resolved_singletons, dependent, instance)
-        return instance
-
-
-class AsyncScope(ScopeBase[AsyncExitStack], Resolver):
-    __slots__ = ScopeSlots + SharedSlots
-
-    def __init__(
-        self,
-        *,
-        resolved_singletons: ResolvedSingletons[Any],
-        registered_singletons: set[type],
-        name: Maybe[Hashable] = MISSING,
-        pre: Maybe[Union["SyncScope", "AsyncScope"]] = MISSING,
-        **args: Unpack[SharedData],
-    ):
-        self._name = name
-        self._pre = pre
-        self._stack = AsyncExitStack()
-
-        super().__init__(
-            **args,
-            resolved_singletons=resolved_singletons,
-            registered_singletons=registered_singletons,
-        )
-
-    async def __aenter__(self) -> "AsyncScope":
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: Union[type[Exception], None],
-        exc_value: Union[Exception, None],
-        traceback: Union[TracebackType, None],
-    ) -> None:
-        await self._stack.__aexit__(exc_type, exc_value, traceback)
-
-    async def enter_async_context(self, context: AsyncContextManager[T]) -> T:
-        return await self._stack.enter_async_context(context)
-
-    @overload
-    async def resolve(self, dependent: IDependent[T], /) -> T: ...
-
-    @overload
-    async def resolve(
-        self, dependent: IFactory[P, T], /, *args: P.args, **kwargs: P.kwargs
-    ) -> T: ...
-
-    async def resolve(
-        self, dependent: IFactory[P, T], /, *args: P.args, **kwargs: P.kwargs
-    ) -> T:
-        return await super().aresolve(dependent, *args, **kwargs)
-
-    @override
-    async def aresolve_callback(
-        self,
-        resolved: Union[T, Awaitable[T]],
-        dependent: IDependent[T],
-        factory_type: FactoryType,
-        is_reuse: bool,
-    ) -> T:
-        if factory_type in ("default", "function"):
-            instance = await resolved if isawaitable(resolved) else resolved
-            if is_reuse:
-                register_dependent(self._resolved_singletons, dependent, instance)
-            return cast(T, instance)
-
-        if factory_type == "resource":
-            instance = self.enter_context(cast(ContextManager[T], resolved))
-        else:
-            instance = await self.enter_async_context(
-                cast(AsyncContextManager[T], resolved)
-            )
-
-        if is_reuse:
-            register_dependent(self._resolved_singletons, dependent, instance)
-        return instance
-
-
-class ScopeManager:
-    __slots__ = (
-        "graph_resolutions",
-        "graph_singletons",
-        "shared_data",
-        "scope_ctx",
-        "name",
-        "_scope",
-        "_token",
-    )
-
-    shared_data: SharedData
-    scope_ctx: ScopeContext
-
-    def __init__(
-        self,
-        shared_data: SharedData,
-        scope_ctx: ScopeContext,
-        graph_resolutions: ResolvedSingletons[Any],
-        graph_singletons: set[type],
-        name: Maybe[Hashable] = MISSING,
-    ):
-        self.shared_data = shared_data
-        self.scope_ctx = scope_ctx
-        self.graph_resolutions = graph_resolutions
-        self.graph_singletons = graph_singletons
-        self.name = name
-
-        self._scope: Maybe[Union[SyncScope, AsyncScope]] = MISSING
-        self._token: Maybe[ScopeToken] = MISSING
-
-    def create_scope(self, previous_scope: Maybe[Union[SyncScope, AsyncScope]]):
-        return SyncScope(
-            registered_singletons=self.graph_singletons,
-            resolved_singletons=self.graph_resolutions,
-            name=self.name,
-            pre=previous_scope,
-            **self.shared_data,
-        )
-
-    def create_ascope(self, previous_scope: Maybe[Union[SyncScope, AsyncScope]]):
-        return AsyncScope(
-            registered_singletons=self.graph_singletons,
-            resolved_singletons=self.graph_resolutions,
-            name=self.name,
-            pre=previous_scope,
-            **self.shared_data,
-        )
-
-    def __enter__(self) -> SyncScope:
-        try:
-            pre = self.scope_ctx.get()
-        except LookupError:
-            pre = MISSING
-
-        self._scope = self.create_scope(previous_scope=pre)
-        self._token = self.scope_ctx.set(self._scope)
-        return self._scope
-
-    async def __aenter__(self) -> AsyncScope:
-        try:
-            pre = cast(AsyncScope, self.scope_ctx.get())
-        except LookupError:
-            pre = MISSING
-
-        self._scope = self.create_ascope(previous_scope=pre)
-        self._token = self.scope_ctx.set(self._scope)
-        return self._scope
-
-    def __exit__(
-        self,
-        exc_type: Union[type, None],
-        exc_value: Any,
-        traceback: Union[TracebackType, None],
-    ) -> None:
-        cast(SyncScope, self._scope).__exit__(exc_type, exc_value, traceback)
-        if is_provided(self._token):
-            self.scope_ctx.reset(self._token)
-
-    async def __aexit__(
-        self,
-        exc_type: Union[type, None],
-        exc_value: Any,
-        traceback: Union[TracebackType, None],
-    ) -> None:
-        await cast(AsyncScope, self._scope).__aexit__(exc_type, exc_value, traceback)
-        if is_provided(self._token):
-            self.scope_ctx.reset(self._token)
