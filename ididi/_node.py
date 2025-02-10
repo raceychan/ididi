@@ -78,7 +78,8 @@ def use(
     """
 
     node = DependentNode[T].from_node(factory, config=NodeConfig(**iconfig))
-    annt = Annotated[node.dependent, node, IDIDI_USE_FACTORY_MARK]
+    dependent: IDependent[T] = node.dependent
+    annt = Annotated[dependent, node, IDIDI_USE_FACTORY_MARK]
     return cast(T, annt)
 
 
@@ -90,6 +91,7 @@ def search_meta(meta: list[Any]) -> Union["DependentNode[Any]", None]:
         if v == IDIDI_USE_FACTORY_MARK:
             node: DependentNode[Any] = meta[i - 1]
             return node
+    return None
 
 
 def resolve_use(annotation: Any) -> Union["DependentNode[Any]", None]:

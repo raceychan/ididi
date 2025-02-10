@@ -14,7 +14,7 @@ copyright: (c) 2024 by race chan.
 license: MIT, see LICENSE for more details.
 """
 
-VERSION = "1.4.3"
+VERSION = "1.4.4"
 
 __version__ = VERSION
 
@@ -24,13 +24,13 @@ from ._node import NodeConfig as NodeConfig
 from ._node import use as use
 from .api import entry as entry
 from .api import resolve as resolve
-from .graph import AsyncScope as AsyncScope
-from .graph import Graph as Graph
-from .graph import SyncScope as SyncScope
 from .interfaces import AsyncResource as AsyncResource
 from .interfaces import INode as INode
 from .interfaces import INodeConfig as INodeConfig
 from .interfaces import Resource as Resource
+from .graph import AsyncScope as AsyncScope
+from .graph import Graph as Graph
+from .graph import SyncScope as SyncScope
 
 try:
     import graphviz as graphviz  # type: ignore

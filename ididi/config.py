@@ -1,4 +1,3 @@
-# from dataclasses import FrozenInstanceError
 from dataclasses import FrozenInstanceError
 from typing import Any, Final, Iterable, Literal
 
@@ -86,6 +85,7 @@ class GraphConfig(FrozenSlot):
 DefaultConfig: Final[NodeConfig] = NodeConfig()
 CacheMax: Final[int] = 1024
 ExtraUnsolvableTypes: set[Any] = {Any, Literal}
+DefaultScopeName: Final[str] = "__ididi_default_scope__"
 
 try:
     from typing import TypeAliasType  # type: ignore
@@ -93,5 +93,3 @@ except ImportError:
     from typing_extensions import TypeAliasType
 
 ExtraUnsolvableTypes.add(TypeAliasType)
-
-DefaultScopeName: Final[str] = "__ididi_default_scope__"

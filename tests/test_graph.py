@@ -165,15 +165,17 @@ def test_multiple_implementations(dg: Graph):
             """Save the repository data."""
             pass
 
-    @dg.node
     class Repo1(Repository):
         def save(self) -> None:
             pass
 
-    @dg.node
+    dg.node(Repo1)
+
     class Repo2(Repository):
         def save(self) -> None:
             pass
+
+    dg.node(Repo2)
 
     dg.resolve(Repository)
 
@@ -188,19 +190,20 @@ def test_multiple_implementations_with_factory(dg: Graph):
             """Save the repository data."""
             pass
 
-    @dg.node
     class Repo1(Repository):
         def save(self) -> None:
             pass
 
-    @dg.node
     class Repo2(Repository):
         def save(self) -> None:
             pass
 
-    @dg.node
+    dg.node(Repo2)
+
     def repo_factory() -> Repository:
         return Repo1()
+
+    dg.node(repo_factory)
 
     assert Repository in dg.nodes
 
@@ -765,12 +768,12 @@ def test_remove_new_type():
 
     dg.node(user_id_factory)
 
-    node = dg.search_node("UserId")
+    node = dg.search("UserId")
 
     assert node
 
     dg.remove_dependent(UserId)
-    assert dg.search_node("UserId") is None
+    assert dg.search("UserId") is None
 
 
 def test_graph_analyze_nested_annt():
@@ -785,11 +788,11 @@ def test_graph_analyze_nested_annt():
 
     dg.analyze(build_user)
 
-    class Aloha:
-        ...
+    class Aloha: ...
 
     annt = ty.Annotated[Aloha, ty.Annotated[User, "hello"]]
 
-
     dg.analyze(annt)
     assert Aloha in dg
+
+    assert dg.get(annt)

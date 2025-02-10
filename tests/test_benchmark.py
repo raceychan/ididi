@@ -1,9 +1,10 @@
 import typing as ty
+from contextlib import contextmanager
 from time import perf_counter
 
 import pytest
 
-from ididi import Graph
+from ididi import Graph, Resource, use
 
 from .test_data import CLASSES, UserService, user_service_factory
 
@@ -61,12 +62,40 @@ def test_resolve_instances(dg: Graph, dependents: list[type]):
 
 @pytest.mark.benchmark
 def test_entry(dg: Graph, dependents: list[type]):
-    rounds = ROUNDS * 1
+    rounds = ROUNDS * 10
     dg.reset(clear_nodes=True)
 
     SERVICE_REGISTRY: set[UserService] = set()
 
-    def create_user(user_name: str, user_email: str, service: UserService) -> str:
+    class Conn: ...
+
+    class Repo: ...
+
+    class Cache: ...
+
+    @contextmanager
+    def get_conn() -> Resource[Conn]:
+        conn = Conn()
+        yield conn
+
+    @contextmanager
+    def get_repo() -> Resource[Repo]:
+        r = Repo()
+        yield r
+
+    @contextmanager
+    def get_cache() -> Resource[Cache]:
+        r = Cache()
+        yield r
+
+    def create_user(
+        user_name: str,
+        user_email: str,
+        service: UserService,
+        conn: ty.Annotated[Conn, use(get_conn)],
+        repo: ty.Annotated[Repo, use(get_repo)],
+        cache: ty.Annotated[Cache, use(get_cache)],
+    ) -> str:
         SERVICE_REGISTRY.add(service)
         return "ok"
 
@@ -75,7 +104,20 @@ def test_entry(dg: Graph, dependents: list[type]):
     for _ in range(rounds):
         pre = perf_counter()
         user_service = user_service_factory()
-        assert create_user("test", "email", service=user_service) == "ok"
+        with get_conn() as conn:
+            with get_repo() as repo:
+                with get_cache() as cache:
+                    assert (
+                        create_user(
+                            "test",
+                            "email",
+                            service=user_service,
+                            conn=conn,
+                            repo=repo,
+                            cache=cache,
+                        )
+                        == "ok"
+                    )
         aft = perf_counter()
         cost = round(aft - pre, 12)
         normal_total += cost
@@ -195,4 +237,46 @@ current implementation of entry is 6.265775 times slower
 menaul construction 0.038749
 ididi resolve 0.285463
 current implementation(without reuse) is 7.366977 times slower
+"""
+
+
+"""
+1.4.3
+
+0.00866 seoncds to register 100 classes
+0.002322 seoncds to statically resolve 100 classes
+0.00012 seoncds to resolve 100 instances
+
+0.001616 seoncds to call regular function create_user 1000 times
+0.007332 seoncds to call entry version of create_user 1000 times
+
+current implementation of entry is 4.537129 times slower
+
+menaul construction took 0.024939
+ididi resolve took 0.102979
+current implementation(without reuse) is 4.129235 times slower
+"""
+
+
+"""
+1.4.4
+
+NOTE:
+benchmark of entry after 1.4.4 is slower because we changed the test method of entry.
+
+|─ 0.239 Graph.resolve  ididi/resolver.py:447
+│  ├─ 0.167 resolve_dfs  ididi/resolver.py:79
+│  │  ├─ 0.087 [self]  ididi/resolver.py
+│  │  ├─ 0.031 Graph.resolve_callback  ididi/resolver.py:402
+│  │  │  ├─ 0.017 register_dependent  ididi/resolver.py:64
+│  │  │  └─ 0.014 [self]  ididi/resolver.py
+│  │  ├─ 0.020 resolve_dfs  ididi/resolver.py:79
+│  │  │  ├─ 0.013 [self]  ididi/resolver.py
+│  │  │  └─ 0.007 dict.get  <built-in>
+│  │  ├─ 0.018 Dependencies.__iter__  ididi/_node.py:204
+│  │  └─ 0.007 dict.get  <built-in>
+│  ├─ 0.048 [self]  ididi/resolver.py
+│  ├─ 0.017 NodeConfig.analyze  ididi/resolver.py:274
+│  └─ 0.007 dict.get  <built-in>
+└─ 0.016 [self]  tests/test_benchmark.py
 """

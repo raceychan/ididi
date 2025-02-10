@@ -94,8 +94,6 @@ update-version:
 	@echo "Updating Pixi version to $(VERSION)..."
 	@pixi run -e publish hatch version $(VERSION)
 
-
-
 git-commit:
 	@echo "Committing changes..."
 	@git add -A
@@ -104,7 +102,7 @@ git-commit:
 git-merge:
 	@echo "Merging $(BRANCH) into master..."
 	@git checkout master
-	@git merge "$(BRANCH)"
+	@git merge --squash "$(BRANCH)"
 
 git-tag:
 	@echo "Tagging the release..."

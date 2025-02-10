@@ -60,3 +60,5 @@ def test_dg_resolve_cls_depends_on_function():
     dg = Graph()
     with dg.scope() as scope:
         assert isinstance(scope.resolve(Route), Route)
+
+    assert (node := dg.get(validate_admin)) and node.dependent is validate_admin

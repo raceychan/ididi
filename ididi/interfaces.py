@@ -68,9 +68,6 @@ AsyncResource = AsyncGenerator[T, None]
 class TDecor(Protocol):
 
     @overload
-    def __call__(self, factory: type[T]) -> type[T]: ...
-
-    @overload
     def __call__(self, factory: IResourceFactory[P, T]) -> IResourceFactory[P, T]: ...
 
     @overload

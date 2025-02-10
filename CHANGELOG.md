@@ -1045,3 +1045,85 @@ Here, entering and exiting `get_session` will be executed in a different thread.
 - variadic arguments, such as `*args` or `**kwargs` without `typing.UnPack`, are no longer considered as dependencies.
 - Builtin types with provided default are no longer considered as dependencies.
 - `Dependency.unresolvabale` is now an attribute, instead of a property.
+
+
+## version 1.4.4
+
+- refactor scope, now user can create a new scope using `scope.scope`
+
+```python
+def test_scope_graph_share_methods():
+    dg = Graph()
+
+    with dg.scope() as s1:
+        with s1.scope() as s2:
+            ...
+```
+
+- `Graph.get` / `Scope.get`
+
+
+*create scope from graph* vs *crate scope from scope*
+
+the created scope will `inherit` resolved instances and registered singletons from its creator, thus
+
+- when create from graph, scope inherit resolved instances and registered singletons from graph
+
+- when create from scope, scope inherit resolved instances and registered singletons from the parent scope.
+
+Example
+```python
+    dg = Graph()
+
+    class User: ...
+    class Cache: ...
+
+    dg_u = dg.resolve(User)
+
+    with dg.scope() as s1:
+        s1_u = s1.resolve(User)
+        assert s1_u is dg_u
+        s1_cache = s1.resolve(Cache)
+        dg_cache = dg.resolve(Cache)
+        assert s1_cache is not dg_cache
+
+        with s1.scope() as s12:
+            assert s12.resolve(User) is dg_u
+            s12_cache = s12.resolve(Cache)
+            assert s12_cache is s1_cache
+            assert s12_cache is not dg_cache
+
+    with dg.scope() as s2:
+        s2_u = s2.resolve(User)
+        assert s2_u is dg_u
+        s2_cache = s2.resolve(Cache)
+        assert s2_cache is not s1_cache
+```
+
+
+
+## versio 1.4.5(plan)
+- consider switch to anyio
+
+- make a re-use params version of `Graph.resolve`, 
+
+```python
+
+from typing import Any, NewType
+
+
+class Request: ...
+
+
+RequestParams = NewType("RequestParams", dict[str, Any])
+
+
+async def test_resolve_request():
+    dg = Graph()
+
+    async def resolve_request(r: Request) -> RequestParams:
+        return RequestParams({"a": 1})
+
+    dg.node(resolve_request)
+    await dg.resolve(resolve_request, reuse_overrides=True, r=Request())
+```

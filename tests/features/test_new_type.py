@@ -94,6 +94,6 @@ def test_custom_values():
 
 
 def test_new_type_factory():
-    node = dg.search_node("UserID")
+    node = dg.search("UserID")
     assert node
     assert node.factory_type != "default"

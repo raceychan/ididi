@@ -1,3 +1,4 @@
+# import cython
 from collections import defaultdict
 from types import FunctionType, MappingProxyType
 from typing import Any, Callable, Hashable, Union, cast
@@ -12,17 +13,17 @@ GraphNodes = dict[IDependent[T], DependentNode[T]]
 ### mapping a type to its corresponding node
 """
 
-GraphNodesView = MappingProxyType[type[T], DependentNode[T]]
+GraphNodesView = MappingProxyType[IDependent[T], DependentNode[T]]
 """
 ### a readonly view of GraphNodes
 """
 
-ResolvedSingletons = dict[type[T], T]
+ResolvedSingletons = dict[IDependent[T], T]
 """
 mapping a type to its resolved instance, only instances of reusable node will be added here.
 """
 
-TypeMappings = dict[type[T], list[type[T]]]
+TypeMappings = dict[IDependent[T], list[IDependent[T]]]
 """
 ### mapping a type to its dependencies
 """
@@ -31,10 +32,10 @@ TypeMappings = dict[type[T], list[type[T]]]
 class TypeRegistry:
     __slots__ = ("_mappings",)
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._mappings: TypeMappings[Any] = defaultdict(list)
 
-    def __getitem__(self, dependent_type: IDependent[T]) -> list[type[T]]:
+    def __getitem__(self, dependent_type: IDependent[T]) -> list[IDependent[T]]:
         return self._mappings[dependent_type].copy()
 
     def __len__(self) -> int:
@@ -43,7 +44,7 @@ class TypeRegistry:
     def __contains__(self, dependent_type: Hashable) -> bool:
         return dependent_type in self._mappings
 
-    def update(self, other: "TypeRegistry"):
+    def update(self, other: "TypeRegistry") -> None:
         self._mappings.update(other._mappings)
 
     def register(self, dependent: IDependent[T]) -> None:
@@ -52,7 +53,7 @@ class TypeRegistry:
         for base in get_bases(dependent):
             self._mappings[base].append(dependent)
 
-    def remove(self, dependent_type: IDependent[T]):
+    def remove(self, dependent_type: IDependent[T]) -> None:
         for base in get_bases(dependent_type):
             self._mappings[base].remove(dependent_type)
 
@@ -111,9 +112,7 @@ class Visitor:
         for node_type in cast(list[IDependent[Any]], start_types):
             dfs(node_type)
 
-    def get_dependents(
-        self, dependency: IDependent[Any]
-    ) -> list[IDependent[Any]]:
+    def get_dependents(self, dependency: IDependent[Any]) -> list[IDependent[Any]]:
         dependents: list[IDependent[Any]] = []
 
         def collect_dependent(node_type: IDependent[Any]):

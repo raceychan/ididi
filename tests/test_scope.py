@@ -1,8 +1,9 @@
+import gc
 import typing as ty
 
 import pytest
 
-from ididi import Graph
+from ididi import Graph, Resource
 from ididi.config import DefaultScopeName
 from ididi.errors import (
     AsyncResourceInSyncError,
@@ -147,10 +148,11 @@ def test_sync_func_requires_async_factory():
 
     class AsyncResource(AsyncResourceBase): ...
 
-    @dg.node
     async def get_async_resource() -> ty.AsyncGenerator[AsyncResource, None]:
         ar = AsyncResource()
         yield ar
+
+    dg.node(get_async_resource)
 
     @dg.entry
     def main(ar: AsyncResource) -> str:
@@ -170,17 +172,19 @@ async def test_scope_repeat_resolve():
 
     class AsyncResource(AsyncResourceBase): ...
 
-    @dg.node
     def get_resource() -> ty.Generator[Resource, None, None]:
         resource = Resource()
         resource.open()
         yield resource
 
-    @dg.node
+    dg.node(get_resource)
+
     async def get_async_resource() -> ty.AsyncGenerator[AsyncResource, None]:
         resource = AsyncResource()
         await resource.open()
         yield resource
+
+    dg.node(get_async_resource)
 
     with dg.scope() as scope:
         resource = scope.resolve(Resource)
@@ -232,19 +236,21 @@ async def test_nested_scope():
 
     class AsyncResource(AsyncResourceBase): ...
 
-    @dg.node
     def get_resource() -> ty.Generator[Resource, None, None]:
         resource = Resource()
         resource.open()
         yield resource
         resource.close()
 
-    @dg.node
+    dg.node(get_resource)
+
     async def get_async_resource() -> ty.AsyncGenerator[AsyncResource, None]:
         resource = AsyncResource()
         await resource.open()
         yield resource
         await resource.close()
+
+    dg.node(get_async_resource)
 
     with dg.scope() as scope:
         resource = scope.resolve(Resource)
@@ -271,19 +277,21 @@ async def test_context_scope():
 
     class AsyncResource(AsyncResourceBase): ...
 
-    @dg.node
     def get_resource() -> ty.Generator[Resource, None, None]:
         resource = Resource()
         resource.open()
         yield resource
         resource.close()
 
-    @dg.node
+    dg.node(get_resource)
+
     async def get_async_resource() -> ty.AsyncGenerator[AsyncResource, None]:
         resource = AsyncResource()
         await resource.open()
         yield resource
         await resource.close()
+
+    dg.node(get_async_resource)
 
     with pytest.raises(ResourceOutsideScopeError):
         await dg.aresolve(Resource)
@@ -323,12 +331,13 @@ def test_non_reuse_resource():
         def __init__(self):
             super().__init__()
 
-    @dg.node(reuse=False)
     def get_resource() -> ty.Generator[Resource, None, None]:
         resource = Resource()
         resource.open()
         yield resource
         resource.close()
+
+    dg.node(get_resource, reuse=False)
 
     with dg.scope() as s:
         r1 = s.resolve(Resource)
@@ -461,3 +470,64 @@ async def test_share_single_pattern():
         g = scope.resolve(Graph)
 
         assert g is dg
+
+
+async def test_scope_pre():
+    dg = Graph()
+
+    with dg.scope("s1") as s1:
+        with dg.scope("s2") as s2:
+            assert s2.pre is s1
+
+    with dg.scope("n1") as n1:
+        with n1.scope("n2") as n2:
+            assert n2.pre is n1
+
+
+async def test_scope_refcnt():
+    dg = Graph()
+
+    with dg.scope("s1") as s1:
+        with dg.scope("s2") as s2:
+            assert s2.pre is s1
+
+    s1_cnt = len(gc.get_referrers(s1))
+    s2_cnt = len(gc.get_referrers(s2))
+
+    # s1 is tracked by s2 as well
+    assert s1_cnt == (s2_cnt + 1)
+
+
+def test_scope_gc():
+    dg = Graph()
+
+    def inner():
+        with dg.scope("1") as i1:
+
+            def inn2():
+                with i1.scope("2") as i2:
+                    assert i2.pre is i1
+
+            inn2()
+
+        i1_cnt = len(gc.get_referrers(i1))
+        # i1_cnt is not referred by i2 anymore
+        # which means i2 is collected.
+        assert i1_cnt == 1
+
+    inner()
+
+
+async def test_ascope_ctx_exit():
+    dg = Graph()
+
+    class Conn: ...
+
+    def get_conn() -> Resource[Conn]:
+        cnn = Conn()
+        yield cnn
+
+    with pytest.raises(TypeError):
+        async with dg.ascope() as asc:
+            await asc.resolve(get_conn)
+            raise TypeError
