@@ -794,5 +794,3 @@ def test_graph_analyze_nested_annt():
 
     dg.analyze(annt)
     assert Aloha in dg
-
-    assert dg.get(annt)

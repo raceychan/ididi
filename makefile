@@ -102,7 +102,7 @@ git-commit:
 git-merge:
 	@echo "Merging $(BRANCH) into master..."
 	@git checkout master
-	@git merge --squash "$(BRANCH)"
+	@git merge "$(BRANCH)"
 
 git-tag:
 	@echo "Tagging the release..."
