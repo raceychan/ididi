@@ -794,3 +794,12 @@ def test_graph_analyze_nested_annt():
 
     dg.analyze(annt)
     assert Aloha in dg
+
+    # class Connection:
+    #     ...
+
+    # def get_conn(url: ty.Annotated[str, IGNORE_PARAM_MARK])->Connection:
+    #     ...
+
+    # def get_repo(conn: ty.Annotated[Connection, USE_FACTORY_MARK, get_conn]):
+    ...

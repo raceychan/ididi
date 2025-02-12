@@ -1127,3 +1127,71 @@ async def test_resolve_request():
     dg.node(resolve_request)
     await dg.resolve(resolve_request, reuse_overrides=True, r=Request())
 ```
+
+- provide a non-intrusive way to node config
+
+```python
+def node(
+    factories: Maybe[dict[type[T], IDependent[T]]] = MISSING,
+    **kwargs: Unpack[INodeConfig],
+):
+    def inner(cls: Any) -> Any:
+        return cls
+
+    return inner
+
+
+class AuthRepo: ...
+
+
+class TokenRegistry: ...
+
+
+def get_auth() -> AuthRepo: ...
+def get_registry() -> TokenRegistry: ...
+
+
+@node(factories={AuthRepo: get_auth, TokenRegistry: get_registry})
+class AuthService:
+    def __init__(self, auth_repo: AuthRepo, token: TokenRegistry): ...
+
+```
+
+
+
+
+```python
+from ididi import Graph
+
+dg = Graph()
+
+dg.node(get_auth, reuse=False, ignore="name")
+dg.node(get_conn)
+dg.node(get_repo, ignore="date")
+
+vs
+
+dg.add_nodes(
+    get_conn,
+    (get_auth, reuse=False, ignore="name"), 
+    (get_repo, ignore="date")
+)
+
+```
+
+right now 
+
+```python
+Ignore = Annotated[T, IGNORE_PARAM_MARK]
+```
+so this works:
+
+```python
+def get_conn(url: Annotated[str, IGNORE_PARAM_MARK]):
+    ...
+```
+
+```python
+def get_repo(conn: Connection = use(get_conn)):
+    ...
+```

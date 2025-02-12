@@ -93,3 +93,19 @@ except ImportError:
     from typing_extensions import TypeAliasType
 
 ExtraUnsolvableTypes.add(TypeAliasType)
+
+USE_FACTORY_MARK = "__ididi_use_factory__"
+IGNORE_PARAM_MARK = "__ididi_ignore_param__"
+
+FactoryType = Literal["default", "function", "resource", "aresource"]
+# carry this information in node so that resolve does not have to do
+# iscontextmanager check
+
+ResolveOrder: dict[FactoryType, int] = {
+    "default": 1,
+    "function": 2,
+    "resource": 3,
+    "aresource": 3,
+}
+# when merge graphs we need to make sure a node with default constructor
+# does not override a node with resource / function factory

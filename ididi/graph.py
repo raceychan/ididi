@@ -40,7 +40,6 @@ from ._node import (
     should_override,
 )
 from ._type_resolve import (
-    FactoryType,
     get_bases,
     get_typed_signature,
     is_function,
@@ -50,7 +49,7 @@ from ._type_resolve import (
     resolve_factory,
     resolve_node_type,
 )
-from .config import CacheMax, DefaultScopeName, EmptyIgnore, GraphConfig
+from .config import CacheMax, DefaultScopeName, EmptyIgnore, FactoryType, GraphConfig
 from .errors import (
     AsyncResourceInSyncError,
     CircularDependencyDetectedError,

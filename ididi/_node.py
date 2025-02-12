@@ -20,10 +20,6 @@ from typing import (
 from typing_extensions import Unpack
 
 from ._type_resolve import (
-    IDIDI_IGNORE_PARAM_MARK,
-    IDIDI_USE_FACTORY_MARK,
-    FactoryType,
-    ResolveOrder,
     flatten_annotated,
     get_args,
     get_factory_sig_from_cls,
@@ -39,7 +35,17 @@ from ._type_resolve import (
     resolve_annotation,
     resolve_forwardref,
 )
-from .config import CacheMax, DefaultConfig, EmptyIgnore, FrozenSlot, NodeConfig
+from .config import (
+    IGNORE_PARAM_MARK,
+    USE_FACTORY_MARK,
+    CacheMax,
+    DefaultConfig,
+    EmptyIgnore,
+    FactoryType,
+    FrozenSlot,
+    NodeConfig,
+    ResolveOrder,
+)
 from .errors import (
     ABCNotImplementedError,
     MissingAnnotationError,
@@ -59,7 +65,7 @@ from .utils.typing_utils import P, T
 
 # ============== Ididi marks ===========
 
-Ignore = Annotated[T, IDIDI_IGNORE_PARAM_MARK]
+Ignore = Annotated[T, IGNORE_PARAM_MARK]
 
 
 def use(
@@ -78,8 +84,7 @@ def use(
     """
 
     node = DependentNode[T].from_node(factory, config=NodeConfig(**iconfig))
-    dependent: IDependent[T] = node.dependent
-    annt = Annotated[dependent, node, IDIDI_USE_FACTORY_MARK]
+    annt = Annotated[T, USE_FACTORY_MARK, node]
     return cast(T, annt)
 
 
@@ -88,8 +93,8 @@ def use(
 
 def search_meta(meta: list[Any]) -> Union["DependentNode[Any]", None]:
     for i, v in enumerate(meta):
-        if v == IDIDI_USE_FACTORY_MARK:
-            node: DependentNode[Any] = meta[i - 1]
+        if v == USE_FACTORY_MARK:
+            node: DependentNode[Any] = meta[i + 1]
             return node
     return None
 
@@ -113,6 +118,20 @@ def should_override(
         ResolveOrder[other_node.factory_type] > ResolveOrder[current_node.factory_type]
     )
     return ans
+
+
+def resolve_marks(annt: Any) -> Union[IDependent[Any], None]:
+    annotate_meta = flatten_annotated(annt)
+    if IGNORE_PARAM_MARK in annotate_meta:
+        return None
+    if node := search_meta(annotate_meta):
+        if node.function_dependent:
+            param_type = node.dependent
+        else:
+            param_type = annt
+    else:
+        param_type = get_args(annt)[0]
+    return param_type
 
 
 # ======================= Signature =====================================
@@ -281,17 +300,9 @@ class Dependencies:
                 default = MISSING
 
             if get_origin(param_type) is Annotated:
-                annotate_meta = flatten_annotated(param_type)
-                if IDIDI_IGNORE_PARAM_MARK in annotate_meta:
+                param_type = resolve_marks(param_type)
+                if param_type is None:
                     continue
-                try:
-                    idx = annotate_meta.index(IDIDI_USE_FACTORY_MARK)
-                except ValueError:
-                    param_type = get_args(param_type)[0]
-                else:
-                    node: DependentNode[Any] = annotate_meta[idx - 1]
-                    if node.function_dependent:
-                        param_type = node.dependent
 
             if param_type is Unpack:
                 dependencies.update(unpack_to_deps(param_annotation))
@@ -497,7 +508,7 @@ class DependentNode(Generic[T]):
 
         if get_origin(dependent) is Annotated:
             metas = flatten_annotated(dependent)
-            if IDIDI_IGNORE_PARAM_MARK in metas:
+            if IGNORE_PARAM_MARK in metas:
                 node = cls._from_function_dep(
                     f, signature=signature, factory_type=factory_type, config=config
                 )
