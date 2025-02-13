@@ -94,7 +94,6 @@ class C:
     def __init__(self, b: B = use(b_f)):
         self.berry = b
 
-@pytest.mark.debug
 def test_nested_inject():
     dg = Graph()
     cream = dg.resolve(C)

@@ -1195,3 +1195,26 @@ def get_conn(url: Annotated[str, IGNORE_PARAM_MARK]):
 def get_repo(conn: Connection = use(get_conn)):
     ...
 ```
+
+
+- support resolve from class method
+
+
+```python
+class Book:
+    @classmethod
+    def from_article(cls, a: str) -> "Book":
+        return Book()
+
+
+@pytest.mark.debug
+def test_resolve_classmethod():
+    dg = Graph()
+    dg.node(Book.from_article)
+
+    node = dg.nodes[Book]
+    assert node.factory_type == "function"
+
+    b = dg.resolve(Book().from_article, a="5")
+    assert isinstance(b, Book)
+```

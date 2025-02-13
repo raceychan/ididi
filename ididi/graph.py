@@ -4,7 +4,7 @@ from contextlib import AsyncExitStack, ExitStack, asynccontextmanager, contextma
 from contextvars import ContextVar, Token, copy_context
 from functools import lru_cache, partial, wraps
 from inspect import isawaitable, iscoroutinefunction
-from types import MappingProxyType, TracebackType
+from types import MappingProxyType, MethodType, TracebackType
 from typing import (
     Annotated,
     Any,
@@ -54,6 +54,7 @@ from .errors import (
     AsyncResourceInSyncError,
     CircularDependencyDetectedError,
     MergeWithScopeStartedError,
+    NotSupportedError,
     OutOfScopeError,
     PositionalOverrideError,
     ResourceOutsideScopeError,
@@ -298,6 +299,12 @@ class Resolver:
         return concrete_node
 
     def _analyze_dep(self, dependent: INode[P, T], config: NodeConfig) -> IDependent[T]:
+        if isinstance(dependent, MethodType):
+            bound_obj = dependent.__self__
+            if not isinstance(bound_obj, type):
+                raise NotSupportedError("Instance method is not supported")
+            dependent = cast(IDependent[T], bound_obj)
+
         if is_function(dependent):
             if is_new_type(dependent):
                 resolved_type = resolve_annotation(dependent)

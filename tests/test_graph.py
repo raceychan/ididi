@@ -795,11 +795,20 @@ def test_graph_analyze_nested_annt():
     dg.analyze(annt)
     assert Aloha in dg
 
-    # class Connection:
-    #     ...
 
-    # def get_conn(url: ty.Annotated[str, IGNORE_PARAM_MARK])->Connection:
-    #     ...
+class Book:
+    @classmethod
+    def from_article(cls, a: str) -> "Book":
+        return Book()
 
-    # def get_repo(conn: ty.Annotated[Connection, USE_FACTORY_MARK, get_conn]):
-    ...
+
+@pytest.mark.debug
+def test_resolve_classmethod():
+    dg = Graph()
+    dg.node(Book.from_article)
+
+    node = dg.nodes[Book]
+    assert node.factory_type == "function"
+
+    b = dg.resolve(Book().from_article, a="5")
+    assert isinstance(b, Book)
