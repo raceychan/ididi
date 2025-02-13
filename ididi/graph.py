@@ -300,9 +300,11 @@ class Resolver:
 
     def _analyze_dep(self, dependent: INode[P, T], config: NodeConfig) -> IDependent[T]:
         if isinstance(dependent, MethodType):
-            bound_obj = dependent.__self__
+            dep_method = dependent
+            bound_obj = dep_method.__self__
             if not isinstance(bound_obj, type):
                 raise NotSupportedError("Instance method is not supported")
+            self._node(dep_method)
             dependent = cast(IDependent[T], bound_obj)
 
         if is_function(dependent):

@@ -15,6 +15,7 @@ from ididi.errors import (
     GenericDependencyNotSupportedError,
     MergeWithScopeStartedError,
     MissingAnnotationError,
+    NotSupportedError,
     PositionalOverrideError,
     TopLevelBulitinTypeError,
     UnsolvableDependencyError,
@@ -801,14 +802,27 @@ class Book:
     def from_article(cls, a: str) -> "Book":
         return Book()
 
+    def dump(self) -> "Book":
+        return self
 
-@pytest.mark.debug
-def test_resolve_classmethod():
+
+def test_analyze_classmethod():
     dg = Graph()
     dg.node(Book.from_article)
 
     node = dg.nodes[Book]
     assert node.factory_type == "function"
 
-    b = dg.resolve(Book().from_article, a="5")
+
+def test_resolve_classmethod():
+    dg = Graph()
+
+    b = dg.resolve(Book.from_article, a="5")
     assert isinstance(b, Book)
+
+
+def test_resolve_instance_method_raise_error():
+    dg = Graph()
+
+    with pytest.raises(NotSupportedError):
+        dg.resolve(Book().dump)

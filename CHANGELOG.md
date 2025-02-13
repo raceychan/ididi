@@ -1210,11 +1210,6 @@ class Book:
 @pytest.mark.debug
 def test_resolve_classmethod():
     dg = Graph()
-    dg.node(Book.from_article)
-
-    node = dg.nodes[Book]
-    assert node.factory_type == "function"
-
-    b = dg.resolve(Book().from_article, a="5")
+    b = dg.resolve(Book.from_article, a="5")
     assert isinstance(b, Book)
 ```
