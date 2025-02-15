@@ -114,10 +114,9 @@ def should_override(
     Check if the other node should override the current node
     """
 
-    ans = (
+    return (
         ResolveOrder[other_node.factory_type] > ResolveOrder[current_node.factory_type]
     )
-    return ans
 
 
 def resolve_marks(annt: Any) -> Union[IDependent[Any], None]:
@@ -209,58 +208,55 @@ def unpack_to_deps(
         dependencies[name] = dep_param
     return dependencies
 
+# TODO: make this an immutable dict, replace 
+class Dependencies(dict[str, Dependency[Any]]):
+    __slots__ = ("_deps")
 
-class Dependencies:
-    __slots__ = ("_deps", "_sig")
+    # def __init__(
+    #     self, deps: dict[str, Dependency[Any]], sig: Union[Signature, None] = None
+    # ):
+    #     self._deps = deps
+    #     # self._sig = sig
 
-    def __init__(
-        self, deps: dict[str, Dependency[Any]], sig: Union[Signature, None] = None
-    ):
-        self._deps = deps
-        self._sig = sig
+    # def __bool__(self) -> bool:
+    #     return bool(self._deps)
 
-    def __bool__(self) -> bool:
-        return bool(self._deps)
+    # def __iter__(self) -> Iterator[tuple[str, Dependency[Any]]]:
+    #     return iter(self._deps.items())
 
-    def __iter__(self) -> Iterator[tuple[str, Dependency[Any]]]:
-        return iter(self._deps.items())
+    # def __len__(self) -> int:
+    #     return len(self._deps)
 
-    def __len__(self) -> int:
-        return len(self._deps)
+    # def __getitem__(self, param_name: str) -> Dependency[Any]:
+    #     return self._deps[param_name]
 
-    def __getitem__(self, param_name: str) -> Dependency[Any]:
-        return self._deps[param_name]
-
-    def __contains__(self, param_name: str):
-        return param_name in self._deps
+    # def __contains__(self, param_name: str):
+    #     return param_name in self._deps
 
     def __repr__(self):
         deps_repr = ", ".join(
-            f"{name}: {dep.type_repr}={dep.default!r}" for name, dep in self
+            f"{name}: {dep.type_repr}={dep.default!r}" for name, dep in self.items()
         )
         return f"Depenencies({deps_repr})"
 
-    @property
-    def signature(self) -> Signature:
-        """
-        dynamically generate signature based on current params,
-        """
-        if self._sig is None:
-            self._sig = Signature(
-                parameters=[
-                    Parameter(
-                        name=p.name,
-                        kind=p.param_kind,
-                        default=p.default,
-                    )
-                    for p in self._deps.values()
-                ],
-                __validate_parameters__=False,
-            )
-        return self._sig
+    # def signature(self) -> Signature:
+    #     """
+    #     dynamically generate signature based on current params,
+    #     """
+    #     return Signature(
+    #             parameters=[
+    #                 Parameter(
+    #                     name=p.name,
+    #                     kind=p.param_kind,
+    #                     default=p.default,
+    #                 )
+    #                 for p in self._deps.values()
+    #             ],
+    #             __validate_parameters__=False,
+    #         )
 
-    def update(self, param_name: str, param_val: Dependency[Any]):
-        self._deps[param_name] = param_val
+    # def update(self, param_name: str, param_val: Dependency[Any]):
+    #     self._deps[param_name] = param_val
 
     @classmethod
     def from_signature(
@@ -416,7 +412,7 @@ class DependentNode(Generic[T]):
     ) -> Generator[Dependency[T], None, None]:
         "params that needs to be statically resolved"
 
-        for param_name, param in self.dependencies:
+        for param_name, param in self.dependencies.items():
             if param_name in ignore:
                 continue
             param_type = cast(Union[IDependent[T], ForwardRef], param.param_type)
@@ -425,7 +421,7 @@ class DependentNode(Generic[T]):
                 param = param.replace_type(new_type)
             yield param
             if param.param_type != param_type:
-                self.dependencies.update(param_name, param)
+                self.dependencies.update({param_name: param})
 
     def check_for_implementations(self) -> None:
         if isinstance(self.factory, type):

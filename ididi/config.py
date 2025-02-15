@@ -84,7 +84,7 @@ class GraphConfig(FrozenSlot):
 
 DefaultConfig: Final[NodeConfig] = NodeConfig()
 CacheMax: Final[int] = 1024
-ExtraUnsolvableTypes: set[Any] = {Any, Literal}
+ExtraUnsolvableTypes: Final[set[Any]] = {Any, Literal}
 DefaultScopeName: Final[str] = "__ididi_default_scope__"
 
 try:
@@ -101,7 +101,7 @@ FactoryType = Literal["default", "function", "resource", "aresource"]
 # carry this information in node so that resolve does not have to do
 # iscontextmanager check
 
-ResolveOrder: dict[FactoryType, int] = {
+ResolveOrder: Final[dict[FactoryType, int]] = {
     "default": 1,
     "function": 2,
     "resource": 3,
@@ -109,3 +109,4 @@ ResolveOrder: dict[FactoryType, int] = {
 }
 # when merge graphs we need to make sure a node with default constructor
 # does not override a node with resource / function factory
+

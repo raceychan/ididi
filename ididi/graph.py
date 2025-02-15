@@ -109,7 +109,7 @@ def resolve_dfs(
     pnode = nodes.get(ptype) or resolver.analyze(ptype)
 
     params = overrides
-    for name, param in pnode.dependencies:
+    for name, param in pnode.dependencies.items():
         if name not in params:
             params[name] = resolve_dfs(resolver, nodes, cache, param.param_type, {})
 
@@ -136,7 +136,7 @@ async def aresolve_dfs(
     pnode = nodes.get(ptype) or graph.analyze(ptype)
 
     params = overrides
-    for name, param in pnode.dependencies:
+    for name, param in pnode.dependencies.items():
         if name not in params:
             params[name] = await aresolve_dfs(graph, nodes, cache, param.param_type, {})
 
@@ -306,8 +306,8 @@ class Resolver:
                 raise NotSupportedError("Instance method is not supported")
             self._node(dep_method)
             dependent = cast(IDependent[T], bound_obj)
-
-        if is_function(dependent):
+            resolved_type = resolve_annotation(dependent)
+        elif is_function(dependent):
             if is_new_type(dependent):
                 resolved_type = resolve_annotation(dependent)
             else:
@@ -318,11 +318,11 @@ class Resolver:
             resolved_type = resolve_annotation(dependent)
 
         annt_dep = None
+
         if get_origin(resolved_type) is Annotated:
             annt_dep = resolved_type
 
         if annt_dep:
-            # TODO: resolve Ignore return case here
             if node := resolve_use(annt_dep):
                 self._node(node.factory)
 
@@ -425,7 +425,7 @@ class Resolver:
 
         contain_resource = any(
             self.should_be_scoped(param.param_type)
-            for _, param in resolved_node.dependencies
+            for _, param in resolved_node.dependencies.items()
         )
         return contain_resource
 
@@ -510,7 +510,7 @@ class Resolver:
                     if inject_node := resolve_use(param_type):
                         inode = self._node(inject_node.factory)
                         node.dependencies.update(
-                            param.name, param.replace_type(inode.dependent)
+                            {param.name: param.replace_type(inode.dependent)}
                         )
                         self.analyze(inode.factory)
                         continue
@@ -518,7 +518,7 @@ class Resolver:
                     fnode = DependentNode.from_node(param_type, config=config)
                     self._nodes[param_type] = fnode
                     node.dependencies.update(
-                        param.name, param.replace_type(fnode.dependent)
+                        {param.name: param.replace_type(fnode.dependent)}
                     )
                     self.analyze(fnode.factory)
                     continue
@@ -558,7 +558,7 @@ class Resolver:
         depends_on_resource: bool = False
         unresolved: list[tuple[str, IDependent[Any]]] = []
 
-        for name, dep in deps:
+        for name, dep in deps.items():
             param_type = dep.param_type
 
             if is_unsolvable_type(param_type):

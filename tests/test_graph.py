@@ -122,7 +122,7 @@ def test_node_signature_change_after_factory(dg: Graph):
     dg.analyze(UserService)
     node = dg.nodes[UserService]
     print(node.dependencies)
-    print(node.dependencies.signature)
+    # print(node.dependencies.signature)
     assert "name" not in node.dependencies
 
     assert len(node.dependencies) == 2
