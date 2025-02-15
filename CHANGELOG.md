@@ -1128,37 +1128,23 @@ async def test_resolve_request():
     await dg.resolve(resolve_request, reuse_overrides=True, r=Request())
 ```
 
-- provide a non-intrusive way to node config
+- provide a more non-intrusive way to node config, where user only need to add new code, no modifying current code, not even decorator.
 
 ```python
-def node(
-    factories: Maybe[dict[type[T], IDependent[T]]] = MISSING,
-    **kwargs: Unpack[INodeConfig],
-):
-    def inner(cls: Any) -> Any:
-        return cls
-
-    return inner
-
-
 class AuthRepo: ...
-
-
 class TokenRegistry: ...
-
 
 def get_auth() -> AuthRepo: ...
 def get_registry() -> TokenRegistry: ...
 
 
-@node(factories={AuthRepo: get_auth, TokenRegistry: get_registry})
 class AuthService:
     def __init__(self, auth_repo: AuthRepo, token: TokenRegistry): ...
 
+dg.add_nodes(factories={AuthRepo: get_auth, TokenRegistry: get_registry})
 ```
 
-
-
+OR
 
 ```python
 from ididi import Graph
@@ -1176,10 +1162,9 @@ dg.add_nodes(
     (get_auth, reuse=False, ignore="name"), 
     (get_repo, ignore="date")
 )
-
 ```
 
-right now 
+- make `Mark` public, user can use it with `typing.Annotated`
 
 ```python
 Ignore = Annotated[T, IGNORE_PARAM_MARK]
@@ -1197,8 +1182,7 @@ def get_repo(conn: Connection = use(get_conn)):
 ```
 
 
-- support resolve from class method
-
+- [x] support resolve from class method
 
 ```python
 class Book:
@@ -1241,15 +1225,18 @@ async def get_conn() -> AsyncGenerator[Connection, None, None]
 user can write
 
 ```python
+
+```
+
+```python
 from ididi import Scoped
 
-Scoped = Annotated[Union[Generator[T, None, None], AsyncGenerator[T, None]], "scoped"]
 
 
 class Connection:
     ...
 
-async def aget_conn() ->Scoped[Connection]:
+async def aget_conn() -> Scoped[Connection]:
     conn = Connection()
     yield conn
 
@@ -1258,3 +1245,9 @@ def get_conn() ->Scoped[Connection]:
     conn = Connection()
     yield conn
 ```
+
+## version 1.5.0
+
+- rewrite ididi in cython
+- make ididi resolve overhead < 100%. make it as fast as hard-coded 
+factories as possible.

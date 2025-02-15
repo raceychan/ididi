@@ -66,6 +66,11 @@ from .utils.typing_utils import P, T
 
 Ignore = Annotated[T, IGNORE_PARAM_MARK]
 
+# ========== NotImplemented =======
+from typing import AsyncGenerator
+
+Scoped = Annotated[Union[Generator[T, None, None], AsyncGenerator[T, None]], "scoped"]
+# ========== NotImplemented =======
 
 def use(
     factory: INodeFactory[P, T],
