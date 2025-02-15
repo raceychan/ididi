@@ -509,17 +509,13 @@ class Resolver:
                 if get_origin(param_type) is Annotated:
                     if inject_node := resolve_use(param_type):
                         inode = self._node(inject_node.factory)
-                        node.dependencies.update(
-                            {param.name: param.replace_type(inode.dependent)}
-                        )
+                        node.dependencies[param.name] = param.replace_type(inode.dependent)
                         self.analyze(inode.factory)
                         continue
                 elif is_function(param_type):
                     fnode = DependentNode.from_node(param_type, config=config)
                     self._nodes[param_type] = fnode
-                    node.dependencies.update(
-                        {param.name: param.replace_type(fnode.dependent)}
-                    )
+                    node.dependencies[param.name]= param.replace_type(fnode.dependent)
                     self.analyze(fnode.factory)
                     continue
 

@@ -1213,3 +1213,48 @@ def test_resolve_classmethod():
     b = dg.resolve(Book.from_article, a="5")
     assert isinstance(b, Book)
 ```
+
+
+- support return dependency
+
+```python
+def json_encode(r: Any) -> bytes:
+    return orjson.dumps(r)
+
+type Json[T] = Annotated[T, use(json_encode)]
+
+async def create_user(user_id: str = "u") -> Json[User]:
+    return User(user_id=user_id)
+
+assert isinstance(dg.resolve(create_user), bytes)
+
+```
+here we will serialize the result of `create_user`
+we can also refactor how we deal with resource right now
+by applying `scope.enter_context` to result, so instead of 
+
+```python
+async def get_conn() -> AsyncGenerator[Connection, None, None]
+    ...
+```
+
+user can write
+
+```python
+from ididi import Scoped
+
+Scoped = Annotated[Union[Generator[T, None, None], AsyncGenerator[T, None]], "scoped"]
+
+
+class Connection:
+    ...
+
+async def aget_conn() ->Scoped[Connection]:
+    conn = Connection()
+    yield conn
+
+
+def get_conn() ->Scoped[Connection]:
+    conn = Connection()
+    yield conn
+```
