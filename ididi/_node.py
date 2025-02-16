@@ -144,6 +144,7 @@ def resolve_marks(annt: Any) -> Union[IDependent[Any], None]:
 
 # ======================= Signature =====================================
 
+
 # TODO: make this a cython struct
 class Dependency(FrozenSlot, Generic[T]):
     """'dpram' for short

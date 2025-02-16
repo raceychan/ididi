@@ -67,26 +67,21 @@ AsyncResource = AsyncGenerator[T, None]
 # Factory with many type params
 class TDecor(Protocol):
     @overload
-    def __call__(self, factory: IResourceFactory[P, T]) -> IResourceFactory[P, T]:
-        ...
+    def __call__(self, factory: IResourceFactory[P, T]) -> IResourceFactory[P, T]: ...
 
     @overload
     def __call__(
         self, factory: IAsyncResourceFactory[P, T]
-    ) -> IAsyncResourceFactory[P, T]:
-        ...
+    ) -> IAsyncResourceFactory[P, T]: ...
 
     @overload
-    def __call__(self, factory: IAsyncFactory[P, T]) -> IAsyncFactory[P, T]:
-        ...
+    def __call__(self, factory: IAsyncFactory[P, T]) -> IAsyncFactory[P, T]: ...
 
     @overload
-    def __call__(self, factory: IFactory[P, T]) -> IFactory[P, T]:
-        ...
+    def __call__(self, factory: IFactory[P, T]) -> IFactory[P, T]: ...
 
     @overload
-    def __call__(self, factory: INode[P, T]) -> INode[P, T]:
-        ...
+    def __call__(self, factory: INode[P, T]) -> INode[P, T]: ...
 
 
 class INodeConfig(TypedDict, total=False):
@@ -119,8 +114,7 @@ class INodeConfig(TypedDict, total=False):
 class EntryFunc(Protocol[P, C]):
     __name__: str
 
-    def __call__(self, *args: Any, **kwargs: Any) -> C:
-        ...
+    def __call__(self, *args: Any, **kwargs: Any) -> C: ...
 
     @overload
     def replace(
@@ -128,8 +122,7 @@ class EntryFunc(Protocol[P, C]):
         before: type[T],
         after: type[T],
         **params: type[Any],
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @overload
     def replace(
@@ -137,19 +130,15 @@ class EntryFunc(Protocol[P, C]):
         before: Maybe[type[T]] = MISSING,
         after: Maybe[type[T]] = MISSING,
         **params: type[Any],
-    ) -> None:
-        ...
+    ) -> None: ...
 
     def replace(
         self,
         before: Maybe[type[T]] = MISSING,
         after: Maybe[type[T]] = MISSING,
         **params: type[Any],
-    ) -> None:
-        ...
+    ) -> None: ...
 
 
 class TEntryDecor(Protocol):
-    def __call__(self, func: Callable[P, T]) -> EntryFunc[P, T]:
-        ...
-
+    def __call__(self, func: Callable[P, T]) -> EntryFunc[P, T]: ...

@@ -46,12 +46,14 @@ def test_annotated_mark():
     assert db.config.url == "asdf"
 
 
-
 def test_dg_add_nodes():
     dg = Graph()
 
-    class AuthService: ...
-    class Conn: ...
+    class AuthService:
+        ...
+
+    class Conn:
+        ...
 
     def auth_factory() -> AuthService:
         return AuthService()
@@ -59,7 +61,6 @@ def test_dg_add_nodes():
     def conn_factory() -> Scoped[Conn]:
         conn = Conn()
         yield conn
-    
 
     dg.add_nodes(
         (DB, {"reuse": False, "ignore": "name"}),
@@ -68,3 +69,36 @@ def test_dg_add_nodes():
     )
     assert len(dg.nodes) == 3
 
+
+from typing import Any, NewType
+
+
+class Request:
+    ...
+
+
+RequestParams = NewType("RequestParams", dict[str, Any])
+
+
+async def test_resolve_request():
+    dg = Graph()
+
+    async def resolve_request(r: Request) -> RequestParams:
+        return RequestParams({"a": 1})
+
+    dg.node(resolve_request)
+    await dg.resolve(resolve_request, r=Request())
+
+
+# from ididi import Ignore, use
+# def test_reuse_resolved():
+#    def dependency(a: int) -> Ignore[int]:
+#        return a
+#
+#    def main(a: int, b: int, c: int = use(dependency)) -> Ignore[float]:
+#        return a + b + c
+#
+#    dg = Graph()
+#
+#    dg.resolve(main)
+#

@@ -626,8 +626,7 @@ class Resolver:
         self,
         dependent: IDependent[T],
         /,
-    ) -> T:
-        ...
+    ) -> T: ...
 
     @overload
     def resolve(
@@ -636,8 +635,7 @@ class Resolver:
         /,
         *args: P.args,
         **overrides: P.kwargs,
-    ) -> T:
-        ...
+    ) -> T: ...
 
     def resolve(
         self,
@@ -702,8 +700,7 @@ class Resolver:
         name: Hashable = "",
         *,
         as_async: Literal[False] = False,
-    ) -> "SyncScope":
-        ...
+    ) -> "SyncScope": ...
 
     @overload
     def use_scope(
@@ -711,8 +708,7 @@ class Resolver:
         name: Hashable = "",
         *,
         as_async: Literal[True],
-    ) -> "AsyncScope":
-        ...
+    ) -> "AsyncScope": ...
 
     def use_scope(
         self,
@@ -732,14 +728,12 @@ class Resolver:
         return scope
 
     @overload
-    def entry(self, **iconfig: Unpack[INodeConfig]) -> TEntryDecor:
-        ...
+    def entry(self, **iconfig: Unpack[INodeConfig]) -> TEntryDecor: ...
 
     @overload
     def entry(
         self, func: Callable[P, T], **iconfig: Unpack[INodeConfig]
-    ) -> EntryFunc[P, T]:
-        ...
+    ) -> EntryFunc[P, T]: ...
 
     def entry(
         self,
@@ -857,18 +851,15 @@ class Resolver:
         return cast(EntryFunc[P, T], f)
 
     @overload
-    def node(self, dependent: type[T], **config: Unpack[INodeConfig]) -> type[T]:
-        ...
+    def node(self, dependent: type[T], **config: Unpack[INodeConfig]) -> type[T]: ...
 
     @overload
     def node(
         self, dependent: INodeFactory[P, T], **config: Unpack[INodeConfig]
-    ) -> INodeFactory[P, T]:
-        ...
+    ) -> INodeFactory[P, T]: ...
 
     @overload
-    def node(self, **config: Unpack[INodeConfig]) -> TDecor:
-        ...
+    def node(self, **config: Unpack[INodeConfig]) -> TDecor: ...
 
     def node(
         self,
@@ -913,7 +904,9 @@ class Resolver:
         self._node(dependent, config=NodeConfig(**config))
         return dependent
 
-    def add_nodes(self, *nodes: Union[IDependent[T], tuple[IDependent[T], INodeConfig]]) -> None:
+    def add_nodes(
+        self, *nodes: Union[IDependent[T], tuple[IDependent[T], INodeConfig]]
+    ) -> None:
         for node in nodes:
             if isinstance(node, tuple):
                 node, nconfig = node
@@ -1056,14 +1049,12 @@ class AsyncScope(ScopeMixin[AsyncExitStack], Resolver):
         return await self._stack.enter_async_context(context)
 
     @overload
-    async def resolve(self, dependent: IDependent[T], /) -> T:
-        ...
+    async def resolve(self, dependent: IDependent[T], /) -> T: ...
 
     @overload
     async def resolve(
         self, dependent: IFactory[P, T], /, *args: P.args, **kwargs: P.kwargs
-    ) -> T:
-        ...
+    ) -> T: ...
 
     async def resolve(
         self, dependent: IFactory[P, T], /, *args: P.args, **kwargs: P.kwargs

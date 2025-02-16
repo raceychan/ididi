@@ -1,4 +1,4 @@
-from ididi import Graph, Ignore, use
+from ididi import Graph
 
 """
 - separate overrides and resolved, carry resolved to sub dependencies.
@@ -44,34 +44,3 @@ def test_node_dpes_ignore_builtin_with_default():
 
     dg.node(User)
     assert not dg.nodes[User].dependencies
-
-
-# def test_reuse_resolved():
-#     def dependency(a: int) -> Ignore[int]:
-#         return a
-
-#     def main(a: int, b: int, c: int = use(dependency)) -> Ignore[float]:
-#         return a + b + c
-
-#     dg = Graph()
-
-#     dg.resolve(main)
-
-from typing import Any, NewType
-
-
-class Request:
-    ...
-
-
-RequestParams = NewType("RequestParams", dict[str, Any])
-
-
-# async def test_resolve_request():
-#     dg = Graph()
-
-#     async def resolve_request(r: Request) -> RequestParams:
-#         return RequestParams({"a": 1})
-
-#     dg.node(resolve_request)
-#     await dg.resolve(resolve_request, r=Request())
