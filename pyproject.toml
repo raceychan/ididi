@@ -3,6 +3,7 @@ authors = [{ name = "raceychan", email = "raceychan@gmail.com" }]
 description = "A dependency injection library for Python, Optimized for serverless applications"
 dynamic = ["version"]
 name = "ididi"
+license = "MIT"
 readme = "README.md"
 requires-python = ">= 3.9"
 
@@ -79,7 +80,7 @@ publish = { features = ["publish"], solve-group = "default" }
 test = { features = ["test"], solve-group = "default" }
 
 [tool.pixi.dependencies]
-python = "3.9.0"
+python = "3.9.0.*"
 typing_extensions = ">=4.12.2,<5"
 cython = "*"
 
@@ -90,7 +91,7 @@ mkdocs-material = ">=9.5.44,<10"
 [tool.pixi.feature.test.dependencies]
 pytest = ">=8.3.3"
 pytest-asyncio = ">=0.24.0,<0.25"
-pytest-cov = ">=4.1.0"
+pytest-cov = "==6.0.0"
 python-graphviz = ">=0.20.3,<0.21"
 pyinstrument = ">=5.0.0,<6"
 

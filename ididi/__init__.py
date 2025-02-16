@@ -22,6 +22,7 @@ from ._node import DependentNode as DependentNode
 from ._node import Ignore as Ignore
 from ._node import NodeConfig as NodeConfig
 from ._node import use as use
+from ._node import Scoped as Scoped
 from .api import entry as entry
 from .api import resolve as resolve
 from .interfaces import AsyncResource as AsyncResource

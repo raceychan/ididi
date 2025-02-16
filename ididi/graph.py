@@ -80,6 +80,7 @@ from .interfaces import (
 from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import P, T
 
+
 def register_dependent(
     mapping: dict[Union[IEmptyFactory[T], type[T]], T],
     dependent_type: IEmptyFactory[T],
@@ -109,11 +110,11 @@ def _resolve_dfs(
 
     params = overrides
     for name, param in pnode.dependencies.items():
-        if name not in params:
-            params[name] = _resolve_dfs(resolver, nodes, cache, param.param_type, {})
+        if name in params:
+            continue
+        params[name] = _resolve_dfs(resolver, nodes, cache, param.param_type, {})
 
     instance = pnode.factory(**params)
-    # pnode.post_process
     result = resolver.resolve_callback(
         resolved=instance,
         dependent=pnode.dependent,
@@ -137,10 +138,9 @@ async def _aresolve_dfs(
 
     params = overrides
     for name, param in pnode.dependencies.items():
-        if name not in params:
-            params[name] = await _aresolve_dfs(
-                graph, nodes, cache, param.param_type, {}
-            )
+        if name in params:
+            continue
+        params[name] = await _aresolve_dfs(graph, nodes, cache, param.param_type, {})
 
     instance = pnode.factory(**params)
     resolved = await graph.aresolve_callback(
@@ -912,6 +912,14 @@ class Resolver:
 
         self._node(dependent, config=NodeConfig(**config))
         return dependent
+
+    def add_nodes(self, *nodes: Union[IDependent[T], tuple[IDependent[T], INodeConfig]]) -> None:
+        for node in nodes:
+            if isinstance(node, tuple):
+                node, nconfig = node
+                self.node(node, **nconfig)
+            else:
+                self.node(node)
 
 
 class ScopeMixin(Generic[Stack]):

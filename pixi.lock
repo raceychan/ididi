@@ -810,8 +810,6 @@ packages:
   - libstdcxx >=13
   - python >=3.9,<3.10.0a0
   - python_abi 3.9.* *_cp39
-  arch: x86_64
-  platform: linux
   license: Apache-2.0
   license_family: APACHE
   size: 3219968
@@ -2909,8 +2907,6 @@ packages:
   - toml
   license: MIT
   license_family: MIT
-  purls:
-  - pkg:pypi/pytest-cov?source=hash-mapping
   size: 26256
   timestamp: 1733223113491
 - conda: https://conda.anaconda.org/conda-forge/linux-64/python-3.9.0-hffdb5ce_5_cpython.tar.bz2

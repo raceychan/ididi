@@ -48,8 +48,6 @@ class TypeRegistry(dict[IDependent[Any], list[IDependent[Any]]]):
         del self[dependent_type]
 
 
-
-
 class Visitor:
     __slots__ = ("_nodes",)
 

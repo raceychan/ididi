@@ -1133,19 +1133,37 @@ def get_conn(url: Annotated[str, IGNORE_PARAM_MARK]):
 ```
 
 ```python
-def get_repo(conn: Connection = use(get_conn)):
+def get_repo(conn: Annotated[Connection, USE_FACTORY_MARK, get_conn, NodeConfig]):
     ...
+```
+
+
+
+- [x] provide a more non-intrusive way to node config, where user only need to add new code, no modifying current code, not even decorator.
+
+```python
+class AuthRepo: ...
+class TokenRegistry: ...
+
+def get_auth() -> AuthRepo: ...
+def get_registry() -> TokenRegistry: ...
+
+class AuthService:
+    def __init__(self, auth_repo: AuthRepo, token: TokenRegistry): ...
+
+dg = Graph()
+dg.add_nodes(
+    get_conn,
+    (get_auth, {"reuse": False, "ignore":"name"})
+)
 ```
 
 - make a re-use params version of `Graph.resolve`, 
 
 ```python
-
 from typing import Any, NewType
 
-
 class Request: ...
-
 
 RequestParams = NewType("RequestParams", dict[str, Any])
 
@@ -1157,46 +1175,8 @@ async def test_resolve_request():
         return RequestParams({"a": 1})
 
     dg.node(resolve_request)
-    await dg.resolve(resolve_request, reuse_overrides=True, r=Request())
+    await dg.shared_resolve(resolve_request, r=Request())
 ```
-
-- provide a more non-intrusive way to node config, where user only need to add new code, no modifying current code, not even decorator.
-
-```python
-class AuthRepo: ...
-class TokenRegistry: ...
-
-def get_auth() -> AuthRepo: ...
-def get_registry() -> TokenRegistry: ...
-
-
-class AuthService:
-    def __init__(self, auth_repo: AuthRepo, token: TokenRegistry): ...
-
-dg.add_nodes(factories={AuthRepo: get_auth, TokenRegistry: get_registry})
-```
-
-OR
-
-```python
-from ididi import Graph
-
-dg = Graph()
-
-dg.node(get_auth, reuse=False, ignore="name")
-dg.node(get_conn)
-dg.node(get_repo, ignore="date")
-
-vs
-
-dg.add_nodes(
-    get_conn,
-    (get_auth, reuse=False, ignore="name"), 
-    (get_repo, ignore="date")
-)
-```
-
-
 
 ## version 1.5.0
 

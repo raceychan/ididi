@@ -152,3 +152,4 @@ class EntryFunc(Protocol[P, C]):
 class TEntryDecor(Protocol):
     def __call__(self, func: Callable[P, T]) -> EntryFunc[P, T]:
         ...
+

@@ -1,6 +1,6 @@
 from ididi.config import IGNORE_PARAM_MARK, USE_FACTORY_MARK
 from typing import Annotated
-from ididi import Graph, NodeConfig
+from ididi import Graph, NodeConfig, Scoped
 
 
 class User:
@@ -30,9 +30,13 @@ class Config:
 def get_config() -> Config:
     return Config("asdf")
 
+
 class DB:
-    def __init__(self, config: Annotated[Config, USE_FACTORY_MARK, get_config, NodeConfig()]):
+    def __init__(
+        self, config: Annotated[Config, USE_FACTORY_MARK, get_config, NodeConfig()]
+    ):
         self.config = config
+
 
 def test_annotated_mark():
     dg = Graph()
@@ -40,3 +44,27 @@ def test_annotated_mark():
     assert not dg.nodes[Config].dependencies
     db = dg.resolve(DB)
     assert db.config.url == "asdf"
+
+
+
+def test_dg_add_nodes():
+    dg = Graph()
+
+    class AuthService: ...
+    class Conn: ...
+
+    def auth_factory() -> AuthService:
+        return AuthService()
+
+    def conn_factory() -> Scoped[Conn]:
+        conn = Conn()
+        yield conn
+    
+
+    dg.add_nodes(
+        (DB, {"reuse": False, "ignore": "name"}),
+        auth_factory,
+        conn_factory,
+    )
+    assert len(dg.nodes) == 3
+
