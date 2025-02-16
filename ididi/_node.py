@@ -1,7 +1,7 @@
 from abc import ABC
 from contextlib import asynccontextmanager, contextmanager
 from functools import lru_cache
-from inspect import  Signature
+from inspect import Signature
 from inspect import _ParameterKind as ParameterKind  # type: ignore
 from inspect import isasyncgenfunction, isgeneratorfunction
 from typing import (
@@ -10,6 +10,7 @@ from typing import (
     Container,
     ForwardRef,
     Generator,
+    AsyncGenerator,
     Generic,
     Union,
     cast,
@@ -67,15 +68,13 @@ from .utils.typing_utils import P, T
 Ignore = Annotated[T, IGNORE_PARAM_MARK]
 
 # ========== NotImplemented =======
-from typing import AsyncGenerator
 
 Scoped = Annotated[Union[Generator[T, None, None], AsyncGenerator[T, None]], "scoped"]
+
 # ========== NotImplemented =======
 
-def use(
-    factory: INodeFactory[P, T],
-    **iconfig: Unpack[INodeConfig],
-) -> T:
+
+def use(func: INodeFactory[P, T], **iconfig: Unpack[INodeConfig]) -> T:
     """
     An annotation to let ididi knows what factory method to use
     without explicitly register it.
@@ -87,28 +86,28 @@ def use(
     ```
     """
 
-    node = DependentNode[T].from_node(factory, config=NodeConfig(**iconfig))
-    annt = Annotated[T, USE_FACTORY_MARK, node]
+    config = NodeConfig(**iconfig)
+    annt = Annotated[T, USE_FACTORY_MARK, func, config]
     return cast(T, annt)
 
 
 # ============== Ididi marks ===========
 
 
-def search_meta(meta: list[Any]) -> Union["DependentNode[Any]", None]:
+def search_meta(meta: list[Any]) -> Union[tuple[IDependent[Any], NodeConfig], None]:
     for i, v in enumerate(meta):
         if v == USE_FACTORY_MARK:
-            node: DependentNode[Any] = meta[i + 1]
-            return node
+            func, config = meta[i + 1], meta[i + 2]
+            return func, config
     return None
 
 
-def resolve_use(annotation: Any) -> Union["DependentNode[Any]", None]:
+def resolve_use(annotation: Any) -> Union[tuple[IDependent[Any], NodeConfig], None]:
     if get_origin(annotation) is not Annotated:
         return
 
-    meta: list[Any] = flatten_annotated(annotation)
-    return search_meta(meta)
+    metas: list[Any] = flatten_annotated(annotation)
+    return search_meta(metas)
 
 
 def should_override(
@@ -127,9 +126,15 @@ def resolve_marks(annt: Any) -> Union[IDependent[Any], None]:
     annotate_meta = flatten_annotated(annt)
     if IGNORE_PARAM_MARK in annotate_meta:
         return None
-    if node := search_meta(annotate_meta):
-        if node.function_dependent:
-            param_type = node.dependent
+    if use_meta := search_meta(annotate_meta):
+        ufunc, _ = use_meta
+        func_return = get_typed_signature(ufunc).return_annotation
+        if get_origin(func_return) is Annotated:
+            return_meta = flatten_annotated(func_return)
+            if IGNORE_PARAM_MARK in return_meta:
+                param_type = ufunc
+            else:
+                param_type = func_return.__origin__
         else:
             param_type = annt
     else:
@@ -212,10 +217,11 @@ def unpack_to_deps(
         dependencies[name] = dep_param
     return dependencies
 
+
 # TODO: make this an immutable dict that is faster to access
 # all mutation only happens at analyze time, this will boost resolve.
 class Dependencies(dict[str, Dependency[Any]]):
-    __slots__ = ("_deps")
+    __slots__ = "_deps"
 
     def __repr__(self):
         deps_repr = ", ".join(
@@ -386,7 +392,7 @@ class DependentNode(Generic[T]):
                 param = param.replace_type(new_type)
             yield param
             if param.param_type != param_type:
-                self.dependencies[param_name]=  param
+                self.dependencies[param_name] = param
 
     def check_for_implementations(self) -> None:
         if isinstance(self.factory, type):

@@ -4,9 +4,11 @@ from ididi import Graph, Resource
 
 
 class DataBase:
-    def __enter__(self): ...
+    def __enter__(self):
+        ...
 
-    def __exit__(self, *args): ...
+    def __exit__(self, *args):
+        ...
 
 
 def get_db() -> Resource[DataBase]:
@@ -14,7 +16,8 @@ def get_db() -> Resource[DataBase]:
     yield db
 
 
-class UserService: ...
+class UserService:
+    ...
 
 
 def get_service(dg: Graph) -> UserService:

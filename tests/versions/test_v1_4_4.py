@@ -11,7 +11,8 @@ def test_scope_graph_share_data():
 def test_create_scope_from_scope():
     dg = Graph()
 
-    class User: ...
+    class User:
+        ...
 
     dg.node(User)
 
@@ -28,9 +29,11 @@ def test_create_scope_from_scope():
 def test_scope_resolve_inheritance():
     dg = Graph()
 
-    class User: ...
+    class User:
+        ...
 
-    class Cache: ...
+    class Cache:
+        ...
 
     dg_u = dg.resolve(User)
 

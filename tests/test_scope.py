@@ -146,7 +146,8 @@ def test_gen_factory():
 def test_sync_func_requires_async_factory():
     dg = Graph()
 
-    class AsyncResource(AsyncResourceBase): ...
+    class AsyncResource(AsyncResourceBase):
+        ...
 
     async def get_async_resource() -> ty.AsyncGenerator[AsyncResource, None]:
         ar = AsyncResource()
@@ -170,7 +171,8 @@ async def test_scope_repeat_resolve():
         def __init__(self):
             super().__init__()
 
-    class AsyncResource(AsyncResourceBase): ...
+    class AsyncResource(AsyncResourceBase):
+        ...
 
     def get_resource() -> ty.Generator[Resource, None, None]:
         resource = Resource()
@@ -234,7 +236,8 @@ async def test_nested_scope():
         def __init__(self):
             super().__init__()
 
-    class AsyncResource(AsyncResourceBase): ...
+    class AsyncResource(AsyncResourceBase):
+        ...
 
     def get_resource() -> ty.Generator[Resource, None, None]:
         resource = Resource()
@@ -275,7 +278,8 @@ async def test_context_scope():
         def __init__(self):
             super().__init__()
 
-    class AsyncResource(AsyncResourceBase): ...
+    class AsyncResource(AsyncResourceBase):
+        ...
 
     def get_resource() -> ty.Generator[Resource, None, None]:
         resource = Resource()
@@ -521,7 +525,8 @@ def test_scope_gc():
 async def test_ascope_ctx_exit():
     dg = Graph()
 
-    class Conn: ...
+    class Conn:
+        ...
 
     def get_conn() -> Resource[Conn]:
         cnn = Conn()

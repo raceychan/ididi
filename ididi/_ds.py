@@ -1,7 +1,6 @@
 # import cython
-from collections import defaultdict
 from types import FunctionType, MappingProxyType
-from typing import Any, Callable, Hashable, Union, cast
+from typing import Any, Callable, Union, cast
 
 from ._node import DependentNode
 from ._type_resolve import get_bases
@@ -29,38 +28,26 @@ TypeMappings = dict[IDependent[T], list[IDependent[T]]]
 """
 
 
-class TypeRegistry:
-    __slots__ = ("_mappings",)
-
-    def __init__(self) -> None:
-        self._mappings: TypeMappings[Any] = defaultdict(list)
-
-    def __getitem__(self, dependent_type: IDependent[T]) -> list[IDependent[T]]:
-        return self._mappings[dependent_type].copy()
-
-    def __len__(self) -> int:
-        return len(self._mappings)
-
-    def __contains__(self, dependent_type: Hashable) -> bool:
-        return dependent_type in self._mappings
-
-    def update(self, other: "TypeRegistry") -> None:
-        self._mappings.update(other._mappings)
-
+class TypeRegistry(dict[IDependent[Any], list[IDependent[Any]]]):
     def register(self, dependent: IDependent[T]) -> None:
-        self._mappings[dependent].append(dependent)
+        try:
+            self[dependent].append(dependent)
+        except KeyError:
+            self[dependent] = [dependent]
 
         for base in get_bases(dependent):
-            self._mappings[base].append(dependent)
+            try:
+                self[base].append(dependent)
+            except KeyError:
+                self[base] = [dependent]
 
     def remove(self, dependent_type: IDependent[T]) -> None:
         for base in get_bases(dependent_type):
-            self._mappings[base].remove(dependent_type)
+            self[base].remove(dependent_type)
 
-        del self._mappings[dependent_type]
+        del self[dependent_type]
 
-    def clear(self) -> None:
-        self._mappings.clear()
+
 
 
 class Visitor:

@@ -40,7 +40,8 @@ def test_scope_resouce_fallback():
 
 
 class Service:
-    def __init__(self, name: str = "s", age: int = 1): ...
+    def __init__(self, name: str = "s", age: int = 1):
+        ...
 
 
 async def test_shared_registered_singleton():

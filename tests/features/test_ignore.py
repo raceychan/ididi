@@ -65,6 +65,7 @@ def test_ignore_datetime():
     dg = Graph()
 
     class Clock:
-        def __init__(self, dt: Annotated[datetime, Ignore[datetime]]): ...
+        def __init__(self, dt: Annotated[datetime, Ignore[datetime]]):
+            ...
 
     dg.resolve(Clock, dt=datetime.now())

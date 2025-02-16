@@ -1103,7 +1103,39 @@ Example
 
 
 ## versio 1.4.5(plan)
-- consider switch to anyio
+
+- [x] support resolve from class method
+
+```python
+class Book:
+    @classmethod
+    def from_article(cls, a: str) -> "Book":
+        return Book()
+
+
+@pytest.mark.debug
+def test_resolve_classmethod():
+    dg = Graph()
+    b = dg.resolve(Book.from_article, a="5")
+    assert isinstance(b, Book)
+```
+
+- [x] make `Mark` public, user can use it with `typing.Annotated`
+
+```python
+Ignore = Annotated[T, IGNORE_PARAM_MARK]
+```
+so this works:
+
+```python
+def get_conn(url: Annotated[str, IGNORE_PARAM_MARK]):
+    ...
+```
+
+```python
+def get_repo(conn: Connection = use(get_conn)):
+    ...
+```
 
 - make a re-use params version of `Graph.resolve`, 
 
@@ -1164,40 +1196,14 @@ dg.add_nodes(
 )
 ```
 
-- make `Mark` public, user can use it with `typing.Annotated`
-
-```python
-Ignore = Annotated[T, IGNORE_PARAM_MARK]
-```
-so this works:
-
-```python
-def get_conn(url: Annotated[str, IGNORE_PARAM_MARK]):
-    ...
-```
-
-```python
-def get_repo(conn: Connection = use(get_conn)):
-    ...
-```
 
 
-- [x] support resolve from class method
+## version 1.5.0
 
-```python
-class Book:
-    @classmethod
-    def from_article(cls, a: str) -> "Book":
-        return Book()
-
-
-@pytest.mark.debug
-def test_resolve_classmethod():
-    dg = Graph()
-    b = dg.resolve(Book.from_article, a="5")
-    assert isinstance(b, Book)
-```
-
+- consider switch to anyio
+- rewrite ididi in cython
+- make ididi resolve overhead < 100%. make it as fast as hard-coded 
+factories as possible.
 
 - support return dependency
 
@@ -1213,6 +1219,7 @@ async def create_user(user_id: str = "u") -> Json[User]:
 assert isinstance(dg.resolve(create_user), bytes)
 
 ```
+
 here we will serialize the result of `create_user`
 we can also refactor how we deal with resource right now
 by applying `scope.enter_context` to result, so instead of 
@@ -1224,9 +1231,16 @@ async def get_conn() -> AsyncGenerator[Connection, None, None]
 
 user can write
 
-```python
+```pythpn
 
+def enter_ctx(scope: Scope):
+    await scope.resolve()
+
+
+Scoped = Annotated[T, scope_factory]
 ```
+
+
 
 ```python
 from ididi import Scoped
@@ -1241,13 +1255,8 @@ async def aget_conn() -> Scoped[Connection]:
     yield conn
 
 
-def get_conn() ->Scoped[Connection]:
+def get_conn() -> Scoped[Connection]:
     conn = Connection()
     yield conn
 ```
 
-## version 1.5.0
-
-- rewrite ididi in cython
-- make ididi resolve overhead < 100%. make it as fast as hard-coded 
-factories as possible.

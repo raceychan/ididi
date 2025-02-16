@@ -60,7 +60,8 @@ def test_node_dpes_ignore_builtin_with_default():
 from typing import Any, NewType
 
 
-class Request: ...
+class Request:
+    ...
 
 
 RequestParams = NewType("RequestParams", dict[str, Any])

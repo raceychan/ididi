@@ -48,7 +48,8 @@ SyncResource = Union[ContextManager[Any]]
 AsyncResource = Union[AsyncContextManager[Any]]
 
 
-class EmptyInitProtocol(Protocol): ...
+class EmptyInitProtocol(Protocol):
+    ...
 
 
 def get_typed_params(sig: Signature, gvars: dict[str, Any]) -> list[Parameter]:

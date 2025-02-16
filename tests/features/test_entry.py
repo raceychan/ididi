@@ -98,7 +98,6 @@ class CreateUser:
 
 
 async def test_entry_with_ignore():
-
     @entry(ignore=CreateUser)
     async def func4(service: NotificationService, cmd: CreateUser) -> str:
         return cmd.user_name
@@ -132,9 +131,11 @@ class Session:
     async def __aexit__(self, exc_type, exc, tb):
         pass
 
-    def __enter__(self): ...
+    def __enter__(self):
+        ...
 
-    def __exit__(self, exc_type, exc, tb): ...
+    def __exit__(self, exc_type, exc, tb):
+        ...
 
 
 async def test_dg_entry_with_acm():
@@ -212,7 +213,8 @@ async def test_entry_replace():
     ) -> UserService:
         return service
 
-    class FakeUserService(UserService): ...
+    class FakeUserService(UserService):
+        ...
 
     create_user = dg.entry(reuse=False)(create_user)
     create_user.replace(UserService, FakeUserService)
@@ -220,7 +222,8 @@ async def test_entry_replace():
     res = await create_user("user", "user@email.com")
     assert isinstance(res, FakeUserService)
 
-    class EvenFaker(UserService): ...
+    class EvenFaker(UserService):
+        ...
 
     create_user.replace(service=EvenFaker)
     create_user.replace(UserService, service=EvenFaker)
@@ -238,7 +241,8 @@ async def test_entry_override_with_factory():
     ) -> UserService:
         return service
 
-    class FakeUserService(UserService): ...
+    class FakeUserService(UserService):
+        ...
 
     @dg.node
     def _() -> UserService:
@@ -261,7 +265,8 @@ async def test_entry_override_with_override():
     def user_factory() -> UserService:
         return UserService("1", 2)
 
-    class FakeUserService(UserService): ...
+    class FakeUserService(UserService):
+        ...
 
     dg.override(UserService, FakeUserService)
 

@@ -47,6 +47,7 @@ UTC_DATETIME = Annotated[datetime, use(utc_factory)]
 
 import pytest
 
+
 def test_resolve_timer():
     class Timer:
         def __init__(self, time: UTC_DATETIME):
@@ -61,7 +62,6 @@ def test_resolve_timer():
 
 
 def test_plain_annotated():
-
     class Clock:
         def __init__(self, time: Annotated[datetime, "aloha"]):
             self._time = time
@@ -93,6 +93,7 @@ def b_f(a: A = use(a_f)) -> B:
 class C:
     def __init__(self, b: B = use(b_f)):
         self.berry = b
+
 
 def test_nested_inject():
     dg = Graph()

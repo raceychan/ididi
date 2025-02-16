@@ -80,7 +80,6 @@ from .interfaces import (
 from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import P, T
 
-
 def register_dependent(
     mapping: dict[Union[IEmptyFactory[T], type[T]], T],
     dependent_type: IEmptyFactory[T],
@@ -96,7 +95,7 @@ def register_dependent(
     mapping[dependent_type] = instance
 
 
-def resolve_dfs(
+def _resolve_dfs(
     resolver: "Resolver",
     nodes: GraphNodes[Any],
     cache: ResolvedSingletons[Any],
@@ -111,9 +110,10 @@ def resolve_dfs(
     params = overrides
     for name, param in pnode.dependencies.items():
         if name not in params:
-            params[name] = resolve_dfs(resolver, nodes, cache, param.param_type, {})
+            params[name] = _resolve_dfs(resolver, nodes, cache, param.param_type, {})
 
     instance = pnode.factory(**params)
+    # pnode.post_process
     result = resolver.resolve_callback(
         resolved=instance,
         dependent=pnode.dependent,
@@ -123,7 +123,7 @@ def resolve_dfs(
     return result
 
 
-async def aresolve_dfs(
+async def _aresolve_dfs(
     graph: "Resolver",
     nodes: GraphNodes[Any],
     cache: ResolvedSingletons[Any],
@@ -138,7 +138,9 @@ async def aresolve_dfs(
     params = overrides
     for name, param in pnode.dependencies.items():
         if name not in params:
-            params[name] = await aresolve_dfs(graph, nodes, cache, param.param_type, {})
+            params[name] = await _aresolve_dfs(
+                graph, nodes, cache, param.param_type, {}
+            )
 
     instance = pnode.factory(**params)
     resolved = await graph.aresolve_callback(
@@ -323,8 +325,9 @@ class Resolver:
             annt_dep = resolved_type
 
         if annt_dep:
-            if node := resolve_use(annt_dep):
-                self._node(node.factory)
+            if use_meta := resolve_use(annt_dep):
+                ufunc, uconfig = use_meta
+                self._node(ufunc, uconfig)
 
             if is_function(dependent):
                 node = DependentNode.from_node(dependent, config=config)
@@ -455,7 +458,7 @@ class Resolver:
 
     def override(self, old_dep: INode[P, T], new_dep: INode[P, T]) -> None:
         """
-        globally override a dependency
+        Override a dependency within the current graph
         """
 
         self.remove_dependent(old_dep)
@@ -490,12 +493,10 @@ class Resolver:
             # when we register a concrete node we also register its bases to type_registry
             if dep in self._analyzed_nodes:
                 return self._analyzed_nodes[dep]
-
             if dep not in self._type_registry:
                 self._node(dep, config)
 
             node = self._resolve_concrete_node(dep)
-
             if self.is_registered_singleton(dep):
                 return node
 
@@ -507,21 +508,22 @@ class Resolver:
 
                 self.check_param_conflict(param_type, current_path)
                 if get_origin(param_type) is Annotated:
-                    if inject_node := resolve_use(param_type):
-                        inode = self._node(inject_node.factory)
-                        node.dependencies[param.name] = param.replace_type(inode.dependent)
+                    if use_meta := resolve_use(param_type):
+                        ufunc, uconfig = use_meta
+                        inode = self._node(ufunc, uconfig)
+                        node.dependencies[param.name] = param.replace_type(
+                            inode.dependent
+                        )
                         self.analyze(inode.factory)
                         continue
                 elif is_function(param_type):
                     fnode = DependentNode.from_node(param_type, config=config)
                     self._nodes[param_type] = fnode
-                    node.dependencies[param.name]= param.replace_type(fnode.dependent)
+                    node.dependencies[param.name] = param.replace_type(fnode.dependent)
                     self.analyze(fnode.factory)
                     continue
-
                 if is_provided(param.default):
                     continue
-
                 if param.unresolvable:
                     raise UnsolvableDependencyError(
                         dep_name=param.name,
@@ -546,10 +548,10 @@ class Resolver:
         return dfs(dependent_type)
 
     def analyze_params(
-        self, func: Callable[P, T], config: NodeConfig = DefaultConfig
+        self, ufunc: Callable[P, T], config: NodeConfig = DefaultConfig
     ) -> tuple[bool, list[tuple[str, IDependent[Any]]]]:
         deps = Dependencies.from_signature(
-            signature=get_typed_signature(func), function=func, config=config
+            signature=get_typed_signature(ufunc), function=ufunc, config=config
         )
         depends_on_resource: bool = False
         unresolved: list[tuple[str, IDependent[Any]]] = []
@@ -557,19 +559,19 @@ class Resolver:
         for name, dep in deps.items():
             param_type = dep.param_type
 
-            if is_unsolvable_type(param_type):
+            if dep.unresolvable:
                 continue
 
-            if inject_node := (resolve_use(param_type) or resolve_use(dep.default)):
-                self._node(inject_node.factory)
-                param_type = inject_node.dependent
+            if use_meta := (resolve_use(param_type) or resolve_use(dep.default)):
+                ufunc, uconfig = use_meta
+                use_node = self._node(ufunc, uconfig)
+                param_type = use_node.dependent
 
             self.analyze(param_type, config=config)
             depends_on_resource = depends_on_resource or self.should_be_scoped(
                 param_type
             )
             unresolved.append((name, param_type))
-
         return depends_on_resource, unresolved
 
     def analyze_nodes(self) -> None:
@@ -624,7 +626,8 @@ class Resolver:
         self,
         dependent: IDependent[T],
         /,
-    ) -> T: ...
+    ) -> T:
+        ...
 
     @overload
     def resolve(
@@ -633,7 +636,8 @@ class Resolver:
         /,
         *args: P.args,
         **overrides: P.kwargs,
-    ) -> T: ...
+    ) -> T:
+        ...
 
     def resolve(
         self,
@@ -650,7 +654,7 @@ class Resolver:
 
         provided_params = frozenset(overrides)
         node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
-        return resolve_dfs(
+        return _resolve_dfs(
             self, self._nodes, self._resolved_singletons, node.dependent, overrides
         )
 
@@ -672,7 +676,7 @@ class Resolver:
 
         provided_params = frozenset(overrides)
         node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
-        return await aresolve_dfs(
+        return await _aresolve_dfs(
             self, self._nodes, self._resolved_singletons, node.dependent, overrides
         )
 
@@ -698,7 +702,8 @@ class Resolver:
         name: Hashable = "",
         *,
         as_async: Literal[False] = False,
-    ) -> "SyncScope": ...
+    ) -> "SyncScope":
+        ...
 
     @overload
     def use_scope(
@@ -706,7 +711,8 @@ class Resolver:
         name: Hashable = "",
         *,
         as_async: Literal[True],
-    ) -> "AsyncScope": ...
+    ) -> "AsyncScope":
+        ...
 
     def use_scope(
         self,
@@ -726,12 +732,14 @@ class Resolver:
         return scope
 
     @overload
-    def entry(self, **iconfig: Unpack[INodeConfig]) -> TEntryDecor: ...
+    def entry(self, **iconfig: Unpack[INodeConfig]) -> TEntryDecor:
+        ...
 
     @overload
     def entry(
         self, func: Callable[P, T], **iconfig: Unpack[INodeConfig]
-    ) -> EntryFunc[P, T]: ...
+    ) -> EntryFunc[P, T]:
+        ...
 
     def entry(
         self,
@@ -849,15 +857,18 @@ class Resolver:
         return cast(EntryFunc[P, T], f)
 
     @overload
-    def node(self, dependent: type[T], **config: Unpack[INodeConfig]) -> type[T]: ...
+    def node(self, dependent: type[T], **config: Unpack[INodeConfig]) -> type[T]:
+        ...
 
     @overload
     def node(
         self, dependent: INodeFactory[P, T], **config: Unpack[INodeConfig]
-    ) -> INodeFactory[P, T]: ...
+    ) -> INodeFactory[P, T]:
+        ...
 
     @overload
-    def node(self, **config: Unpack[INodeConfig]) -> TDecor: ...
+    def node(self, **config: Unpack[INodeConfig]) -> TDecor:
+        ...
 
     def node(
         self,
@@ -1037,12 +1048,14 @@ class AsyncScope(ScopeMixin[AsyncExitStack], Resolver):
         return await self._stack.enter_async_context(context)
 
     @overload
-    async def resolve(self, dependent: IDependent[T], /) -> T: ...
+    async def resolve(self, dependent: IDependent[T], /) -> T:
+        ...
 
     @overload
     async def resolve(
         self, dependent: IFactory[P, T], /, *args: P.args, **kwargs: P.kwargs
-    ) -> T: ...
+    ) -> T:
+        ...
 
     async def resolve(
         self, dependent: IFactory[P, T], /, *args: P.args, **kwargs: P.kwargs

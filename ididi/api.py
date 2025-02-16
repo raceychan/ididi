@@ -9,11 +9,13 @@ from .utils.typing_utils import P, T
 
 
 @overload
-def entry(**iconfig: Unpack[INodeConfig]) -> TEntryDecor: ...
+def entry(**iconfig: Unpack[INodeConfig]) -> TEntryDecor:
+    ...
 
 
 @overload
-def entry(func: Callable[P, T]) -> IDependent[T]: ...
+def entry(func: Callable[P, T]) -> IDependent[T]:
+    ...
 
 
 def entry(
@@ -26,11 +28,13 @@ def entry(
 
 
 @overload
-def resolve(dep: Callable[P, T], /) -> T: ...
+def resolve(dep: Callable[P, T], /) -> T:
+    ...
 
 
 @overload
-def resolve(dep: Callable[P, T], /, *args: P.args, **overrides: P.kwargs) -> T: ...
+def resolve(dep: Callable[P, T], /, *args: P.args, **overrides: P.kwargs) -> T:
+    ...
 
 
 def resolve(dep: Callable[P, T], /, **overrides: Any) -> T:

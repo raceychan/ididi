@@ -46,8 +46,8 @@ async def test_resolve_with_factory():
     assert dg.nodes[ACM].factory_type == "function"
     assert not acm._closed
 
-async def test_user_defined_acm():
 
+async def test_user_defined_acm():
     @asynccontextmanager
     async def acm_factory() -> AsyncResource[ACM]:
         acm = ACM()

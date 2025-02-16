@@ -5,13 +5,16 @@ from typing_extensions import Unpack
 from ididi import Graph
 
 
-class DataBase: ...
+class DataBase:
+    ...
 
 
-class Cache: ...
+class Cache:
+    ...
 
 
-class Config: ...
+class Config:
+    ...
 
 
 class KWARGS(TypedDict):

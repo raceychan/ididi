@@ -80,9 +80,7 @@ def test_threading_resolve_non_reuse(
     assert len(set(results)) == len(results)
 
 
-def test_threading_resolve_reuse(
-    dg: Graph, pool: ThreadPoolExecutor, max_workers: int
-):
+def test_threading_resolve_reuse(dg: Graph, pool: ThreadPoolExecutor, max_workers: int):
 
     # Create a thread pool executor
     results: list[object] = []

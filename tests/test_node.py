@@ -55,7 +55,6 @@ def test_typed_annotation():
 
 
 def test_empty_init():
-
     class EmptyService:
         pass
 

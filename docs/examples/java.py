@@ -9,7 +9,8 @@ class Item(ABC):
 
     @property
     @abstractmethod
-    def cost(self) -> float: ...
+    def cost(self) -> float:
+        ...
 
 
 @dataclass
@@ -49,7 +50,8 @@ class ShopCartBase:
 
 
 @dataclass
-class EconomicShopCartImpl(ShopCartBase): ...
+class EconomicShopCartImpl(ShopCartBase):
+    ...
 
 
 @dataclass
@@ -62,7 +64,8 @@ class LuxuryShopCartImpl(ShopCartBase):
 
 class ShopCartCreator(ABC):
     @abstractmethod
-    def create(self, items: ty.Sequence[Item], discount: Discount) -> ShopCartBase: ...
+    def create(self, items: ty.Sequence[Item], discount: Discount) -> ShopCartBase:
+        ...
 
 
 class LuxuryShopCartCreator(ShopCartCreator):
@@ -123,7 +126,8 @@ class ShopCartFactoryManagerBuilder:
 
 class AbstractShoprtCartFactoryManagerBuilderFactory(ABC):
     @abstractmethod
-    def _pre_create(self): ...
+    def _pre_create(self):
+        ...
 
     @abstractmethod
     def create_builder(self) -> ShopCartFactoryManagerBuilder:
@@ -136,7 +140,8 @@ class ShoprtCartFactoryManagerBuilderFactoryBase(
     """Base implementation of AbstractShoprtCartFactoryManagerBuilderFactory."""
 
     @abstractmethod
-    def _pre_create(self): ...
+    def _pre_create(self):
+        ...
 
     def create_builder(self) -> ShopCartFactoryManagerBuilder:
         self._pre_create()

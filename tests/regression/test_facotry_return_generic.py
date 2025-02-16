@@ -49,19 +49,23 @@ def test_emptry_return_factory():
     with pytest.raises(UnsolvableReturnTypeError):
 
         @dg.node
-        def animal_factory(animal_type: str): ...
+        def animal_factory(animal_type: str):
+            ...
 
     with pytest.raises(ForwardReferenceNotFoundError):
 
         @dg.node
-        def animal_factory(animtal_type: str = "test") -> "Normal": ...
+        def animal_factory(animtal_type: str = "test") -> "Normal":
+            ...
 
 
-class UserService: ...
+class UserService:
+    ...
 
 
 @dg.node
-def user_service_factory() -> "UserService": ...
+def user_service_factory() -> "UserService":
+    ...
 
 
 def test_forward_factory():

@@ -55,7 +55,8 @@ def test_ignore_dependences():
     dg = Graph()
 
     class User:
-        def __init__(self, name: Ignore[str]): ...
+        def __init__(self, name: Ignore[str]):
+            ...
 
     dg.node(User)
 

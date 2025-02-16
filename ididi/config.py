@@ -94,12 +94,19 @@ except ImportError:
 
 ExtraUnsolvableTypes.add(TypeAliasType)
 
+# ================== Marks ==================
 USE_FACTORY_MARK = "__ididi_use_factory__"
+"""
+`typing.Annotated[T, USE_FACTORY_MARK, Callable[..., T], NodeConfig]`
+"""
+
 IGNORE_PARAM_MARK = "__ididi_ignore_param__"
+"""
+`typing.Annotated[T, IGNORE_PARAM_MARK]`
+"""
+# ================== Marks ==================
 
 FactoryType = Literal["default", "function", "resource", "aresource"]
-# carry this information in node so that resolve does not have to do
-# iscontextmanager check
 
 ResolveOrder: Final[dict[FactoryType, int]] = {
     "default": 1,
@@ -107,6 +114,3 @@ ResolveOrder: Final[dict[FactoryType, int]] = {
     "resource": 3,
     "aresource": 3,
 }
-# when merge graphs we need to make sure a node with default constructor
-# does not override a node with resource / function factory
-

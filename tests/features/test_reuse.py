@@ -21,8 +21,8 @@ def test_config_eq():
 
 
 def test_remove_annotated():
-
-    def config_factory() -> Config: ...
+    def config_factory() -> Config:
+        ...
 
     dg = Graph()
     dg.node(config_factory)

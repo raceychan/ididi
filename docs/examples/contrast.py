@@ -30,7 +30,8 @@ class ShopCart:
 
 
 @dataclass
-class EconomicShopCart(ShopCart): ...
+class EconomicShopCart(ShopCart):
+    ...
 
 
 @dataclass

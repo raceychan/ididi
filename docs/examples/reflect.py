@@ -12,11 +12,13 @@ class SendEmail:
 
 
 class Notification(Protocol):
-    def send_notification(self, command: Command) -> None: ...
+    def send_notification(self, command: Command) -> None:
+        ...
 
 
 class EmailNotification:
     def send_notification(self, command: SendEmail) -> None:
         self._send_email(command.email)
 
-    def _send_email(self, email: str) -> None: ...
+    def _send_email(self, email: str) -> None:
+        ...

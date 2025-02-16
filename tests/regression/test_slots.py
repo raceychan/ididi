@@ -39,14 +39,16 @@ async def test_async_scope_valid_slots():
 
 
 def test_node_ds_slots():
-    class User: ...
+    class User:
+        ...
 
     n = DependentNode.from_node(User)
 
     with pytest.raises(AttributeError):
         n.__dict__
 
-    def t() -> str: ...
+    def t() -> str:
+        ...
 
     dep = Dependency("name", t, 3, 4)
     with pytest.raises(AttributeError):

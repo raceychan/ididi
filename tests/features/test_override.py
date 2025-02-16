@@ -5,10 +5,12 @@ test override dependencies
 from ididi import Graph
 
 
-class DataBase: ...
+class DataBase:
+    ...
 
 
-class FakeDB(DataBase): ...
+class FakeDB(DataBase):
+    ...
 
 
 class UserRepository:

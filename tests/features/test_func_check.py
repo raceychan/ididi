@@ -4,7 +4,8 @@ from ididi._type_resolve import is_function
 
 
 def test_function_check():
-    def test_plain(): ...
+    def test_plain():
+        ...
 
     def test_gen():
         yield
@@ -13,7 +14,9 @@ def test_function_check():
     def test_cmx():
         yield
 
-    async def test_async(): ...
+    async def test_async():
+        ...
+
     async def test_agen():
         yield
 
@@ -22,7 +25,8 @@ def test_function_check():
         yield
 
     class T:
-        def hello(self): ...
+        def hello(self):
+            ...
 
     assert is_function(test_plain)
     assert is_function(test_gen)
