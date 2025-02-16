@@ -226,10 +226,11 @@ def test_static_resolve_factory(dg: Graph):
         def save(self) -> None:
             pass
 
-    @dg.node
     class Repo2(Repository):
         def save(self) -> None:
             pass
+
+    dg.node(Repo2)
 
     @dg.node
     def repo_factory() -> Repository:
@@ -237,7 +238,7 @@ def test_static_resolve_factory(dg: Graph):
 
     assert Repository in dg.nodes
 
-    repo = dg.analyze(repo_factory)
+    _ = dg.analyze(repo_factory)
     assert Repository in dg.type_registry[Repository]
 
 
@@ -249,7 +250,7 @@ async def test_resource_cleanup(dg: Graph):
         async def __aenter__(self):
             return self
 
-        async def __aexit__(self, *args):
+        async def __aexit__(self, *_):
             await self.close()
 
         async def close(self):
@@ -263,7 +264,7 @@ async def test_resource_cleanup(dg: Graph):
         async def __aenter__(self):
             return self
 
-        async def __aexit__(self, *args):
+        async def __aexit__(self, *_):
             await self.close()
 
         async def close(self):
@@ -327,8 +328,7 @@ def test_node_removal_cleanup(dg: Graph):
     dg.resolve(Service)
 
     # Get the node and remove it
-    node = dg.nodes[Dependency]
-    dg._remove_node(node)
+    dg.remove_dependent(Dependency)
 
     # Check that all references are cleaned up
     assert Dependency not in dg.nodes
@@ -401,19 +401,18 @@ def test_unsupported_annotation(dg: Graph):
         dg.resolve(BadService)
 
     class New:
-        def __init__(self, name: str):
-            ...
+        def __init__(self, name: str): ...
 
     with pytest.raises(UnsolvableDependencyError):
         dg.resolve(New)
 
     class Old:
-        def __init__(self, age: int = 3):
-            ...
+        def __init__(self, age: int = 3): ...
 
-    @dg.node
     def new_factory(age: int) -> New:
         return New(age)
+
+    dg.node(new_factory)
 
     with pytest.raises(UnsolvableDependencyError):
         dg.resolve(New)
@@ -540,8 +539,7 @@ async def test_graph_without_static_resolve(dg: Graph):
 def test_remove_old_node():
     dg = Graph()
 
-    class IUser:
-        ...
+    class IUser: ...
 
     class User(IUser):
         def __init__(self, name: str = "user"):
@@ -606,12 +604,10 @@ def test_generic_service_with_default(dg: Graph):
 
 def test_node_config_non_transitive(dg: Graph):
     class Base:
-        def __init__(self, name: str = "base"):
-            ...
+        def __init__(self, name: str = "base"): ...
 
     class Sub:
-        def __init__(self, b: Base):
-            ...
+        def __init__(self, b: Base): ...
 
     dg.node(reuse=False)(Sub)
     dg.analyze(Sub)
@@ -621,8 +617,7 @@ def test_node_config_non_transitive(dg: Graph):
 
 def test_partial_node(dg: Graph):
     class Base:
-        def __init__(self, name: str = "base"):
-            ...
+        def __init__(self, name: str = "base"): ...
 
     class Sub:
         def __init__(self, b: Base, age: int):
@@ -693,8 +688,7 @@ def test_graph_static_resolved_should_not_override():
     dg = Graph()
     dg2 = Graph()
 
-    def checker_factory() -> ComplianceChecker:
-        ...
+    def checker_factory() -> ComplianceChecker: ...
 
     dg.node(checker_factory)
 
@@ -709,8 +703,7 @@ def test_graph_static_resolved_should_not_override():
 def test_factory_override_default_value():
     dg = Graph()
 
-    class Database:
-        ...
+    class Database: ...
 
     DB_SINGLETON = Database()
 
@@ -745,8 +738,7 @@ def test_graph_ignore():
 
 
 def test_remove_dependent():
-    class Database:
-        ...
+    class Database: ...
 
     dg = Graph()
 
@@ -756,11 +748,9 @@ def test_remove_dependent():
 def test_remove_dependent_with_factory():
     dg = Graph()
 
-    class Service:
-        ...
+    class Service: ...
 
-    def sfactory() -> Service:
-        ...
+    def sfactory() -> Service: ...
 
     dg.node(sfactory)
 
@@ -790,19 +780,16 @@ def test_remove_new_type():
 def test_graph_analyze_nested_annt():
     dg = Graph()
 
-    class User:
-        ...
+    class User: ...
 
-    def hello() -> User:
-        ...
+    def hello() -> User: ...
 
     def build_user() -> ty.Annotated[User, use(hello)]:
         return User()
 
     dg.analyze(build_user)
 
-    class Aloha:
-        ...
+    class Aloha: ...
 
     annt = ty.Annotated[Aloha, ty.Annotated[User, "hello"]]
 
@@ -839,3 +826,37 @@ def test_resolve_instance_method_raise_error():
 
     with pytest.raises(NotSupportedError):
         dg.resolve(Book().dump)
+
+
+class Conn:
+    def __init__(self, url: str): ...
+
+
+async def get_conn() -> Conn:
+    return Conn("")
+
+
+async def test_aresolve_override():
+    dg = Graph()
+
+    c = await dg.aresolve(Conn, url="url")
+
+
+def test_dg_get_node():
+    dg = Graph()
+
+    dg.node(get_conn)
+    assert (node := dg.get(get_conn))
+    assert node.dependent is Conn
+
+@pytest.mark.debug
+def test_factory_return_annt():
+    dg = Graph()
+
+    def get_conn() -> ty.Annotated[Conn, "aloha"]:
+        return Conn()
+
+    class DB:
+        def __init__(self, conn: ty.Annotated[Conn, use(get_conn)]): ...
+
+    dg.analyze(DB)

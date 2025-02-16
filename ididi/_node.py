@@ -7,10 +7,10 @@ from inspect import isasyncgenfunction, isgeneratorfunction
 from typing import (
     Annotated,
     Any,
+    AsyncGenerator,
     Container,
     ForwardRef,
     Generator,
-    AsyncGenerator,
     Generic,
     Union,
     cast,
@@ -126,15 +126,12 @@ def resolve_marks(annt: Any) -> Union[IDependent[Any], None]:
     annotate_meta = flatten_annotated(annt)
     if IGNORE_PARAM_MARK in annotate_meta:
         return None
+
     if use_meta := search_meta(annotate_meta):
         ufunc, _ = use_meta
         func_return = get_typed_signature(ufunc).return_annotation
         if get_origin(func_return) is Annotated:
-            return_meta = flatten_annotated(func_return)
-            if IGNORE_PARAM_MARK in return_meta:
-                param_type = ufunc
-            else:
-                param_type = func_return.__origin__
+            param_type = ufunc
         else:
             param_type = annt
     else:
