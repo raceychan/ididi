@@ -1,3 +1,11 @@
+.PHONY: compile
+compile:
+	pixi run cythonize -i -3 -a ididi/graph.py
+
+.PHONY: clean
+clean:
+	find ididi \( -name "*.c" -o -name "*.so" \) -type f -exec rm -f {} \;
+
 .PHONY: test
 test:
 	pixi run -e test pytest -m "not benchmark" -vx --capture=fd tests/

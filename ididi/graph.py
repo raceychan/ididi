@@ -5,7 +5,7 @@ from contextvars import ContextVar, Token, copy_context
 from functools import lru_cache, partial, wraps
 from inspect import isawaitable, iscoroutinefunction
 from types import MappingProxyType, MethodType, TracebackType
-from typing import (
+from typing import (  # final,
     Annotated,
     Any,
     AsyncContextManager,
@@ -22,7 +22,6 @@ from typing import (
     TypeVar,
     Union,
     cast,
-    final,
     get_args,
     get_origin,
     overload,
@@ -80,6 +79,26 @@ from .interfaces import (
 from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import P, T
 
+SharedSlots: tuple[str, ...] = (
+    "_nodes",
+    "_analyzed_nodes",
+    "_type_registry",
+    "_ignore",
+    "_resolved_singletons",
+    "_registered_singletons",
+    "_workers",
+)
+ScopeSlots = SharedSlots + ("_name", "_stack", "_pre")
+AsyncScopeSlots = SharedSlots + ScopeSlots + ("_loop",)
+GraphSlots = SharedSlots + ("_token",)
+
+Stack = TypeVar("Stack", ExitStack, AsyncExitStack)
+AnyScope = Union["SyncScope", "AsyncScope"]
+ScopeToken = Token[AnyScope]
+ScopeContext = ContextVar[AnyScope]
+
+_SCOPE_CONTEXT: Final[ScopeContext] = ContextVar("idid_scope_ctx")
+
 
 def register_dependent(
     mapping: dict[Union[IEmptyFactory[T], type[T]], T],
@@ -96,12 +115,18 @@ def register_dependent(
     mapping[dependent_type] = instance
 
 
+# cdef dict share_cache = overrides.copy()
+# for name in params:
+# if name in share_cache,
+#     params[name] = share_cache[name]
+
+
 def _resolve_dfs(
-    resolver: "Resolver",
-    nodes: GraphNodes[Any],
-    cache: ResolvedSingletons[Any],
-    ptype: IDependent[T],
-    overrides: dict[str, Any],
+    resolver: "Resolver",  # cdef Resolver
+    nodes: GraphNodes[Any],  # cdef dict
+    cache: ResolvedSingletons[Any],  # cdef dict
+    ptype: IDependent[T],  # cdef object
+    overrides: dict[str, Any],  # cdef dict
 ) -> T:
     if resolution := cache.get(ptype):
         return resolution
@@ -178,27 +203,6 @@ class SharedData(TypedDict):
     type_registry: TypeRegistry
     ignore: GraphIgnore
     workers: ThreadPoolExecutor
-
-
-SharedSlots: tuple[str, ...] = (
-    "_nodes",
-    "_analyzed_nodes",
-    "_type_registry",
-    "_ignore",
-    "_resolved_singletons",
-    "_registered_singletons",
-    "_workers",
-)
-ScopeSlots = SharedSlots + ("_name", "_stack", "_pre")
-AsyncScopeSlots = SharedSlots + ScopeSlots + ("_loop",)
-GraphSlots = SharedSlots + ("_token",)
-
-Stack = TypeVar("Stack", ExitStack, AsyncExitStack)
-AnyScope = Union["SyncScope", "AsyncScope"]
-ScopeToken = Token[AnyScope]
-ScopeContext = ContextVar[AnyScope]
-
-_SCOPE_CONTEXT: Final[ScopeContext] = ContextVar("idid_scope_ctx")
 
 
 class Resolver:
@@ -505,7 +509,6 @@ class Resolver:
             for param in node.analyze_unsolved_params(ignore):
                 if (param_type := param.param_type) in self._analyzed_nodes:
                     continue
-
                 self.check_param_conflict(param_type, current_path)
                 if get_origin(param_type) is Annotated:
                     if use_meta := resolve_use(param_type):
@@ -531,16 +534,13 @@ class Resolver:
                         dependency_type=param.param_type,
                         factory=node.factory,
                     )
-
                 try:
                     fnode = dfs(param_type)
                 except UnsolvableNodeError as une:
                     une.add_context(node.dependent, param.name, param.param_type)
                     raise
-
                 self._register_node(fnode)
                 self._analyzed_nodes[param_type] = fnode
-
             current_path.pop()
             self._analyzed_nodes[dep] = node
             return node
@@ -915,16 +915,12 @@ class Resolver:
                 self.node(node)
 
 
-class ScopeMixin(Generic[Stack]):
+class ResolveScope(Resolver):
     __slots__ = ()
 
-    _nodes: GraphNodes[Any]
-    _stack: Stack
-    _name: Hashable
-    _pre: Maybe[AnyScope]
-    _workers: ThreadPoolExecutor
-    _resolved_singletons: ResolvedSingletons[Any]
-    _registered_singletons: set[type]
+    _name: "Maybe[Hashable]"
+    _pre: "Maybe[AnyScope]"
+    _stack: "ExitStack"
 
     @property
     def name(self) -> Hashable:
@@ -958,7 +954,7 @@ class ScopeMixin(Generic[Stack]):
             raise OutOfScopeError(name)
 
 
-class SyncScope(ScopeMixin[ExitStack], Resolver):
+class SyncScope(ResolveScope):
     __slots__ = ScopeSlots
 
     def __init__(
@@ -1011,7 +1007,7 @@ class SyncScope(ScopeMixin[ExitStack], Resolver):
         return instance
 
 
-class AsyncScope(ScopeMixin[AsyncExitStack], Resolver):
+class AsyncScope(ResolveScope):
     __slots__ = AsyncScopeSlots
 
     def __init__(
@@ -1088,7 +1084,6 @@ class AsyncScope(ScopeMixin[AsyncExitStack], Resolver):
         return instance
 
 
-@final
 class Graph(Resolver):
     """
     ### Description:

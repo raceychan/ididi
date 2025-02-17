@@ -3,7 +3,7 @@ authors = [{ name = "raceychan", email = "raceychan@gmail.com" }]
 description = "A dependency injection library for Python, Optimized for serverless applications"
 dynamic = ["version"]
 name = "ididi"
-license = "MIT"
+# license = "MIT"
 readme = "README.md"
 requires-python = ">= 3.9"
 
@@ -82,8 +82,7 @@ test = { features = ["test"], solve-group = "default" }
 [tool.pixi.dependencies]
 python = "3.9.0.*"
 typing_extensions = ">=4.12.2,<5"
-cython = "*"
-black = ">=25.1.0,<26"
+cython = "==3.0.12"
 
 [tool.pixi.feature.dev.dependencies]
 jupyter = ">=1.1.1,<2"
