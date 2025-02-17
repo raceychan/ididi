@@ -3,11 +3,11 @@ EXT = ididi/graph.pyx ididi/_node.py ididi/_ds.py
 
 .PHONY: compile
 compile:
-	pixi run cythonize -i -3 -a ${EXT}
+	pixi run cythonize -i -3 ${EXT}
 
 .PHONY: clean
 clean:
-	find ididi \( -name "*.c" -o -name "*.so" \) -type f -exec rm -f {} \;
+	find ididi \( -name "*.c" -o -name "*.so" -o -name "*.html" \) -type f -exec rm -f {} \;
 
 .PHONY: test
 test:
