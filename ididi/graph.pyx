@@ -116,8 +116,6 @@ def register_dependent(
     mapping[dependent_type] = instance
 
 
-
-
 cdef object _resolve_dfs(
     Resolver resolver,
     dict nodes,
@@ -125,23 +123,63 @@ cdef object _resolve_dfs(
     object ptype,
     dict overrides,
 ):
+    cdef object resolution
     cdef dict params
+    cdef DependentNode pnode
     cdef str name
     cdef Dependency param
-    cdef DependentNode pnode
-    cdef object resolution
 
     if resolution := cache.get(ptype):
         return resolution
 
-    pnode = nodes.get(ptype) or resolver.analyze(ptype)
     params = overrides
-    pdeps = pnode.dependencies
+    pnode = nodes.get(ptype) or resolver.analyze(ptype)
 
-    for name, param in pdeps.items():
+    for name, param in pnode.dependencies.items():
         if name in params:
             continue
-        params[name] = _resolve_dfs(resolver, nodes, cache, param.param_type, {})
+
+        params[name] = _resolve_sub_dfs(
+            resolver, nodes, cache, param.param_type, overrides
+        )
+
+    try:
+        instance = pnode.factory(**params)
+    except TypeError as te:
+        raise TypeError(f"{pnode.dependent}, {te}")
+
+    result = resolver.resolve_callback(
+        instance,
+        pnode.dependent,
+        pnode.factory_type,
+        pnode.config.reuse,
+    )
+    return result
+
+cdef object _resolve_sub_dfs(
+    Resolver resolver,
+    dict nodes,
+    dict cache,
+    object ptype,
+    dict overrides,
+):
+    cdef object resolution
+    cdef dict params
+    cdef DependentNode pnode
+    cdef str name
+    cdef Dependency param
+
+    if resolution := cache.get(ptype):
+        return resolution
+
+    params = {}
+    pnode = nodes.get(ptype) or resolver.analyze(ptype)
+
+    for name, param in pnode.dependencies.items():
+        if val := overrides.get(name):
+            params[name] = val
+        else:
+            params[name] = _resolve_sub_dfs(resolver, nodes, cache, param.param_type, overrides)
 
     instance = pnode.factory(**params)
     result = resolver.resolve_callback(
@@ -163,13 +201,13 @@ async def _aresolve_dfs(
     if resolution := cache.get(ptype):
         return resolution
 
+    params = overrides
     pnode = nodes.get(ptype) or graph.analyze(ptype)
 
-    params = overrides
     for name, param in pnode.dependencies.items():
         if name in params:
             continue
-        params[name] = await _aresolve_dfs(graph, nodes, cache, param.param_type, {})
+        params[name] = await _aresolve_sub_dfs(graph, nodes, cache, param.param_type, {})
 
     instance = pnode.factory(**params)
     resolved = await graph.aresolve_callback(
@@ -180,6 +218,33 @@ async def _aresolve_dfs(
     )
     return resolved
 
+async def _aresolve_sub_dfs(
+    resolver: "Resolver",
+    nodes: GraphNodes[Any],
+    cache: ResolvedSingletons[Any],
+    ptype: IDependent[T],
+    overrides: dict[str, Any],
+):
+    if resolution := cache.get(ptype):
+        return resolution
+
+    params = {}
+    pnode = nodes.get(ptype) or resolver.analyze(ptype)
+
+    for name, param in pnode.dependencies.items():
+        if val := overrides.get(name):
+            params[name] = val
+        else:
+            params[name] = await _aresolve_sub_dfs(resolver, nodes, cache, param.param_type, overrides)
+
+    instance = pnode.factory(**params)
+    resolved = await resolver.aresolve_callback(
+        resolved=instance,
+        dependent=pnode.dependent,
+        factory_type=pnode.factory_type,
+        is_reuse=pnode.config.reuse,
+    )
+    return resolved
 
 @asynccontextmanager
 async def syncscope_in_thread(
