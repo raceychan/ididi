@@ -1,9 +1,11 @@
+from ._ds cimport TypeRegistry
+
 cdef object _resolve_dfs(Resolver resolver, dict nodes, dict cache, object ptype, dict overrides)
 
 cdef class Resolver:
     cdef readonly dict _nodes
     cdef readonly dict _analyzed_nodes
-    cdef readonly object _type_registry
+    cdef readonly TypeRegistry _type_registry
     cdef readonly frozenset _ignore
     cdef readonly object _workers
 

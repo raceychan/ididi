@@ -28,7 +28,8 @@ from typing import (  # final,; Generic,
 
 from typing_extensions import Self, Unpack, override
 
-from ._ds import GraphNodes, GraphNodesView, ResolvedSingletons, TypeRegistry, Visitor
+from ._ds import GraphNodes, GraphNodesView, ResolvedSingletons, Visitor
+from ._ds cimport TypeRegistry
 from ._node import (
     DefaultConfig,
     Dependencies,
