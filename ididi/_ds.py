@@ -7,12 +7,12 @@ from ._type_resolve import get_bases
 from .interfaces import IDependent
 from .utils.typing_utils import T
 
-GraphNodes = dict[IDependent[T], DependentNode[T]]
+GraphNodes = dict[IDependent[T], DependentNode]
 """
 ### mapping a type to its corresponding node
 """
 
-GraphNodesView = MappingProxyType[IDependent[T], DependentNode[T]]
+GraphNodesView = MappingProxyType[IDependent[T], DependentNode]
 """
 ### a readonly view of GraphNodes
 """

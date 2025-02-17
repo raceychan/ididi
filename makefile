@@ -1,6 +1,9 @@
+EXT = ididi/graph.py ididi/_node.py
+
+
 .PHONY: compile
 compile:
-	pixi run cythonize -i -3 -a ididi/graph.py
+	pixi run cythonize -i -3 ${EXT}
 
 .PHONY: clean
 clean:

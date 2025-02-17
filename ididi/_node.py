@@ -4,14 +4,13 @@ from functools import lru_cache
 from inspect import Signature
 from inspect import _ParameterKind as ParameterKind  # type: ignore
 from inspect import isasyncgenfunction, isgeneratorfunction
-from typing import (
+from typing import (  # Generic,
     Annotated,
     Any,
     AsyncGenerator,
     Container,
     ForwardRef,
     Generator,
-    Generic,
     Union,
     cast,
     get_origin,
@@ -35,14 +34,13 @@ from ._type_resolve import (
     resolve_annotation,
     resolve_forwardref,
 )
-from .config import (
+from .config import (  # FrozenSlot,
     IGNORE_PARAM_MARK,
     USE_FACTORY_MARK,
     CacheMax,
     DefaultConfig,
     EmptyIgnore,
     FactoryType,
-    FrozenSlot,
     NodeConfig,
     ResolveOrder,
 )
@@ -110,9 +108,7 @@ def resolve_use(annotation: Any) -> Union[tuple[IDependent[Any], NodeConfig], No
     return search_meta(metas)
 
 
-def should_override(
-    other_node: "DependentNode[T]", current_node: "DependentNode[T]"
-) -> bool:
+def should_override(other_node: "DependentNode", current_node: "DependentNode") -> bool:
     """
     Check if the other node should override the current node
     """
@@ -143,7 +139,7 @@ def resolve_marks(annt: Any) -> Union[IDependent[Any], None]:
 
 
 # TODO: make this a cython struct
-class Dependency(FrozenSlot, Generic[T]):
+class Dependency:
     """'dpram' for short
     Represents a parameter and its corresponding dependency node
 
@@ -161,54 +157,47 @@ class Dependency(FrozenSlot, Generic[T]):
     default: the default value of the param, 5, in this case.
     """
 
-    __slots__ = ("name", "param_type", "param_kind", "default", "unresolvable")
-
     name: str
-    param_type: IDependent[T]  # resolved_type
-    param_kind: ParameterKind
-    default: Maybe[T]
+    param_type: "IDependent[Any]"  # resolved_type
+    default_: "Maybe[Any]"
     unresolvable: bool
 
     def __init__(
         self,
         name: str,
         param_type: IDependent[T],
-        param_kind: ParameterKind,
         default: Maybe[T],
     ) -> None:
-        object.__setattr__(self, "name", name)
-        object.__setattr__(self, "param_type", param_type)
-        object.__setattr__(self, "param_kind", param_kind)
-        object.__setattr__(self, "default", default)
-        object.__setattr__(self, "unresolvable", is_unsolvable_type(param_type))
+        self.name = name
+        self.param_type = param_type
+        self.default_ = default
+        self.unresolvable = is_unsolvable_type(param_type)
 
     def __repr__(self) -> str:
-        return f"Dependency({self.name}: {self.type_repr}={self.default!r})"
+        return f"Dependency({self.name}: {self.type_repr}={self.default_!r})"
 
     @property
     def type_repr(self):
         return getattr(self.param_type, "__name__", f"{self.param_type}")
 
-    def replace_type(self, param_type: IDependent[T]) -> "Dependency[T]":
+    def replace_type(self, param_type: IDependent[T]) -> "Dependency":
         return Dependency(
             name=self.name,
-            param_kind=self.param_kind,
             param_type=param_type,
-            default=self.default,
+            default=self.default_,
         )
 
 
 def unpack_to_deps(
     param_annotation: Annotated[Any, "Unpack"]
-) -> "dict[str, Dependency[Any]]":
+) -> "dict[str, Dependency]":
     unpack: type = get_args(param_annotation)[0]
     fields = unpack.__annotations__
-    dependencies: dict[str, Dependency[Any]] = {}
+    dependencies: dict[str, Dependency] = {}
 
     for name, ftype in fields.items():
-        dep_param = Dependency[Any](
+        dep_param = Dependency(
             name=name,
-            param_kind=ParameterKind.KEYWORD_ONLY,
             param_type=resolve_annotation(ftype),
             default=MISSING,
         )
@@ -218,12 +207,12 @@ def unpack_to_deps(
 
 # TODO: make this an immutable dict that is faster to access
 # all mutation only happens at analyze time, this will boost resolve.
-class Dependencies(dict[str, Dependency[Any]]):
+class Dependencies(dict[str, Dependency]):
     __slots__ = "_deps"
 
     def __repr__(self):
         deps_repr = ", ".join(
-            f"{name}: {dep.type_repr}={dep.default!r}" for name, dep in self.items()
+            f"{name}: {dep.type_repr}={dep.default_!r}" for name, dep in self.items()
         )
         return f"Depenencies({deps_repr})"
 
@@ -238,7 +227,7 @@ class Dependencies(dict[str, Dependency[Any]]):
         if is_class_or_method(function):
             params = params[1:]  # skip 'self'
 
-        dependencies: dict[str, Dependency[Any]] = {}
+        dependencies: dict[str, Dependency] = {}
 
         for param in params:
             param_annotation = param.annotation
@@ -281,7 +270,6 @@ class Dependencies(dict[str, Dependency[Any]]):
 
             dep_param = Dependency(
                 name=param.name,
-                param_kind=param.kind,
                 param_type=param_type,
                 default=default,
             )
@@ -303,7 +291,7 @@ class Dependencies(dict[str, Dependency[Any]]):
 # ======================= Node =====================================
 
 
-class DependentNode(Generic[T]):
+class DependentNode:
     """
     A DAG node that represents a dependency
 
@@ -378,13 +366,13 @@ class DependentNode(Generic[T]):
 
     def analyze_unsolved_params(
         self, ignore: Container[str] = EmptyIgnore
-    ) -> Generator[Dependency[T], None, None]:
+    ) -> Generator[Dependency, None, None]:
         "params that needs to be statically resolved"
 
         for param_name, param in self.dependencies.items():
             if param_name in ignore:
                 continue
-            param_type = cast(Union[IDependent[T], ForwardRef], param.param_type)
+            param_type = cast(Union[IDependent[object], ForwardRef], param.param_type)
             if isinstance(param_type, ForwardRef):
                 new_type = resolve_forwardref(self.dependent, param_type)
                 param = param.replace_type(new_type)
@@ -412,7 +400,7 @@ class DependentNode(Generic[T]):
         factory_type: FactoryType,
         signature: Signature,
         config: NodeConfig,
-    ) -> "DependentNode[T]":
+    ) -> "DependentNode":
         dependencies = Dependencies.from_signature(
             function=factory, signature=signature, config=config
         )
@@ -453,7 +441,7 @@ class DependentNode(Generic[T]):
         *,
         factory: INodeFactory[P, T],
         config: NodeConfig,
-    ) -> "DependentNode[T]":
+    ) -> "DependentNode":
 
         f = factory
         factory_type: FactoryType
@@ -491,9 +479,7 @@ class DependentNode(Generic[T]):
         return node
 
     @classmethod
-    def _from_class(
-        cls, *, dependent: type[T], config: NodeConfig
-    ) -> "DependentNode[T]":
+    def _from_class(cls, *, dependent: type[T], config: NodeConfig) -> "DependentNode":
         if is_class_with_empty_init(dependent):
             signature = EMPTY_SIGNATURE
         else:
@@ -521,7 +507,7 @@ class DependentNode(Generic[T]):
         factory_or_class: INode[P, T],
         *,
         config: NodeConfig = DefaultConfig,
-    ) -> "DependentNode[T]":
+    ) -> "DependentNode":
         """
         Build a node Nonrecursively
         from
@@ -530,7 +516,7 @@ class DependentNode(Generic[T]):
         """
 
         if is_class(factory_or_class):
-            dependent = cast(type[T], factory_or_class)
+            dependent = cast(type, factory_or_class)
             return cls._from_class(dependent=dependent, config=config)
         else:
             factory = cast(INodeFactory[P, T], factory_or_class)

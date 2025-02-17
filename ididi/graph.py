@@ -121,11 +121,11 @@ def register_dependent(
 
 
 def _resolve_dfs(
-    resolver: "Resolver",  # cdef Resolver
-    nodes: GraphNodes[Any],  # cdef dict
-    cache: ResolvedSingletons[Any],  # cdef dict
-    ptype: IDependent[T],  # cdef object
-    overrides: dict[str, Any],  # cdef dict
+    resolver: "Resolver",
+    nodes: GraphNodes[Any],
+    cache: ResolvedSingletons[Any],
+    ptype: IDependent[T],
+    overrides: dict[str, Any],
 ) -> T:
     if resolution := cache.get(ptype):
         return resolution
@@ -198,7 +198,7 @@ class SharedData(TypedDict):
     "Data shared between graph and scope"
 
     nodes: GraphNodes[Any]
-    analyzed_nodes: dict[IDependent[Any], DependentNode[Any]]
+    analyzed_nodes: dict[IDependent[Any], DependentNode]
     type_registry: TypeRegistry
     ignore: GraphIgnore
     workers: ThreadPoolExecutor
@@ -229,7 +229,7 @@ class Resolver:
             f"resolved={len(self._resolved_singletons)})"
         )
 
-    def get(self, dep: INode[P, T]) -> Union[DependentNode[T], None]:
+    def get(self, dep: INode[P, T]) -> Union[DependentNode, None]:
         if node := self._nodes.get(dep):
             return node
         return self._nodes.get(resolve_node_type(dep))
@@ -268,7 +268,7 @@ class Resolver:
     def __contains__(self, item: INode[P, T]) -> bool:
         return resolve_node_type(item) in self._nodes
 
-    def _remove_node(self, node: DependentNode[Any]) -> None:
+    def _remove_node(self, node: DependentNode) -> None:
         """
         Remove a node from the graph and clean up all its references.
         """
@@ -279,7 +279,7 @@ class Resolver:
         self._resolved_singletons.pop(dependent_type, None)
         self._analyzed_nodes.pop(dependent_type, None)
 
-    def _register_node(self, node: DependentNode[Any]) -> None:
+    def _register_node(self, node: DependentNode) -> None:
         """
         Register a dependency node and update dependency relationships.
         Automatically registers any unregistered dependencies.
@@ -293,7 +293,7 @@ class Resolver:
         self._nodes[dependent] = node
         self._type_registry.register(dependent)
 
-    def _resolve_concrete_node(self, dependent: IDependent[T]) -> DependentNode[Any]:
+    def _resolve_concrete_node(self, dependent: IDependent[T]) -> DependentNode:
         # when user assign impl via factory
         if (node := self._nodes.get(dependent)) and node.factory_type != "default":
             return node
@@ -467,7 +467,7 @@ class Resolver:
         self.remove_dependent(old_dep)
         self._node(new_dep)
 
-    def search(self, dep_name: str) -> Union[DependentNode[Any], None]:
+    def search(self, dep_name: str) -> Union[DependentNode, None]:
         for dep, node in self._nodes.items():
             if dep.__name__ == dep_name:
                 return node
@@ -478,7 +478,7 @@ class Resolver:
         *,
         config: NodeConfig = DefaultConfig,
         ignore: Container[str] = EmptyIgnore,
-    ) -> DependentNode[T]:
+    ) -> DependentNode:
         """
         Recursively analyze the type information of a dependency.
         """
@@ -492,7 +492,7 @@ class Resolver:
 
         current_path: list[IDependent[T]] = []
 
-        def dfs(dep: IDependent[T]) -> DependentNode[T]:
+        def dfs(dep: IDependent[T]) -> DependentNode:
             # when we register a concrete node we also register its bases to type_registry
             if dep in self._analyzed_nodes:
                 return self._analyzed_nodes[dep]
@@ -524,7 +524,7 @@ class Resolver:
                     node.dependencies[param.name] = param.replace_type(fnode.dependent)
                     self.analyze(fnode.factory)
                     continue
-                if is_provided(param.default):
+                if is_provided(param.default_):
                     continue
                 if param.unresolvable:
                     raise UnsolvableDependencyError(
@@ -561,7 +561,7 @@ class Resolver:
             if dep.unresolvable:
                 continue
 
-            if use_meta := (resolve_use(param_type) or resolve_use(dep.default)):
+            if use_meta := (resolve_use(param_type) or resolve_use(dep.default_)):
                 ufunc, uconfig = use_meta
                 use_node = self._node(ufunc, uconfig)
                 param_type = use_node.dependent
@@ -650,7 +650,7 @@ class Resolver:
             return resolution
 
         provided_params = frozenset(overrides)
-        node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
+        node: DependentNode = self.analyze(dependent, ignore=provided_params)
         return _resolve_dfs(
             self, self._nodes, self._resolved_singletons, node.dependent, overrides
         )
@@ -672,18 +672,18 @@ class Resolver:
             return resolution
 
         provided_params = frozenset(overrides)
-        node: DependentNode[T] = self.analyze(dependent, ignore=provided_params)
+        node: DependentNode = self.analyze(dependent, ignore=provided_params)
         return await _aresolve_dfs(
             self, self._nodes, self._resolved_singletons, node.dependent, overrides
         )
 
     def _node(
         self, dependent: INode[P, T], config: NodeConfig = DefaultConfig
-    ) -> DependentNode[T]:
+    ) -> DependentNode:
         merged_config = NodeConfig(
             reuse=config.reuse, ignore=self._ignore | config.ignore
         )
-        node = DependentNode[T].from_node(dependent, config=merged_config)
+        node = DependentNode.from_node(dependent, config=merged_config)
         if node.function_dependent:
             return node
 
@@ -1113,7 +1113,7 @@ class Graph(Resolver):
 
     _nodes: GraphNodes[Any]
     "Map a type to a dependent node"
-    _analyzed_nodes: dict[IDependent[Any], DependentNode[Any]]
+    _analyzed_nodes: dict[IDependent[Any], DependentNode]
     "Nodes that have been recursively resolved and is validated to be resolvable."
     _type_registry: TypeRegistry
     "Map a type to its implementations"
