@@ -1,6 +1,5 @@
 cdef object _resolve_dfs(Resolver resolver, dict nodes, dict cache, object ptype, dict overrides)
 
-
 cdef class Resolver:
     cdef readonly dict _nodes
     cdef readonly dict _analyzed_nodes

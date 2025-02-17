@@ -5,7 +5,7 @@ from contextvars import ContextVar, Token, copy_context
 from functools import lru_cache, partial, wraps
 from inspect import isawaitable, iscoroutinefunction
 from types import MappingProxyType, MethodType, TracebackType
-from typing import (  # final,
+from typing import (  # final,; Generic,
     Annotated,
     Any,
     AsyncContextManager,
@@ -14,7 +14,6 @@ from typing import (  # final,
     Container,
     ContextManager,
     Final,
-    Generic,
     Hashable,
     Literal,
     Sequence,
@@ -920,7 +919,7 @@ class ResolveScope(Resolver):
 
     _name: "Maybe[Hashable]"
     _pre: "Maybe[AnyScope]"
-    _stack: "ExitStack"
+    _stack: "Union[ExitStack, AsyncExitStack]"
 
     @property
     def name(self) -> Hashable:
@@ -969,6 +968,7 @@ class SyncScope(ResolveScope):
         self._name = name
         self._pre = pre
         self._stack = ExitStack()
+
         super().__init__(
             **args,
             resolved_singletons=resolved_singletons,
