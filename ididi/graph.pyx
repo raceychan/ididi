@@ -138,7 +138,6 @@ cdef object _resolve_dfs(
     for name, param in pnode.dependencies.items():
         if name in params:
             continue
-
         params[name] = _resolve_sub_dfs(
             resolver, nodes, cache, param.param_type, overrides
         )
@@ -208,13 +207,16 @@ async def _aresolve_dfs(
         if name in params:
             continue
         params[name] = await _aresolve_sub_dfs(graph, nodes, cache, param.param_type, {})
+    try:
+        instance = pnode.factory(**params)
+    except TypeError as te:
+        raise TypeError(f"{pnode.dependent}, {te}")
 
-    instance = pnode.factory(**params)
     resolved = await graph.aresolve_callback(
-        resolved=instance,
-        dependent=pnode.dependent,
-        factory_type=pnode.factory_type,
-        is_reuse=pnode.config.reuse,
+        instance,
+        pnode.dependent,
+        pnode.factory_type,
+        pnode.config.reuse,
     )
     return resolved
 
@@ -239,10 +241,10 @@ async def _aresolve_sub_dfs(
 
     instance = pnode.factory(**params)
     resolved = await resolver.aresolve_callback(
-        resolved=instance,
-        dependent=pnode.dependent,
-        factory_type=pnode.factory_type,
-        is_reuse=pnode.config.reuse,
+        instance,
+        pnode.dependent,
+        pnode.factory_type,
+        pnode.config.reuse,
     )
     return resolved
 
