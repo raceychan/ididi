@@ -34,6 +34,9 @@ requires = ["hatchling"]
 [tool.hatch.version]
 path = "ididi/__init__.py"
 
+[tool.hatch.build.targets.wheel.hooks.cython]
+dependencies = ["hatch-cython"]
+
 [tool.setuptools]
 py-modules = ["ididi"]
 
