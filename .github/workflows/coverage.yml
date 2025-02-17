@@ -24,7 +24,7 @@ jobs:
         run: pip install typing_extensions pytest pytest-cov pytest-asyncio cython
 
       - name: compile
-        run: cythonize -i -3 -a ididi/graph.pyx ididi/_node.py ididi/_ds.py
+        run: cythonize -i -3 ididi/graph.pyx ididi/_node.py ididi/_ds.py
 
       - name: Install graphviz
         run: pip install graphviz
