@@ -67,14 +67,11 @@ def test_entry(dg: Graph, dependents: list[type]):
 
     SERVICE_REGISTRY: set[UserService] = set()
 
-    class Conn:
-        ...
+    class Conn: ...
 
-    class Repo:
-        ...
+    class Repo: ...
 
-    class Cache:
-        ...
+    class Cache: ...
 
     @contextmanager
     def get_conn() -> Resource[Conn]:
@@ -282,4 +279,12 @@ benchmark of entry after 1.4.4 is slower because we changed the test method of e
 │  ├─ 0.017 NodeConfig.analyze  ididi/resolver.py:274
 │  └─ 0.007 dict.get  <built-in>
 └─ 0.016 [self]  tests/test_benchmark.py
+"""
+
+"""
+1.4.5
+
+menaul construction took 0.026685
+ididi resolve took 0.027252
+current implementation(without reuse) is 1.021248 times slower
 """

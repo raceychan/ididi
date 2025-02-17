@@ -13,7 +13,6 @@ from typing import (
     Callable,
     Container,
     ContextManager,
-    Final,
     Generator,
     Generic,
     Hashable,
@@ -92,8 +91,6 @@ Stack = TypeVar("Stack", ExitStack, AsyncExitStack)
 AnyScope = Union["SyncScope", "AsyncScope"]
 ScopeToken = Token[AnyScope]
 ScopeContext = ContextVar[AnyScope]
-
-_SCOPE_CONTEXT: Final[ScopeContext] = ContextVar("idid_scope_ctx")
 
 class Resolver:
     __slots__ = SharedSlots
@@ -370,6 +367,10 @@ class Resolver:
         ```
         """
         ...
+
+    def add_nodes(
+        self, *nodes: Union[IDependent[T], tuple[IDependent[T], INodeConfig]]
+    ) -> None: ...
 
 class ScopeMixin(Generic[Stack]):
     __slots__ = ()
