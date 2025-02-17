@@ -5,6 +5,8 @@ dev.ipynb
 # Byte-compiled / optimized / DLL files
 .pixi/
 *.pixi
+*.c
+*.so
 DEVNOTE.md
 
 # Python cache files (more comprehensive)
