@@ -67,7 +67,7 @@ def test_dg_add_nodes():
         auth_factory,
         conn_factory,
     )
-    assert len(dg.nodes) == 3
+    assert len(dg.nodes) == 4
 
 
 from typing import Any, NewType

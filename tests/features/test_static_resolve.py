@@ -56,20 +56,20 @@ def dg() -> Graph:
 
 def test_analyze(dg: Graph):
     _ = dg.analyze(EmailService)
-    assert len(dg.nodes) == 7
+    assert len(dg.nodes) == 8
     assert len(dg.resolved_nodes) == 7
 
 
 def test_analyze_equal_resolve(dg: Graph):
     _ = dg.analyze(EmailService)
-    assert len(dg.nodes) == 7
+    assert len(dg.nodes) == 8
     assert len(dg.resolved_nodes) == 7
 
     dg.reset()
 
     dg.resolve(EmailService)
 
-    assert len(dg.nodes) == 7
+    assert len(dg.nodes) == 8
     assert len(dg.resolved_nodes) == 7
 
 
@@ -89,11 +89,11 @@ class ForwardConfig:
 
 def test_forward_dependency(dg: Graph):
     _ = dg.analyze(ForwardService)
-    assert len(dg.nodes) == 3
+    assert len(dg.nodes) == 4
     assert len(dg.resolved_nodes) == 3
 
     dg.resolve(ForwardService)
-    assert len(dg.nodes) == 3
+    assert len(dg.nodes) == 4
     assert len(dg.resolved_nodes) == 3
 
 

@@ -432,23 +432,23 @@ async def test_scope_different_across_context():
 
     dg.resolve(Normal)
 
-    with dg.scope(1) as s1:
+    with dg.scope("1") as s1:
 
         def func1():
-            with dg.scope(2) as s2:
-                with dg.scope(3) as s3:
+            with dg.scope("2") as s2:
+                with dg.scope("3") as s3:
                     repr(s1)
                     n3 = s3.resolve(Normal)
                     n1 = s1.resolve(Normal)
                     assert (
                         n1 is n3
                     ), "Non-resources reusable instances should be shared across scopes"
-                    assert s3.get_scope(1) is s1
-                    assert s3.get_scope(2) is s2
-                    assert s3.get_scope(3) is s3
+                    assert s3.get_scope("1") is s1
+                    assert s3.get_scope("2") is s2
+                    assert s3.get_scope("3") is s3
 
                 with pytest.raises(OutOfScopeError):
-                    s3 = dg.use_scope(3)
+                    s3 = dg.use_scope("3")
 
                 return s1
 

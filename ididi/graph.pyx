@@ -20,7 +20,6 @@ from typing import (  # final,; Generic,
     TypedDict,
     TypeVar,
     Union,
-    cast,
     get_args,
     get_origin,
     overload,
@@ -316,7 +315,7 @@ cdef class Resolver:
             if not isinstance(bound_obj, type):
                 raise NotSupportedError("Instance method is not supported")
             self._node(dep_method)
-            dependent = cast(IDependent[T], bound_obj)
+            dependent = bound_obj
             resolved_type = resolve_annotation(dependent)
         elif is_function(dependent):
             if is_new_type(dependent):
@@ -341,7 +340,7 @@ cdef class Resolver:
             if is_function(dependent):
                 node = DependentNode.from_node(dependent, config=config)
                 self._nodes[dependent] = node
-                return cast(IDependent[T], dependent)
+                return dependent
 
             resolved_type, *_ = get_args(annt_dep)
         return resolved_type
@@ -594,8 +593,20 @@ cdef class Resolver:
         """
         if dependent_type is None:
             dependent_type = type(dependent)
+
         register_dependent(self._resolved_singletons, dependent_type, dependent)
         self._registered_singletons.add(dependent_type)
+
+        self._nodes[dependent_type] = DependentNode(
+            dependent=dependent_type,
+            factory=dependent_type,
+            factory_type="function",
+            dependencies=Dependencies(),
+            config=DefaultConfig,
+        )
+
+        self._type_registry[dependent_type] = [dependent_type]
+
 
     def resolve_callback(
         self,
@@ -624,7 +635,7 @@ cdef class Resolver:
         instance = await resolved if isawaitable(resolved) else resolved
         if is_reuse:
             register_dependent(self._resolved_singletons, dependent, instance)
-        return cast(T, instance)
+        return instance
 
     @overload
     def resolve(
@@ -776,7 +787,7 @@ cdef class Resolver:
         # checkout https://github.com/dbrattli/Expression/blob/main/expression/core/pipe.py
 
         if not func:
-            configured = cast(TEntryDecor, partial(self.entry, **iconfig))
+            configured = partial(self.entry, **iconfig)
             return configured
 
         config = NodeConfig(**iconfig)
@@ -825,7 +836,7 @@ cdef class Resolver:
 
                 f = _async_wrapper
         else:
-            sync_func = cast(IDependent[T], func)
+            sync_func = func
             if require_scope:
 
                 @wraps(sync_func)
@@ -853,7 +864,7 @@ cdef class Resolver:
                 f = _sync_wrapper
 
         setattr(f, replace.__name__, replace)
-        return cast(EntryFunc[P, T], f)
+        return f
 
     @overload
     def node(self, dependent: type[T], **config: Unpack[INodeConfig]) -> type[T]: ...
@@ -900,7 +911,7 @@ cdef class Resolver:
         """
 
         if not dependent:
-            configured = cast(TDecor, partial(self.node, **config))
+            configured = partial(self.node, **config)
             return configured
 
         if is_unsolvable_type(dependent):
@@ -953,7 +964,7 @@ cdef class ResolveScope(Resolver):
         ptr = self
         while is_provided(ptr._pre):
             if ptr._pre._name == name:
-                return cast(Self, ptr._pre)
+                return ptr._pre
             ptr = ptr._pre
         else:
             raise OutOfScopeError(name)
@@ -1075,13 +1086,13 @@ cdef class AsyncScope(ResolveScope):
             instance = await resolved if isawaitable(resolved) else resolved
             if is_reuse:
                 register_dependent(self._resolved_singletons, dependent, instance)
-            return cast(T, instance)
+            return instance
 
         if factory_type == "resource":
-            resolved = cast(ContextManager[T], resolved)
+            resolved = resolved
             resolved = syncscope_in_thread(self._loop, self._workers, resolved)
         else:
-            resolved = cast(AsyncContextManager[T], resolved)
+            resolved = resolved
 
         instance = await self.enter_async_context(resolved)
 

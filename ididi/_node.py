@@ -191,7 +191,7 @@ class Dependency:
 def unpack_to_deps(
     param_annotation: Annotated[Any, "Unpack"]
 ) -> "dict[str, Dependency]":
-    unpack: type = get_args(param_annotation)[0]
+    unpack = get_args(param_annotation)[0]
     fields = unpack.__annotations__
     dependencies: dict[str, Dependency] = {}
 
