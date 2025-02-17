@@ -21,7 +21,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: pip install typing_extensions pytest pytest-cov pytest-asyncio cython distutils
+        run: pip install typing_extensions pytest pytest-cov pytest-asyncio cython
+
+      - name: Install cython
+        run: pip install cython==3.0.12
 
       - name: compile
         run: cythonize -i -3 ididi/graph.pyx ididi/_node.py ididi/_ds.py
