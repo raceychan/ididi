@@ -1,4 +1,4 @@
-EXT = ididi/graph.pyx ididi/_node.py
+EXT = ididi/graph.pyx ididi/_node.py ididi/_ds.py
 
 
 .PHONY: compile
