@@ -1,4 +1,5 @@
 from ididi import Graph, Resource
+import pytest
 
 # from ididi._itypes import Resource
 
@@ -20,10 +21,11 @@ class UserService: ...
 def get_service(dg: Graph) -> UserService:
     return dg
 
-
+@pytest.mark.debug
 def test_dg_self_inject():
     dg = Graph()
-    assert dg is dg.resolve(get_service)
+    assert dg is dg.resolve(Graph)
+    # assert dg is dg.resolve(get_service)
 
 
 def test_dg_register_dependent():

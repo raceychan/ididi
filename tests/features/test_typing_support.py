@@ -68,13 +68,3 @@ def test_optional():
     assert isinstance(dg.resolve(UserRepo).db, DataBase)
 
 
-# def test_annt():
-#     dg = Graph()
-
-#     class User: ...
-
-
-#     NamedUser = Annotated[User, "NamedUser"]
-
-#     d = dg.resolve(NamedUser)
-#     breakpoint()
