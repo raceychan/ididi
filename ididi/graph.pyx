@@ -588,13 +588,13 @@ cdef class Resolver:
                         node.dependencies[param.name] = param.replace_type(
                             inode.dependent
                         )
-                        self.analyze(inode.factory)
+                        self.analyze(inode.factory, ignore=ignore)
                         continue
                 elif is_function(param_type):
                     fnode = DependentNode.from_node(param_type, config=config)
                     self._nodes[param_type] = fnode
                     node.dependencies[param.name] = param.replace_type(fnode.dependent)
-                    self.analyze(fnode.factory)
+                    self.analyze(fnode.factory, ignore=ignore)
                     continue
                 if is_provided(param.default_):
                     continue

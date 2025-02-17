@@ -105,7 +105,6 @@ def test_class_override_reuse():
     assert user.name == user.uname.name == "uuu"
 
 
-@pytest.mark.skip("not implemented")
 def test_reuse_resolved():
     dg = Graph()
 
