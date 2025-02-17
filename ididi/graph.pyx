@@ -78,6 +78,8 @@ from .interfaces import (
 from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import P, T
 
+from ._node cimport Dependency, DependentNode
+
 SharedSlots: tuple[str, ...] = (
     "_nodes",
     "_analyzed_nodes",
@@ -114,36 +116,39 @@ def register_dependent(
     mapping[dependent_type] = instance
 
 
-# cdef dict share_cache = overrides.copy()
-# for name in params:
-# if name in share_cache,
-#     params[name] = share_cache[name]
 
 
-def _resolve_dfs(
-    resolver: "Resolver",
-    nodes: GraphNodes[Any],
-    cache: ResolvedSingletons[Any],
-    ptype: IDependent[T],
-    overrides: dict[str, Any],
-) -> T:
+cdef object _resolve_dfs(
+    Resolver resolver,
+    dict nodes,
+    dict cache,
+    object ptype,
+    dict overrides,
+):
+    cdef dict params
+    cdef str name
+    cdef Dependency param
+    cdef DependentNode pnode
+    cdef object resolution
+
     if resolution := cache.get(ptype):
         return resolution
 
     pnode = nodes.get(ptype) or resolver.analyze(ptype)
-
     params = overrides
-    for name, param in pnode.dependencies.items():
+    pdeps = pnode.dependencies
+
+    for name, param in pdeps.items():
         if name in params:
             continue
         params[name] = _resolve_dfs(resolver, nodes, cache, param.param_type, {})
 
     instance = pnode.factory(**params)
     result = resolver.resolve_callback(
-        resolved=instance,
-        dependent=pnode.dependent,
-        factory_type=pnode.factory_type,
-        is_reuse=pnode.config.reuse,
+        instance,
+        pnode.dependent,
+        pnode.factory_type,
+        pnode.config.reuse,
     )
     return result
 
@@ -204,7 +209,7 @@ class SharedData(TypedDict):
     workers: ThreadPoolExecutor
 
 
-class Resolver:
+cdef class Resolver:
     __slots__ = SharedSlots
 
     def __init__(
@@ -914,11 +919,11 @@ class Resolver:
                 self.node(node)
 
 
-class ResolveScope(Resolver):
+cdef class ResolveScope(Resolver):
     __slots__ = ()
 
     _name: "Maybe[Hashable]"
-    _pre: "Maybe[AnyScope]"
+    _pre: "Maybe[ResolveScope]"
     _stack: "Union[ExitStack, AsyncExitStack]"
 
     @property
@@ -926,7 +931,7 @@ class ResolveScope(Resolver):
         return self._name
 
     @property
-    def pre(self) -> Maybe[AnyScope]:
+    def pre(self) -> Maybe[ResolveScope]:
         return self._pre
 
     def __repr__(self) -> str:
@@ -953,7 +958,7 @@ class ResolveScope(Resolver):
             raise OutOfScopeError(name)
 
 
-class SyncScope(ResolveScope):
+cdef class SyncScope(ResolveScope):
     __slots__ = ScopeSlots
 
     def __init__(
@@ -1007,7 +1012,7 @@ class SyncScope(ResolveScope):
         return instance
 
 
-class AsyncScope(ResolveScope):
+cdef class AsyncScope(ResolveScope):
     __slots__ = AsyncScopeSlots
 
     def __init__(
@@ -1084,7 +1089,7 @@ class AsyncScope(ResolveScope):
         return instance
 
 
-class Graph(Resolver):
+cdef class Graph(Resolver):
     """
     ### Description:
     A Directed Acyclic Graph where each dependent is a node.
