@@ -1,6 +1,7 @@
-from ididi.config import IGNORE_PARAM_MARK, USE_FACTORY_MARK
 from typing import Annotated
-from ididi import Graph, NodeConfig, Scoped
+
+from ididi import Graph, Ignore, NodeConfig, Scoped, use
+from ididi.config import IGNORE_PARAM_MARK, USE_FACTORY_MARK
 
 
 class User:
@@ -49,11 +50,9 @@ def test_annotated_mark():
 def test_dg_add_nodes():
     dg = Graph()
 
-    class AuthService:
-        ...
+    class AuthService: ...
 
-    class Conn:
-        ...
+    class Conn: ...
 
     def auth_factory() -> AuthService:
         return AuthService()
@@ -73,8 +72,7 @@ def test_dg_add_nodes():
 from typing import Any, NewType
 
 
-class Request:
-    ...
+class Request: ...
 
 
 RequestParams = NewType("RequestParams", dict[str, Any])
@@ -90,15 +88,30 @@ async def test_resolve_request():
     await dg.resolve(resolve_request, r=Request())
 
 
-# from ididi import Ignore, use
-# def test_reuse_resolved():
-#    def dependency(a: int) -> Ignore[int]:
-#        return a
-#
-#    def main(a: int, b: int, c: int = use(dependency)) -> Ignore[float]:
-#        return a + b + c
-#
-#    dg = Graph()
-#
-#    dg.resolve(main)
-#
+def test_class_override_reuse():
+
+    class Username:
+        def __init__(self, name: str):
+            self.name = name
+
+    class User:
+        def __init__(self, name: str, uname: Username):
+            self.name = name
+            self.uname = uname
+
+    dg = Graph()
+    user = dg.resolve(User, name="uuu")
+
+    assert user.name == user.uname.name == "uuu"
+
+
+def test_reuse_resolved():
+    dg = Graph()
+
+    def dependency(a: int) -> Ignore[int]:
+        return a
+
+    def main(a: int, b: int, c: Annotated[int, use(dependency)]) -> Ignore[float]:
+        return a + b + c
+
+    dg.resolve(main, a=1, b=2)
