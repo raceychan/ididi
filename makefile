@@ -41,7 +41,6 @@ cov:
 report:
 	pixi run -e test pytest tests/ --cov=ididi --cov-report html
 
-
 .PHONY: docs
 docs:
 	pixi run -e dev mkdocs serve
