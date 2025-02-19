@@ -20,18 +20,18 @@ __version__ = VERSION
 
 from ._node import DependentNode as DependentNode
 from ._node import Ignore as Ignore
-from ._node import NodeConfig as NodeConfig
-from ._node import use as use
 from ._node import Scoped as Scoped
+from ._node import use as use
 from .api import entry as entry
 from .api import resolve as resolve
+from .config import NodeConfig as NodeConfig
+from .graph import AsyncScope as AsyncScope
+from .graph import Graph as Graph
+from .graph import SyncScope as SyncScope
 from .interfaces import AsyncResource as AsyncResource
 from .interfaces import INode as INode
 from .interfaces import INodeConfig as INodeConfig
 from .interfaces import Resource as Resource
-from .graph import AsyncScope as AsyncScope
-from .graph import Graph as Graph
-from .graph import SyncScope as SyncScope
 
 try:
     import graphviz as graphviz  # type: ignore

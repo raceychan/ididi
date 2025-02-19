@@ -15,17 +15,14 @@ from typing import (  # final,; Generic,
     ContextManager,
     Final,
     Hashable,
-    Literal,
     Sequence,
     TypedDict,
-    TypeVar,
     Union,
     get_args,
-    get_origin,
-    overload,
+    get_origin
 )
 
-from typing_extensions import Self, Unpack, override
+from typing_extensions import Self, Unpack
 
 from ._ds import GraphNodes, GraphNodesView, ResolvedSingletons, Visitor
 from ._ds cimport TypeRegistry
@@ -71,7 +68,6 @@ from .interfaces import (
     IFactory,
     INode,
     INodeConfig,
-    INodeFactory,
     TDecor,
     TEntryDecor,
 )
@@ -80,24 +76,9 @@ from .utils.typing_utils import P, T
 
 from ._node cimport Dependency, DependentNode
 
-SharedSlots: tuple[str, ...] = (
-    "_nodes",
-    "_analyzed_nodes",
-    "_type_registry",
-    "_ignore",
-    "_resolved_singletons",
-    "_registered_singletons",
-    "_workers",
-)
-ScopeSlots = SharedSlots + ("_name", "_stack", "_pre")
-AsyncScopeSlots = SharedSlots + ScopeSlots + ("_loop",)
-GraphSlots = SharedSlots + ("_token",)
-
-Stack = TypeVar("Stack", ExitStack, AsyncExitStack)
 AnyScope = Union["SyncScope", "AsyncScope"]
 ScopeToken = Token[AnyScope]
 ScopeContext = ContextVar[AnyScope]
-
 _SCOPE_CONTEXT: Final[ScopeContext] = ContextVar("idid_scope_ctx")
 
 
@@ -277,7 +258,6 @@ class SharedData(TypedDict):
 
 
 cdef class Resolver:
-    __slots__ = SharedSlots
 
     def __init__(
         self,
@@ -312,25 +292,14 @@ cdef class Resolver:
 
     @property
     def resolution_registry(self) -> ResolvedSingletons[Any]:
-        """
-        A mapping of dependent types to their resolved instances.
-        """
         return self._resolved_singletons
 
     @property
     def type_registry(self) -> TypeRegistry:
-        """
-        A mapping of abstract types to their implementations.
-        """
         return self._type_registry
 
     @property
     def resolved_nodes(self) -> GraphNodesView[Any]:
-        """
-        A node is considered resolved if all its dependencies have been resolved.
-        Which means all its forward dependencies have been resolved.
-        This would also include builtin types.
-        """
         return MappingProxyType(self._analyzed_nodes)
 
     @property
@@ -341,9 +310,6 @@ cdef class Resolver:
         return resolve_node_type(item) in self._nodes
 
     def _remove_node(self, node: DependentNode) -> None:
-        """
-        Remove a node from the graph and clean up all its references.
-        """
         dependent_type = node.dependent
 
         self._nodes.pop(dependent_type)
@@ -352,11 +318,6 @@ cdef class Resolver:
         self._analyzed_nodes.pop(dependent_type, None)
 
     def _register_node(self, node: DependentNode) -> None:
-        """
-        Register a dependency node and update dependency relationships.
-        Automatically registers any unregistered dependencies.
-        """
-
         dep_type = node.dependent
         dependent: IDependent[Any] = get_origin(dep_type) or dep_type
         if dependent in self._nodes:
@@ -491,7 +452,6 @@ cdef class Resolver:
 
     @lru_cache(CacheMax)
     def should_be_scoped(self, dep_type: INode[P, T]) -> bool:
-        "Recursively check if a dependent type contains any resource dependency"
         if not (resolved_node := self._analyzed_nodes.get(dep_type)):
             resolved_node = self.analyze(dep_type)
 
@@ -520,22 +480,16 @@ cdef class Resolver:
                 raise ReusabilityConflictError(current_path, param_type)
 
     def remove_singleton(self, dependent_type: type) -> None:
-        "Remove the registered singleton from current graph, return if not found"
         if dependent_type in self._registered_singletons:
             self._registered_singletons.remove(dependent_type)
 
     def remove_dependent(self, dependent: INode[P, T]) -> None:
-        "Remove the dependent from current graph, return if not found"
         dependent_type = resolve_node_type(dependent)
 
         if node := self._nodes.get(dependent_type):
             self._remove_node(node)
 
     def override(self, old_dep: INode[P, T], new_dep: INode[P, T]) -> None:
-        """
-        Override a dependency within the current graph
-        """
-
         self.remove_dependent(old_dep)
         self._node(new_dep)
 
@@ -551,9 +505,6 @@ cdef class Resolver:
         config: NodeConfig = DefaultConfig,
         ignore: Container[str] = EmptyIgnore,
     ) -> DependentNode:
-        """
-        Recursively analyze the type information of a dependency.
-        """
         if node := self._analyzed_nodes.get(dependent):
             return node
 
@@ -655,9 +606,6 @@ cdef class Resolver:
     def register_singleton(
         self, dependent: T, dependent_type: Union[type[T], None] = None
     ) -> None:
-        """
-        Register a dependent instance to be injected, provide a dependent type if it's not the same as the instance type.
-        """
         if dependent_type is None:
             dependent_type = type(dependent)
 
@@ -703,23 +651,6 @@ cdef class Resolver:
         if is_reuse:
             register_dependent(self._resolved_singletons, dependent, instance)
         return instance
-
-    @overload
-    def resolve(
-        self,
-        dependent: IDependent[T],
-        /,
-    ) -> T: ...
-
-    @overload
-    def resolve(
-        self,
-        dependent: IFactory[P, T],
-        /,
-        *args: P.args,
-        **overrides: P.kwargs,
-    ) -> T: ...
-
     def resolve(
         self,
         dependent: IFactory[P, T],
@@ -746,9 +677,6 @@ cdef class Resolver:
         *args: P.args,
         **overrides: P.kwargs,
     ) -> T:
-        """
-        Async version of resolve that handles async context managers and coroutines.
-        """
         if args:
             raise PositionalOverrideError(args)
 
@@ -777,82 +705,22 @@ cdef class Resolver:
         self._register_node(node)
         return node
 
-    @overload
-    def use_scope(
-        self,
-        name: Hashable = "",
-        *,
-        as_async: Literal[False] = False,
-    ) -> "SyncScope": ...
-
-    @overload
-    def use_scope(
-        self,
-        name: Hashable = "",
-        *,
-        as_async: Literal[True],
-    ) -> "AsyncScope": ...
-
     def use_scope(
         self,
         name: Hashable = "",
         *,
         as_async: bool = False,
     ) -> Union["SyncScope", "AsyncScope"]:
-        """
-        Get most recently created scope
-
-        as_async: bool
-        pure typing helper, ignored at runtime
-        """
         scope = _SCOPE_CONTEXT.get()
         if name and name != scope.name:
             return scope.get_scope(name)
         return scope
-
-    @overload
-    def entry(self, **iconfig: Unpack[INodeConfig]) -> TEntryDecor: ...
-
-    @overload
-    def entry(
-        self, func: Callable[P, T], **iconfig: Unpack[INodeConfig]
-    ) -> EntryFunc[P, T]: ...
 
     def entry(
         self,
         func: Union[Callable[P, T], IAsyncFactory[P, T], None] = None,
         **iconfig: Unpack[INodeConfig],
     ) -> Union[EntryFunc[P, T], TEntryDecor]:
-        """
-        statically resolve dependencies of the decorated function \
-            then replace it with a new function, \
-            where the new func will solve dependency after being called.
-
-        ### Dependency overrides must be passed as kwarg arguments
-
-        ```py
-        @entry
-        async def create_user(user_name: str, user_email: str, repo: Repository):
-            await repository.add_user(user_name, user_email)
-
-        # client code
-        await create_user(user_name, usere_email)
-        ```
-
-        ### - Positional only dependency is not supported, e.g.
-        
-        ```py
-        @entry
-        async def func(email_sender: EmailSender, /):
-            ...
-
-        # this would raise an exception
-        ```
-        """
-        # TODO:
-        # 1. better typing supoprt by adding more generic vars to func
-        # checkout https://github.com/dbrattli/Expression/blob/main/expression/core/pipe.py
-
         if not func:
             configured = partial(self.entry, **iconfig)
             return configured
@@ -933,50 +801,11 @@ cdef class Resolver:
         setattr(f, replace.__name__, replace)
         return f
 
-    @overload
-    def node(self, dependent: type[T], **config: Unpack[INodeConfig]) -> type[T]: ...
-
-    @overload
-    def node(
-        self, dependent: INodeFactory[P, T], **config: Unpack[INodeConfig]
-    ) -> INodeFactory[P, T]: ...
-
-    @overload
-    def node(self, **config: Unpack[INodeConfig]) -> TDecor: ...
-
     def node(
         self,
         dependent: Union[INode[P, T], None] = None,
         **config: Unpack[INodeConfig],
     ) -> Union[INode[P, T], TDecor]:
-        """
-        ### Decorator to register a node in the dependency graph.
-
-        This does NOT statically resolve the node
-
-        - Can be used with both factory functions and classes.
-        - If decorating a factory function that returns an existing type,
-        it will override the factory for that type.
-        ----
-        Examples:
-
-        #### Register a class:
-
-        ```python
-        dg = Graph()
-
-        @dg.node
-        class AuthService: ...
-        ```
-
-        #### Register a factory function:
-
-        ```python
-        @dg.node
-        def auth_service_factory() -> AuthService: ...
-        ```
-        """
-
         if not dependent:
             configured = partial(self.node, **config)
             return configured
@@ -999,8 +828,6 @@ cdef class Resolver:
 
 
 cdef class ResolveScope(Resolver):
-    __slots__ = ()
-
     _name: "Maybe[Hashable]"
     _pre: "Maybe[ResolveScope]"
     _stack: "Union[ExitStack, AsyncExitStack]"
@@ -1038,8 +865,6 @@ cdef class ResolveScope(Resolver):
 
 
 cdef class SyncScope(ResolveScope):
-    __slots__ = ScopeSlots
-
     def __init__(
         self,
         *,
@@ -1070,7 +895,6 @@ cdef class SyncScope(ResolveScope):
     ) -> None:
         self._stack.__exit__(exc_type, exc_value, traceback)
 
-    @override
     def resolve_callback(
         self,
         resolved: ContextManager[T],
@@ -1092,7 +916,6 @@ cdef class SyncScope(ResolveScope):
 
 
 cdef class AsyncScope(ResolveScope):
-    __slots__ = AsyncScopeSlots
 
     def __init__(
         self,
@@ -1128,20 +951,11 @@ cdef class AsyncScope(ResolveScope):
     async def enter_async_context(self, context: AsyncContextManager[T]) -> T:
         return await self._stack.enter_async_context(context)
 
-    @overload
-    async def resolve(self, dependent: IDependent[T], /) -> T: ...
-
-    @overload
-    async def resolve(
-        self, dependent: IFactory[P, T], /, *args: P.args, **kwargs: P.kwargs
-    ) -> T: ...
-
     async def resolve(
         self, dependent: IFactory[P, T], /, *args: P.args, **kwargs: P.kwargs
     ) -> T:
         return await super().aresolve(dependent, *args, **kwargs)
 
-    @override
     async def aresolve_callback(
         self,
         resolved: Union[ContextManager[T], AsyncContextManager[T]],
@@ -1169,42 +983,11 @@ cdef class AsyncScope(ResolveScope):
 
 
 cdef class Graph(Resolver):
-    """
-    ### Description:
-    A Directed Acyclic Graph where each dependent is a node.
-
-    Example
-    ---
-    ```python
-    from typing import AsyncGenerator
-    from ididi import Graph, use, entry, AsyncResource
-
-    async def conn_factory(engine: AsyncEngine) -> AsyncGenerator[Repository, None]:
-        async with engine.begin() as conn:
-            yield conn
-
-    class UnitOfWork:
-        def __init__(self, conn: AsyncConnection=use(conn_factory)):
-            self._conn = conn
-
-    @entry
-    async def main(command: CreateUser, uow: UnitOfWork):
-        await uow.execute(build_query(command))
-    ```
-    """
-
-    __slots__ = GraphSlots
-
     _nodes: GraphNodes[Any]
-    "Map a type to a dependent node"
     _analyzed_nodes: dict[IDependent[Any], DependentNode]
-    "Nodes that have been recursively resolved and is validated to be resolvable."
     _type_registry: TypeRegistry
-    "Map a type to its implementations"
     _resolved_singletons: ResolvedSingletons[Any]
-    "Instances of reusable types"
     _registered_singletons: set[type]
-    "Types that are menually added singletons "
 
     def __init__(
         self,
@@ -1213,29 +996,6 @@ cdef class Graph(Resolver):
         ignore: GraphIgnoreConfig = EmptyIgnore,
         workers: Union[ThreadPoolExecutor, None] = None,
     ):
-        """
-        - self_inject:
-
-          - If True, the current instance of the `Graph` will be injected into any dependency that requires it.
-
-        - ignore:
-
-          - A configuration that defines dependencies to be ignored during resolution.
-          - This can be a tuple of `(dependency_name, dependency_type)`.
-          - For example, `ignore=('name', str)` will ignore dependencies named `'name'` or those of type `str`.
-
-
-        ### Example:
-        - Creating a Graph with self-injection enabled, ignoring 'str' type dependencies, and allowing partial resolution.
-
-            ```python
-            graph = Graph(self_inject=False, ignore=('name', str))
-            ```
-
-        ### Notes:
-        - `self_inject` is useful when you have a dependency that requires current instance of `Graph` as its dependency.
-        - `ignore` is a flexible configuration to skip over specific dependencies during resolution.
-        """
         config = GraphConfig(self_inject=self_inject, ignore=ignore)
 
         super().__init__(
@@ -1273,20 +1033,6 @@ cdef class Graph(Resolver):
     # ==========================  Public ==========================
 
     def merge(self, other: Union["Graph", Sequence["Graph"]]):
-        """
-        Merge the other graphs into this graph, update the current graph.
-
-        ## Logic
-
-        1. If a node not in current graph, it will be added,
-        2. otherwise, compare the `resolve order` of these two nodes, keep the one with higher order.
-
-        ### resolve order
-
-        1. node with resource management factory > node with a plain factory.
-        2. node with a plain factory > node with default constructor.
-        """
-
         if isinstance(other, Graph):
             others = (other,)
         else:
@@ -1302,15 +1048,6 @@ cdef class Graph(Resolver):
             self._resolved_singletons.update(other._resolved_singletons)
 
     def reset(self, clear_nodes: bool = False) -> None:
-        """
-        Clear all resolved instances while maintaining registrations.
-
-        clear_nodes: bool
-        ---
-        whether to clear:
-        - the node registry
-        - the type registry
-        """
         self._resolved_singletons.clear()
         self._registered_singletons.clear()
 
