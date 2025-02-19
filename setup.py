@@ -1,7 +1,7 @@
 from Cython.Build import cythonize
-from setuptools import Extension, setup
+from setuptools import setup
 
-extensions = [Extension("ididi.graph", ["ididi/graph.pyx"]), "ididi/_node.py", "ididi/_ds.py"]
+extensions = ["ididi/graph.pyx", "ididi/_node.py", "ididi/_ds.py"]
 setup(
     name="ididi",
     ext_modules=cythonize(extensions),
