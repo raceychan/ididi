@@ -27,7 +27,7 @@ def test_complex_resolve():
         assert d == "f"
         return a + b + c
 
-    dg.resolve(main, a=1, b=2, k="f", e="e")
+    assert dg.resolve(main, a=1, b=2, k="f", e="e") == 4
 
 
 def test_complex_resolve_fail():

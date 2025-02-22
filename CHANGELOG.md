@@ -1137,8 +1137,6 @@ def get_repo(conn: Annotated[Connection, USE_FACTORY_MARK, get_conn, NodeConfig]
     ...
 ```
 
-
-
 - [x] provide a more non-intrusive way to node config, where user only need to add new code, no modifying current code, not even decorator.
 
 ```python
@@ -1180,12 +1178,12 @@ async def test_resolve_request():
 
 ## version 1.5.0
 
-- consider switch to anyio
+- consider switch to anyio[cancel]
 - rewrite ididi in cython
 - make ididi resolve overhead < 100%. make it as fast as hard-coded 
-factories as possible.
+factories as possible. 
 
-- support return dependency
+- support return dependency[cancel]
 
 ```python
 def json_encode(r: Any) -> bytes:
@@ -1245,7 +1243,38 @@ def get_conn() -> Scoped[Connection]:
 ## version 1.5.1
 
 
-- support extra params to dependencies and overrides-reuse
+- support extra params to dependencies and overrides-reuse, this allows us to do complex dependency resolution, 
 
-- `Graph.entry` no longer ignore builtin-types by default, now user should specifically ignore
+```python
+dg = Graph()
 
+def dep3(e: int) -> Ignore[str]:
+    return "ok"
+
+def dependency(a: int, a2: Annotated[str, use(dep3)]) -> Ignore[int]:
+    return a
+
+def dep2(k: str, g: Annotated[int, use(dependency)]) -> Ignore[str]:
+    assert g == 1
+    return k
+
+def main(
+    a: int,
+    b: int,
+    c: Annotated[int, use(dependency)],
+    d: Annotated[str, use(dep2)],
+) -> Ignore[float]:
+    assert d == "f"
+    return a + b + c
+
+assert dg.resolve(main, a=1, b=2, k="f", e="e") == 4
+```
+
+the downside is that now `Graph.resolve` is 1.3x slower, we might find a way to reduce this in next few patches, but this feature is really needy right now.
+
+
+- `Graph.entry` no longer ignore builtin-types by default, now user should specifically ignore builtin params. This is mainly for
+1. resolve and entry to have similar behaviors 
+2. user might be confused by what will be automatically ignored, Ignore[T] is more explicit
+
+- rollback a behavior introduced in `version 1.4.3`, where Ignored params were not considered as dependencies, now they are dependencies again.
