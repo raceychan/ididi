@@ -42,7 +42,7 @@ async def test_graph_resolve_complex_factory():
         u = User(1, address)
         yield u
 
-    with pytest.raises(UnsolvableDependencyError):
+    with pytest.raises(TypeError):
         async with dg.ascope() as scope:
             user = await scope.resolve(user_factory)
 

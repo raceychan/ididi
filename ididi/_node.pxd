@@ -12,5 +12,6 @@ cdef class DependentNode:
     cdef readonly object factory
     cdef readonly str factory_type
     cdef readonly bint function_dependent
+    cdef readonly bint is_async
     cdef readonly Dependencies dependencies
     cdef readonly object config

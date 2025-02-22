@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager, contextmanager
 from functools import lru_cache
 from inspect import Signature
 from inspect import _ParameterKind as ParameterKind  # type: ignore
-from inspect import isasyncgenfunction, isgeneratorfunction
+from inspect import isasyncgenfunction, iscoroutinefunction, isgeneratorfunction
 from types import MethodType
 from typing import (  # Generic,
     Annotated,
@@ -318,15 +318,6 @@ class DependentNode:
     whether this node is reusable, default is True
     """
 
-    __slots__ = (
-        "dependent",
-        "factory",
-        "factory_type",
-        "function_dependent",
-        "dependencies",
-        "config",
-    )
-
     def __init__(
         self,
         *,
@@ -340,6 +331,7 @@ class DependentNode:
         self.dependent = dependent
         self.factory = factory
         self.factory_type: FactoryType = factory_type
+        self.is_async = factory_type in ("afunction", "aresource")
         self.function_dependent = function_dependent
         self.dependencies = dependencies
         self.config = config
@@ -446,6 +438,8 @@ class DependentNode:
             factory_type = "resource"
         elif genfunc := getattr(factory, "__wrapped__", None):
             factory_type = "aresource" if isasyncgenfunction(genfunc) else "resource"
+        # elif iscoroutinefunction(factory):
+        #     factory_type = "afunction"
         else:
             factory_type = "function"
 

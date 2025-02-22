@@ -8,7 +8,7 @@ from functools import lru_cache
 from inspect import Parameter, Signature
 from inspect import isasyncgenfunction as isasyncgenfunction
 from inspect import isgeneratorfunction as isgeneratorfunction
-from types import FunctionType, GenericAlias, MethodType
+from types import FunctionType, GenericAlias
 from typing import (
     Annotated,
     Any,
@@ -169,10 +169,6 @@ def is_ctxmgr_cls(
     t: type[T],
 ) -> TypeGuard[type[ContextManager[T]]]:
     return issubclass(t, ContextManager)
-
-
-# def is_class_or_method(obj: Any) -> bool:
-#     return isinstance(obj, (type, MethodType))
 
 
 def is_function(obj: Any):

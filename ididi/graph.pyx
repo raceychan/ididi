@@ -67,7 +67,6 @@ from .interfaces import (
     GraphIgnoreConfig,
     IAsyncFactory,
     IDependent,
-    IEmptyFactory,
     IFactory,
     INode,
     INodeConfig,
@@ -122,15 +121,12 @@ cdef object _resolve_dfs(
     for name, param in pnode.dependencies.items():
         if (val := overrides.get(name, MISSING)) is not MISSING:
             params[name] = val
-        elif param.default_:
-            params[name] = param.default_
+        elif param.unresolvable:
+            continue
         else:
             try:
                 params[name]= _resolve_dfs(resolver, nodes, cache, param.param_type, overrides)
-            except TopLevelBulitinTypeError:
-                if param.default_:
-                    params[name] = param.default_
-                    continue
+            except TopLevelBulitinTypeError: # missing overrides
                 raise UnsolvableDependencyError(
                     dep_name=name, 
                     factory=param.param_type, 
@@ -171,17 +167,18 @@ async def _aresolve_dfs(
 
     params = {}
     pnode = nodes.get(ptype) or resolver.analyze(ptype)
+#    if pnode.is_async:
+#        return _resolve_dfs(resolver, nodes, cache, pnode.dependent, overrides)
 
     for name, param in pnode.dependencies.items():
         if (val := overrides.get(name, MISSING)) is not MISSING:
             params[name] = val
+        elif param.unresolvable:
+            continue
         else:
             try:
                 params[name]= await _aresolve_dfs(resolver, nodes, cache, param.param_type, overrides)
             except TopLevelBulitinTypeError:
-                if param.default_:
-                    params[name] = param.default_
-                    continue
                 raise UnsolvableDependencyError(
                     dep_name=name, 
                     factory=param.param_type, 
@@ -486,6 +483,8 @@ cdef class Resolver:
 
         def dfs(dep: IDependent[T]) -> DependentNode:
             # when we register a concrete node we also register its bases to type_registry
+            cdef frozenset node_graph_ignore
+
             if dep in self._analyzed_nodes:
                 return self._analyzed_nodes[dep]
             if dep not in self._type_registry:
@@ -497,7 +496,6 @@ cdef class Resolver:
 
             current_path.append(dep)
 
-            cdef frozenset node_graph_ignore
             if ignore is not self._ignore:
                 node_graph_ignore = ignore | self._ignore
             else:
@@ -620,7 +618,7 @@ cdef class Resolver:
         str factory_type,
         bint is_reuse,
     ):
-        if factory_type not in ("default", "function"):
+        if factory_type in ("resource", "aresource"):
             raise ResourceOutsideScopeError(dependent)
 
         if is_reuse:
@@ -634,7 +632,7 @@ cdef class Resolver:
         str factory_type,
         bint is_reuse,
     ):
-        if factory_type not in ("default", "function"):
+        if factory_type in ("resource", "aresource"):
             raise ResourceOutsideScopeError(dependent)
 
         instance = await resolved if isawaitable(resolved) else resolved
@@ -668,7 +666,7 @@ cdef class Resolver:
         /,
         *args: P.args,
         **overrides: P.kwargs,
-    ) -> T:
+    ):
         if args:
             raise PositionalOverrideError(args)
 

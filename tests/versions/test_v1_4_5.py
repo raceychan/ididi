@@ -1,5 +1,7 @@
 from typing import Annotated
+
 import pytest
+
 from ididi import Graph, Ignore, NodeConfig, Scoped, use
 from ididi.config import IGNORE_PARAM_MARK, USE_FACTORY_MARK
 
