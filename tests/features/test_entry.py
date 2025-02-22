@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from ididi import Graph, entry, resolve
+from ididi import Graph, Ignore, entry, resolve
 
 
 class Config:
@@ -83,7 +83,9 @@ def test_solve():
 
 async def test_entry_with_overrides():
     @entry
-    async def func4(notif: NotificationService, email: str, format: str):
+    async def func4(
+        notif: NotificationService, email: Ignore[str], format: Ignore[str]
+    ):
         return email, format
 
     a, b = await func4(email="asdf", format="asdf")
@@ -99,7 +101,7 @@ class CreateUser:
 
 async def test_entry_with_ignore():
     @entry(ignore=CreateUser)
-    async def func4(service: NotificationService, cmd: CreateUser) -> str:
+    async def func4(service: NotificationService, cmd: Ignore[CreateUser]) -> str:
         return cmd.user_name
 
     cmd = CreateUser(user_name="1", user_email="2")
@@ -131,11 +133,9 @@ class Session:
     async def __aexit__(self, exc_type, exc, tb):
         pass
 
-    def __enter__(self):
-        ...
+    def __enter__(self): ...
 
-    def __exit__(self, exc_type, exc, tb):
-        ...
+    def __exit__(self, exc_type, exc, tb): ...
 
 
 async def test_dg_entry_with_acm():
@@ -181,7 +181,7 @@ def test_entry_reuse():
     dg.reset()
 
     def create_user(
-        user_name: str, user_email: str, service: UserService
+        user_name: Ignore[str], user_email: Ignore[str], service: UserService
     ) -> UserService:
         return service
 
@@ -209,12 +209,11 @@ async def test_entry_replace():
     dg = Graph()
 
     async def create_user(
-        user_name: str, user_email: str, service: UserService
+        user_name: Ignore[str], user_email: Ignore[str], service: UserService
     ) -> UserService:
         return service
 
-    class FakeUserService(UserService):
-        ...
+    class FakeUserService(UserService): ...
 
     create_user = dg.entry(reuse=False)(create_user)
     create_user.replace(UserService, FakeUserService)
@@ -222,8 +221,7 @@ async def test_entry_replace():
     res = await create_user("user", "user@email.com")
     assert isinstance(res, FakeUserService)
 
-    class EvenFaker(UserService):
-        ...
+    class EvenFaker(UserService): ...
 
     create_user.replace(service=EvenFaker)
     create_user.replace(UserService, service=EvenFaker)
@@ -235,14 +233,13 @@ async def test_entry_replace():
 async def test_entry_override_with_factory():
     dg = Graph()
 
-    @dg.entry
+    @dg.entry(ignore=("user_name", "user_email"))
     async def create_user(
         user_name: str, user_email: str, service: UserService
     ) -> UserService:
         return service
 
-    class FakeUserService(UserService):
-        ...
+    class FakeUserService(UserService): ...
 
     @dg.node
     def _() -> UserService:
@@ -255,7 +252,7 @@ async def test_entry_override_with_factory():
 async def test_entry_override_with_override():
     dg = Graph()
 
-    @dg.entry
+    @dg.entry(ignore=(0, 1))
     async def create_user(
         user_name: str, user_email: str, service: UserService
     ) -> UserService:
@@ -265,8 +262,7 @@ async def test_entry_override_with_override():
     def user_factory() -> UserService:
         return UserService("1", 2)
 
-    class FakeUserService(UserService):
-        ...
+    class FakeUserService(UserService): ...
 
     dg.override(UserService, FakeUserService)
 

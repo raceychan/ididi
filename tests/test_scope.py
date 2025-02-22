@@ -3,7 +3,7 @@ import typing as ty
 
 import pytest
 
-from ididi import Graph, Resource
+from ididi import Graph, Resource, Ignore
 from ididi.config import DefaultScopeName
 from ididi.errors import (
     AsyncResourceInSyncError,
@@ -414,7 +414,7 @@ async def test_db_exec():
     dg.node(async_get_db)
 
     @dg.entry
-    async def main(db: AsyncDataBase, sql: str) -> ty.Any:
+    async def main(db: AsyncDataBase, sql: Ignore[str]) -> ty.Any:
         res = await db.execute(sql)
         return res
 

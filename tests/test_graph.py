@@ -122,9 +122,8 @@ def test_node_signature_change_after_factory(dg: Graph):
     dg.analyze(UserService)
     node = dg.nodes[UserService]
     print(node.dependencies)
-    assert "name" not in node.dependencies
 
-    assert len(node.dependencies) == 2
+    assert len(node.dependencies) == 3
 
     def user_service_factory(repo: UserRepository) -> UserService:
         return UserService(repo, auth=AuthService(Database(Config())))
@@ -798,20 +797,27 @@ def test_graph_analyze_nested_annt():
 
 
 class Book:
+    def __init__(self, b: str):
+        self.b = b
+
     @classmethod
     def from_article(cls, a: str) -> "Book":
-        return Book()
+        return Book(b=a)
 
     def dump(self) -> "Book":
         return self
 
 
+
 def test_analyze_classmethod():
     dg = Graph()
+
     dg.node(Book.from_article)
 
     node = dg.nodes[Book]
     assert node.factory_type == "function"
+    assert node.factory.__func__ is Book.from_article.__func__  # type: ignore
+    assert node.dependencies and node.dependencies["a"]
 
 
 def test_resolve_classmethod():
@@ -825,7 +831,7 @@ def test_resolve_instance_method_raise_error():
     dg = Graph()
 
     with pytest.raises(NotSupportedError):
-        dg.resolve(Book().dump)
+        dg.resolve(Book("b").dump)
 
 
 class Conn:

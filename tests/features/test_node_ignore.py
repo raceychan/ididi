@@ -1,7 +1,7 @@
 import pytest
 
 from ididi import Graph, Ignore
-from ididi.errors import UnsolvableDependencyError
+from ididi.errors import TopLevelBulitinTypeError, UnsolvableDependencyError
 
 
 class IgnoreNode:
@@ -34,7 +34,8 @@ def test_resolve_with_ignore():
 def test_resolve_without_ignore():
     dg = Graph()
     dg.node(ignore=("name", int))(IgnoreNode)
-    with pytest.raises(TypeError):
+
+    with pytest.raises(UnsolvableDependencyError):
         dg.resolve(IgnoreNode)
 
     n = dg.resolve(IgnoreNode, name="test", age=3)
@@ -45,7 +46,7 @@ def test_resolve_without_ignore():
 def test_resolve_with_positinoal_ignore():
     dg = Graph()
     dg.node(ignore=(0, "age"))(IgnoreNode)
-    assert len(dg.nodes[IgnoreNode].dependencies) == 0
+    assert len(dg.nodes[IgnoreNode].dependencies) == 2
 
     i = dg.resolve(IgnoreNode, name="r", age=5)
     assert i.name == "r" and i.age == 5
@@ -55,9 +56,8 @@ def test_ignore_dependences():
     dg = Graph()
 
     class User:
-        def __init__(self, name: Ignore[str]):
-            ...
+        def __init__(self, name: Ignore[str]): ...
 
     dg.node(User)
 
-    assert len(dg.nodes[User].dependencies) == 0
+    assert len(dg.nodes[User].dependencies) == 1

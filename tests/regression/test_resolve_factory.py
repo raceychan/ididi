@@ -3,6 +3,7 @@ import typing as ty
 import pytest
 
 from ididi import Graph
+from ididi.errors import UnsolvableDependencyError
 
 
 def test_graph_resolve_factory():
@@ -41,7 +42,7 @@ async def test_graph_resolve_complex_factory():
         u = User(1, address)
         yield u
 
-    with pytest.raises(TypeError):
+    with pytest.raises(UnsolvableDependencyError):
         async with dg.ascope() as scope:
             user = await scope.resolve(user_factory)
 

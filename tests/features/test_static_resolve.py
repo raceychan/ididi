@@ -204,7 +204,7 @@ def test_ignore():
             self.c = c
 
     # TypeError: __init__() missing 3 required positional arguments: 'a', 'b', and 'c'
-    with pytest.raises(TypeError):
+    with pytest.raises(UnsolvableDependencyError):
         dg.resolve(Item)
 
     item = dg.resolve(Item, a=1, b="2", c=3)

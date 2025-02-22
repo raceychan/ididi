@@ -177,7 +177,7 @@ def create_root_service():
     )
 
 
-def create_root_service_reuse():
+async def create_root_service_reuse():
     # Level 4 (leaves)
     l4_s1 = L4Service1(config=Config("l4_s1"))
     l4_s2 = L4Service2(config=Config("l4_s2"))
@@ -207,7 +207,7 @@ def create_root_service_reuse():
 
 
 @pytest.mark.benchmark
-def test_create_root():
+async def test_create_root():
     n = 1000
     start = perf_counter()
 
@@ -243,11 +243,11 @@ def test_create_root():
 
 
 @pytest.mark.benchmark
-def test_create_root_reuse():
+async def test_create_root_reuse():
     n = 1000
     start = perf_counter()
     for _ in range(n):
-        root_service = create_root_service_reuse()
+        root_service = await create_root_service_reuse()
     end = perf_counter()
     menual = round(end - start, 6)
 

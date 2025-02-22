@@ -1,8 +1,11 @@
 import ididi
-from tests.features.services import UserService
+from ididi import Graph
+from tests.features.services import UserService, Config
 
 
 def test_ididi_solve():
+    dg = Graph()
+    dg.analyze(UserService)
     assert isinstance(ididi.resolve(UserService), UserService)
 
 

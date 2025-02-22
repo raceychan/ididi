@@ -1240,3 +1240,12 @@ def get_conn() -> Scoped[Connection]:
     yield conn
 ```
 
+
+
+## version 1.5.1
+
+
+- support extra params to dependencies and overrides-reuse
+
+- `Graph.entry` no longer ignore builtin-types by default, now user should specifically ignore
+

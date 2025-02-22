@@ -171,8 +171,8 @@ def is_ctxmgr_cls(
     return issubclass(t, ContextManager)
 
 
-def is_class_or_method(obj: Any) -> bool:
-    return isinstance(obj, (type, MethodType, classmethod))
+# def is_class_or_method(obj: Any) -> bool:
+#     return isinstance(obj, (type, MethodType))
 
 
 def is_function(obj: Any):

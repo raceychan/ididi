@@ -21,7 +21,6 @@ class UserService: ...
 def get_service(dg: Graph) -> UserService:
     return dg
 
-@pytest.mark.debug
 def test_dg_self_inject():
     dg = Graph()
     assert dg is dg.resolve(Graph)

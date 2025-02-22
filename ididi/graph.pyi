@@ -255,7 +255,7 @@ class Resolver:
         Async version of resolve that handles async context managers and coroutines.
         """
 
-    def _node(
+    def include_node(
         self, dependent: INode[P, T], config: NodeConfig = DefaultConfig
     ) -> DependentNode: ...
     @overload

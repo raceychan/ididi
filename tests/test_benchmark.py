@@ -4,7 +4,7 @@ from time import perf_counter
 
 import pytest
 
-from ididi import Graph, Resource, use
+from ididi import Graph, Ignore, Resource, use
 
 from .test_data import CLASSES, UserService, user_service_factory
 
@@ -89,8 +89,8 @@ def test_entry(dg: Graph, dependents: list[type]):
         yield r
 
     def create_user(
-        user_name: str,
-        user_email: str,
+        user_name: Ignore[str],
+        user_email: Ignore[str],
         service: UserService,
         conn: ty.Annotated[Conn, use(get_conn)],
         repo: ty.Annotated[Repo, use(get_repo)],

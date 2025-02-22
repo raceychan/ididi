@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Annotated
 
-from ididi import Graph, Graph, Ignore, use
+from ididi import Graph, Ignore, use
 
 from ..test_data import AuthenticationService, Database, DatabaseConfig, UserService
 
@@ -15,7 +15,7 @@ def test_ignore_param():
 
     dg.analyze(User)
     node = dg.nodes[User]
-    assert not node.dependencies
+    assert node.dependencies
     u = dg.resolve(User, name="test")
     assert u.name == "test"
 
@@ -37,10 +37,11 @@ def test_resolve():
 def test_graph_ignore_name():
     dg = Graph(ignore="name")
 
-    def create_db(name: str) -> Database:
+    def create_db(name: Ignore[str]) -> Database:
         return Database(1)
 
     dg.analyze(create_db)
+
     assert isinstance(dg.resolve(create_db, name=5), Database)
 
 
@@ -65,7 +66,6 @@ def test_ignore_datetime():
     dg = Graph()
 
     class Clock:
-        def __init__(self, dt: Annotated[datetime, Ignore[datetime]]):
-            ...
+        def __init__(self, dt: Annotated[datetime, Ignore[datetime]]): ...
 
     dg.resolve(Clock, dt=datetime.now())

@@ -24,6 +24,8 @@ from ._node import Scoped as Scoped
 from ._node import use as use
 from .api import entry as entry
 from .api import resolve as resolve
+from .config import IGNORE_PARAM_MARK as IGNORE_PARAM_MARK
+from .config import USE_FACTORY_MARK as USE_FACTORY_MARK
 from .config import NodeConfig as NodeConfig
 from .graph import AsyncScope as AsyncScope
 from .graph import Graph as Graph

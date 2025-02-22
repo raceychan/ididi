@@ -42,7 +42,7 @@ class DB:
 def test_annotated_mark():
     dg = Graph()
     dg.analyze(Config)
-    assert not dg.nodes[Config].dependencies
+    assert dg.nodes[Config].dependencies
     db = dg.resolve(DB)
     assert db.config.url == "asdf"
 

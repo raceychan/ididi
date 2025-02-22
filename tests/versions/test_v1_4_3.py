@@ -23,24 +23,26 @@ class SyncScope:
 """
 
 
-def test_graph_ignore_apply_create_node():
-    dg = Graph(ignore="name")
+# SKIP: rollback in v1.5.1 for allowing extract params with resolve
 
-    class User:
-        def __init__(self, name: str):
-            self.name = name
+# def test_graph_ignore_apply_create_node():
+#     dg = Graph(ignore="name")
 
-    dg.node(User)
-    assert not dg.nodes[User].dependencies
+#     class User:
+#         def __init__(self, name: str):
+#             self.name = name
+
+#     dg.node(User)
+#     assert not dg.nodes[User].dependencies
 
 
-def test_node_dpes_ignore_builtin_with_default():
-    dg = Graph()
+# def test_node_dpes_ignore_builtin_with_default():
+#     dg = Graph()
 
-    class User:
-        def __init__(self, name: str = "name", age: int = 3):
-            self.name = name
-            self.age = age
+#     class User:
+#         def __init__(self, name: str = "name", age: int = 3):
+#             self.name = name
+#             self.age = age
 
-    dg.node(User)
-    assert not dg.nodes[User].dependencies
+#     dg.node(User)
+#     assert not dg.nodes[User].dependencies

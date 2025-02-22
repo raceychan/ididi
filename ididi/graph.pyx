@@ -27,11 +27,13 @@ from typing_extensions import Self, Unpack
 from ._ds import GraphNodes, GraphNodesView, ResolvedSingletons, Visitor
 from ._ds cimport TypeRegistry
 from ._node import (
+    IGNORE_PARAM_MARK,
     DefaultConfig,
     Dependencies,
     DependentNode,
     NodeConfig,
     resolve_use,
+    search_meta,
     should_override,
 )
 from ._type_resolve import (
@@ -41,6 +43,7 @@ from ._type_resolve import (
     is_new_type,
     is_unsolvable_type,
     resolve_annotation,
+    flatten_annotated,
     resolve_factory,
     resolve_node_type,
 )
@@ -82,11 +85,11 @@ ScopeContext = ContextVar[AnyScope]
 _SCOPE_CONTEXT: Final[ScopeContext] = ContextVar("idid_scope_ctx")
 
 
-def register_dependent(
-    mapping: dict[Union[IEmptyFactory[T], type[T]], T],
-    dependent_type: IEmptyFactory[T],
-    instance: T,
-) -> None:
+cdef register_dependent(
+    dict mapping,
+    object dependent_type,
+    object instance,
+):
     if isinstance(dependent_type, type):
         base_types = get_bases(type(instance))
         for base in base_types:
@@ -113,16 +116,27 @@ cdef object _resolve_dfs(
     if resolution := cache.get(ptype):
         return resolution
 
-    params = overrides
-    pnode = nodes.get(ptype) or resolver.analyze(ptype)
+    params = {}
+    pnode = nodes.get(ptype) or resolver.analyze(ptype) # type: ignore
 
     for name, param in pnode.dependencies.items():
-        if name in params:
-            continue
-        params[name] = _resolve_sub_dfs(
-            resolver, nodes, cache, param.param_type, overrides
-        )
-
+        if (val := overrides.get(name, MISSING)) is not MISSING:
+            params[name] = val
+        elif param.default_:
+            params[name] = param.default_
+        else:
+            try:
+                params[name]= _resolve_dfs(resolver, nodes, cache, param.param_type, overrides)
+            except TopLevelBulitinTypeError:
+                if param.default_:
+                    params[name] = param.default_
+                    continue
+                raise UnsolvableDependencyError(
+                    dep_name=name, 
+                    factory=param.param_type, 
+                    dependent_type=pnode.dependent, 
+                    dependency_type=param.param_type
+                )
     try:
         instance = pnode.factory(**params)
     except TypeError as te:
@@ -132,16 +146,16 @@ cdef object _resolve_dfs(
         instance,
         pnode.dependent,
         pnode.factory_type,
-        pnode.config.reuse,
+        pnode.config.reuse, # type: ignore
     )
     return result
 
-cdef object _resolve_sub_dfs(
+async def _aresolve_dfs(
     Resolver resolver,
     dict nodes,
     dict cache,
     object ptype,
-    dict overrides,
+    dict overrides
 ):
     cdef object resolution
     cdef dict params
@@ -152,62 +166,6 @@ cdef object _resolve_sub_dfs(
     if resolution := cache.get(ptype):
         return resolution
 
-    params = {}
-    pnode = nodes.get(ptype) or resolver.analyze(ptype)
-
-    for name, param in pnode.dependencies.items():
-        if val := overrides.get(name):
-            params[name] = val
-        else:
-            params[name] = _resolve_sub_dfs(resolver, nodes, cache, param.param_type, overrides)
-
-    instance = pnode.factory(**params)
-    result = resolver.resolve_callback(
-        instance,
-        pnode.dependent,
-        pnode.factory_type,
-        pnode.config.reuse,
-    )
-    return result
-
-
-async def _aresolve_dfs(
-    graph: "Resolver",
-    nodes: GraphNodes[Any],
-    cache: ResolvedSingletons[Any],
-    ptype: IDependent[T],
-    overrides: dict[str, Any],
-) -> T:
-    if resolution := cache.get(ptype):
-        return resolution
-
-    params = overrides
-    pnode = nodes.get(ptype) or graph.analyze(ptype)
-
-    for name, param in pnode.dependencies.items():
-        if name in params:
-            continue
-        params[name] = await _aresolve_sub_dfs(graph, nodes, cache, param.param_type, {})
-    try:
-        instance = pnode.factory(**params)
-    except TypeError as te:
-        raise TypeError(f"{pnode.dependent}, {te}")
-
-    resolved = await graph.aresolve_callback(
-        instance,
-        pnode.dependent,
-        pnode.factory_type,
-        pnode.config.reuse,
-    )
-    return resolved
-
-async def _aresolve_sub_dfs(
-    resolver: "Resolver",
-    nodes: GraphNodes[Any],
-    cache: ResolvedSingletons[Any],
-    ptype: IDependent[T],
-    overrides: dict[str, Any],
-):
     if resolution := cache.get(ptype):
         return resolution
 
@@ -215,10 +173,21 @@ async def _aresolve_sub_dfs(
     pnode = nodes.get(ptype) or resolver.analyze(ptype)
 
     for name, param in pnode.dependencies.items():
-        if val := overrides.get(name):
+        if (val := overrides.get(name, MISSING)) is not MISSING:
             params[name] = val
         else:
-            params[name] = await _aresolve_sub_dfs(resolver, nodes, cache, param.param_type, overrides)
+            try:
+                params[name]= await _aresolve_dfs(resolver, nodes, cache, param.param_type, overrides)
+            except TopLevelBulitinTypeError:
+                if param.default_:
+                    params[name] = param.default_
+                    continue
+                raise UnsolvableDependencyError(
+                    dep_name=name, 
+                    factory=param.param_type, 
+                    dependent_type=pnode.dependent, 
+                    dependency_type=param.param_type
+                )
 
     instance = pnode.factory(**params)
     resolved = await resolver.aresolve_callback(
@@ -226,7 +195,7 @@ async def _aresolve_sub_dfs(
         pnode.dependent,
         pnode.factory_type,
         pnode.config.reuse,
-    )
+     )
     return resolved
 
 @asynccontextmanager
@@ -342,7 +311,7 @@ cdef class Resolver:
             bound_obj = dep_method.__self__
             if not isinstance(bound_obj, type):
                 raise NotSupportedError("Instance method is not supported")
-            self._node(dep_method)
+            self.include_node(dep_method)
             dependent = bound_obj
             resolved_type = resolve_annotation(dependent)
         elif is_function(dependent):
@@ -350,7 +319,7 @@ cdef class Resolver:
                 resolved_type = resolve_annotation(dependent)
             else:
                 if dependent not in self._nodes:
-                    self._node(dependent, config)
+                    self.include_node(dependent, config)
                 resolved_type = resolve_factory(dependent)
         else:
             resolved_type = resolve_annotation(dependent)
@@ -363,7 +332,7 @@ cdef class Resolver:
         if annt_dep:
             if use_meta := resolve_use(annt_dep):
                 ufunc, uconfig = use_meta
-                self._node(ufunc, uconfig)
+                self.include_node(ufunc, uconfig)
 
             if is_function(dependent):
                 node = DependentNode.from_node(dependent, config=config)
@@ -463,7 +432,7 @@ cdef class Resolver:
 
         contain_resource = any(
             self.should_be_scoped(param.param_type)
-            for _, param in resolved_node.dependencies.items()
+            for _, param in resolved_node.dependencies.items() if not param.unresolvable
         )
         return contain_resource
 
@@ -491,7 +460,7 @@ cdef class Resolver:
 
     def override(self, old_dep: INode[P, T], new_dep: INode[P, T]) -> None:
         self.remove_dependent(old_dep)
-        self._node(new_dep)
+        self.include_node(new_dep)
 
     def search(self, dep_name: str) -> Union[DependentNode, None]:
         for dep, node in self._nodes.items():
@@ -503,7 +472,7 @@ cdef class Resolver:
         dependent: INode[P, T],
         *,
         config: NodeConfig = DefaultConfig,
-        ignore: Container[str] = EmptyIgnore,
+        ignore: frozenset[str] = EmptyIgnore,
     ) -> DependentNode:
         if node := self._analyzed_nodes.get(dependent):
             return node
@@ -520,7 +489,7 @@ cdef class Resolver:
             if dep in self._analyzed_nodes:
                 return self._analyzed_nodes[dep]
             if dep not in self._type_registry:
-                self._node(dep, config)
+                self.include_node(dep, config)
 
             node = self._resolve_concrete_node(dep)
             if self.is_registered_singleton(dep):
@@ -528,24 +497,33 @@ cdef class Resolver:
 
             current_path.append(dep)
 
-            for param in node.analyze_unsolved_params(ignore):
+            cdef frozenset node_graph_ignore
+            if ignore is not self._ignore:
+                node_graph_ignore = ignore | self._ignore
+            else:
+                node_graph_ignore = ignore
+
+            for param in node.analyze_unsolved_params(node_graph_ignore):
                 if (param_type := param.param_type) in self._analyzed_nodes:
                     continue
                 self.check_param_conflict(param_type, current_path)
                 if get_origin(param_type) is Annotated:
-                    if use_meta := resolve_use(param_type):
+                    metas = flatten_annotated(param_type)
+                    if use_meta := search_meta(metas):
                         ufunc, uconfig = use_meta
-                        inode = self._node(ufunc, uconfig)
+                        inode = self.include_node(ufunc, uconfig)
                         node.dependencies[param.name] = param.replace_type(
                             inode.dependent
                         )
-                        self.analyze(inode.factory, ignore=ignore)
+                        self.analyze(inode.factory, ignore=node_graph_ignore)
+                        continue
+                    elif IGNORE_PARAM_MARK in metas:
                         continue
                 elif is_function(param_type):
                     fnode = DependentNode.from_node(param_type, config=config)
                     self._nodes[param_type] = fnode
                     node.dependencies[param.name] = param.replace_type(fnode.dependent)
-                    self.analyze(fnode.factory, ignore=ignore)
+                    self.analyze(fnode.factory, ignore=node_graph_ignore)
                     continue
                 if is_provided(param.default_):
                     continue
@@ -573,21 +551,33 @@ cdef class Resolver:
         self, ufunc: Callable[P, T], config: NodeConfig = DefaultConfig
     ) -> tuple[bool, list[tuple[str, IDependent[Any]]]]:
         deps = Dependencies.from_signature(
-            signature=get_typed_signature(ufunc), function=ufunc, config=config
+            signature=get_typed_signature(ufunc), function=ufunc
         )
         depends_on_resource: bool = False
         unresolved: list[tuple[str, IDependent[Any]]] = []
 
-        for name, dep in deps.items():
-            param_type = dep.param_type
+        for i, (name, param) in enumerate(deps.items()):
+            param_type = param.param_type
 
-            if dep.unresolvable:
+            if i in config.ignore or name in config.ignore or param_type in config.ignore:
                 continue
 
-            if use_meta := (resolve_use(param_type) or resolve_use(dep.default_)):
+            if param.unresolvable and is_provided(param.default_):
+                continue
+
+            if get_origin(param_type) is Annotated:
+                metas = flatten_annotated(param_type)
+                if use_meta := search_meta(metas):
+                    ufunc, uconfig = use_meta
+                    use_node = self.include_node(ufunc, uconfig)
+                    param_type = use_node.dependent
+                elif IGNORE_PARAM_MARK in metas:
+                    continue
+            elif use_meta := resolve_use(param.default_):
                 ufunc, uconfig = use_meta
-                use_node = self._node(ufunc, uconfig)
+                use_node = self.include_node(ufunc, uconfig)
                 param_type = use_node.dependent
+
 
             self.analyze(param_type, config=config)
             depends_on_resource = depends_on_resource or self.should_be_scoped(
@@ -625,11 +615,11 @@ cdef class Resolver:
 
     def resolve_callback(
         self,
-        resolved: Any,
-        dependent: IDependent[T],
-        factory_type: FactoryType,
-        is_reuse: bool,
-    ) -> T:
+        object resolved,
+        object dependent,
+        str factory_type,
+        bint is_reuse,
+    ):
         if factory_type not in ("default", "function"):
             raise ResourceOutsideScopeError(dependent)
 
@@ -639,10 +629,10 @@ cdef class Resolver:
 
     async def aresolve_callback(
         self,
-        resolved: Any,
-        dependent: IDependent[T],
-        factory_type: FactoryType,
-        is_reuse: bool,
+        object resolved,
+        object dependent,
+        str factory_type,
+        bint is_reuse,
     ):
         if factory_type not in ("default", "function"):
             raise ResourceOutsideScopeError(dependent)
@@ -651,13 +641,14 @@ cdef class Resolver:
         if is_reuse:
             register_dependent(self._resolved_singletons, dependent, instance)
         return instance
+
     def resolve(
         self,
-        dependent: IFactory[P, T],
+        dependent,
         /,
-        *args: P.args,
-        **overrides: P.kwargs,
-    ) -> T:
+        *args,
+        **overrides,
+    ):
         if args:
             raise PositionalOverrideError(args)
 
@@ -666,6 +657,7 @@ cdef class Resolver:
 
         provided_params = frozenset(overrides)
         node: DependentNode = self.analyze(dependent, ignore=provided_params)
+
         return _resolve_dfs(
             self, self._nodes, self._resolved_singletons, node.dependent, overrides
         )
@@ -689,7 +681,7 @@ cdef class Resolver:
             self, self._nodes, self._resolved_singletons, node.dependent, overrides
         )
 
-    def _node(
+    def include_node(
         self, dependent: INode[P, T], config: NodeConfig = DefaultConfig
     ) -> DependentNode:
         merged_config = NodeConfig(
@@ -813,7 +805,7 @@ cdef class Resolver:
         if is_unsolvable_type(dependent):
             raise TopLevelBulitinTypeError(dependent)
 
-        self._node(dependent, config=NodeConfig(**config))
+        self.include_node(dependent, config=NodeConfig(**config))
         return dependent
 
     def add_nodes(

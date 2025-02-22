@@ -106,11 +106,16 @@ IGNORE_PARAM_MARK = "__ididi_ignore_param__"
 """
 # ================== Marks ==================
 
+DEFAULT_FACTORY = "default"
+FUNCTION_FACTORY = "function"
+RESOURCE_FACTORY = "resource"
+ARESOURCE_FACTORY = "aresource"
+
 FactoryType = Literal["default", "function", "resource", "aresource"]
 
 ResolveOrder: Final[dict[FactoryType, int]] = {
-    "default": 1,
-    "function": 2,
-    "resource": 3,
-    "aresource": 3,
+    DEFAULT_FACTORY: 1,
+    FUNCTION_FACTORY: 2,
+    RESOURCE_FACTORY: 3,
+    ARESOURCE_FACTORY: 3,
 }

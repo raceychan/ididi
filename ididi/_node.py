@@ -4,11 +4,11 @@ from functools import lru_cache
 from inspect import Signature
 from inspect import _ParameterKind as ParameterKind  # type: ignore
 from inspect import isasyncgenfunction, isgeneratorfunction
+from types import MethodType
 from typing import (  # Generic,
     Annotated,
     Any,
     AsyncGenerator,
-    Container,
     ForwardRef,
     Generator,
     Union,
@@ -25,7 +25,6 @@ from ._type_resolve import (
     get_typed_signature,
     is_actxmgr_cls,
     is_class,
-    is_class_or_method,
     is_class_with_empty_init,
     is_ctxmgr_cls,
     is_unsolvable_type,
@@ -58,7 +57,7 @@ from .interfaces import (
     INodeConfig,
     INodeFactory,
 )
-from .utils.param_utils import MISSING, Maybe, is_provided
+from .utils.param_utils import MISSING, Maybe
 from .utils.typing_utils import P, T
 
 # ============== Ididi marks ===========
@@ -118,10 +117,8 @@ def should_override(other_node: "DependentNode", current_node: "DependentNode") 
     )
 
 
-def resolve_marks(annt: Any) -> Union[IDependent[Any], None]:
+def resolve_marks(annt: Any) -> IDependent[Any]:
     annotate_meta = flatten_annotated(annt)
-    if IGNORE_PARAM_MARK in annotate_meta:
-        return None
 
     if use_meta := search_meta(annotate_meta):
         ufunc, _ = use_meta
@@ -130,6 +127,8 @@ def resolve_marks(annt: Any) -> Union[IDependent[Any], None]:
             param_type = ufunc
         else:
             param_type = annt
+    elif IGNORE_PARAM_MARK in annotate_meta:
+        return annt
     else:
         param_type = get_args(annt)[0]
     return param_type
@@ -221,11 +220,16 @@ class Dependencies(dict[str, Dependency]):
         cls,
         function: INodeFactory[P, T],
         signature: Signature,
-        config: NodeConfig,
     ) -> "Dependencies":
         params = tuple(signature.parameters.values())
-        if is_class_or_method(function):
-            params = params[1:]  # skip 'self'
+
+        if isinstance(function, type):
+            params = params[1:]  # skip 'self', 'cls'
+        elif isinstance(function, MethodType):
+            owner = function.__self__
+            unbound = owner.__dict__[function.__name__]
+            if not isinstance(unbound, classmethod):
+                params = params[1:]  # skip 'self', 'cls'
 
         dependencies: dict[str, Dependency] = {}
 
@@ -255,15 +259,13 @@ class Dependencies(dict[str, Dependency]):
 
             if get_origin(param_type) is Annotated:
                 param_type = resolve_marks(param_type)
-                if param_type is None:
-                    continue
 
             if param_type is Unpack:
                 dependencies.update(unpack_to_deps(param_annotation))
                 continue
 
-            if is_unsolvable_type(param_type) and is_provided(default):
-                continue
+            # if is_unsolvable_type(param_type) and is_provided(default):
+            #     continue
 
             if param.kind in (ParameterKind.VAR_POSITIONAL, ParameterKind.VAR_KEYWORD):
                 continue
@@ -275,17 +277,7 @@ class Dependencies(dict[str, Dependency]):
             )
             dependencies[param.name] = dep_param
 
-        ignore = config.ignore
-        excluded_deps = {
-            param_name: param
-            for pos_idx, (param_name, param) in enumerate(dependencies.items())
-            if (
-                pos_idx not in ignore
-                and param_name not in ignore
-                and param.param_type not in ignore
-            )
-        }
-        return cls(excluded_deps)
+        return cls(dependencies)
 
 
 # ======================= Node =====================================
@@ -365,20 +357,23 @@ class DependentNode:
         return self.factory_type in ("resource", "aresource")
 
     def analyze_unsolved_params(
-        self, ignore: Container[str] = EmptyIgnore
+        self, ignore: frozenset[Any] = EmptyIgnore
     ) -> Generator[Dependency, None, None]:
         "params that needs to be statically resolved"
+        ignore = ignore | self.config.ignore
 
-        for param_name, param in self.dependencies.items():
-            if param_name in ignore:
+        for i, (name, param) in enumerate(self.dependencies.items()):
+            if i in ignore or name in ignore:
                 continue
             param_type = cast(Union[IDependent[object], ForwardRef], param.param_type)
+            if param_type in ignore:
+                continue
             if isinstance(param_type, ForwardRef):
                 new_type = resolve_forwardref(self.dependent, param_type)
                 param = param.replace_type(new_type)
             yield param
             if param.param_type != param_type:
-                self.dependencies[param_name] = param
+                self.dependencies[name] = param
 
     def check_for_implementations(self) -> None:
         if isinstance(self.factory, type):
@@ -402,7 +397,7 @@ class DependentNode:
         config: NodeConfig,
     ) -> "DependentNode":
         dependencies = Dependencies.from_signature(
-            function=factory, signature=signature, config=config
+            function=factory, signature=signature
         )
         node = DependentNode(
             dependent=resolve_annotation(dependent),
@@ -422,9 +417,7 @@ class DependentNode:
         factory_type: FactoryType,
         config: NodeConfig = DefaultConfig,
     ):
-        deps = Dependencies.from_signature(
-            function=function, signature=signature, config=config
-        )
+        deps = Dependencies.from_signature(function=function, signature=signature)
         node = DependentNode(
             dependent=function,
             factory=function,
