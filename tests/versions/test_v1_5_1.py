@@ -1,4 +1,5 @@
 from typing import Annotated
+
 import pytest
 
 from ididi import Graph, Ignore, use
@@ -27,7 +28,8 @@ def test_complex_resolve():
         assert d == "f"
         return a + b + c
 
-    assert dg.resolve(main, a=1, b=2, k="f", e="e") == 4
+    res = dg.resolve(main, a=1, b=2, k="f", e="e")
+    assert res == 4
 
 
 def test_complex_resolve_fail():

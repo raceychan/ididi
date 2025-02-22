@@ -212,7 +212,7 @@ async def test_create_root():
     start = perf_counter()
 
     for _ in range(n):
-        root_service = create_root_service()
+        _ = create_root_service()
     end = perf_counter()
 
     menual = round((end - start), 6)
@@ -247,7 +247,7 @@ async def test_create_root_reuse():
     n = 1000
     start = perf_counter()
     for _ in range(n):
-        root_service = await create_root_service_reuse()
+        _ = await create_root_service_reuse()
     end = perf_counter()
     menual = round(end - start, 6)
 

@@ -224,47 +224,19 @@ class Resolver:
         factory_type: FactoryType,
         is_reuse: bool,
     ) -> T: ...
-    @overload
     def resolve(
         self,
-        dependent: IDependent[T],
+        dependent: IFactory[..., T],
         /,
-    ) -> T: ...
-    @overload
-    def resolve(
-        self,
-        dependent: IFactory[P, T],
-        /,
-        *args: P.args,
-        **overrides: P.kwargs,
-    ) -> T: ...
-    def resolve(
-        self,
-        dependent: IFactory[P, T],
-        /,
-        *args: P.args,
-        **overrides: P.kwargs,
-    ) -> T: ...
-    @overload
-    def aresolve(
-        self,
-        dependent: IDependent[T],
-        /,
-    ) -> Awaitable[T]: ...
-    @overload
-    async def aresolve(
-        self,
-        dependent: IFactory[P, T],
-        /,
-        *args: P.args,
-        **overrides: P.kwargs,
+        *args: Any,
+        **overrides: Any,
     ) -> T: ...
     async def aresolve(
         self,
-        dependent: IFactory[P, T],
+        dependent: IFactory[..., T],
         /,
-        *args: P.args,
-        **overrides: P.kwargs,
+        *args: Any,
+        **overrides: Any,
     ) -> T:
         """
         Async version of resolve that handles async context managers and coroutines.
