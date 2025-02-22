@@ -3,7 +3,6 @@ import typing as ty
 import pytest
 
 from ididi import Graph
-from ididi.errors import UnsolvableDependencyError
 
 
 def test_graph_resolve_factory():

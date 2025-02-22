@@ -167,8 +167,6 @@ async def _aresolve_dfs(
 
     params = {}
     pnode = nodes.get(ptype) or resolver.analyze(ptype)
-#    if pnode.is_async:
-#        return _resolve_dfs(resolver, nodes, cache, pnode.dependent, overrides)
 
     for name, param in pnode.dependencies.items():
         if (val := overrides.get(name, MISSING)) is not MISSING:
@@ -953,17 +951,15 @@ cdef class AsyncScope(ResolveScope):
         factory_type: FactoryType,
         is_reuse: bool,
     ) -> T:
-        if factory_type in ("default", "function"):
+        if factory_type in ("default", "function", "afunction"):
             instance = await resolved if isawaitable(resolved) else resolved
             if is_reuse:
                 register_dependent(self._resolved_singletons, dependent, instance)
             return instance
 
         if factory_type == "resource":
-            resolved = resolved
             resolved = syncscope_in_thread(self._loop, self._workers, resolved)
-        else:
-            resolved = resolved
+
 
         instance = await self.enter_async_context(resolved)
 

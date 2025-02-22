@@ -331,7 +331,6 @@ class DependentNode:
         self.dependent = dependent
         self.factory = factory
         self.factory_type: FactoryType = factory_type
-        self.is_async = factory_type in ("afunction", "aresource")
         self.function_dependent = function_dependent
         self.dependencies = dependencies
         self.config = config
@@ -438,8 +437,8 @@ class DependentNode:
             factory_type = "resource"
         elif genfunc := getattr(factory, "__wrapped__", None):
             factory_type = "aresource" if isasyncgenfunction(genfunc) else "resource"
-        # elif iscoroutinefunction(factory):
-        #     factory_type = "afunction"
+        elif iscoroutinefunction(factory):
+            factory_type = "afunction"
         else:
             factory_type = "function"
 
