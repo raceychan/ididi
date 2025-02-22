@@ -162,9 +162,6 @@ async def _aresolve_dfs(
     if resolution := cache.get(ptype):
         return resolution
 
-    if resolution := cache.get(ptype):
-        return resolution
-
     params = {}
     pnode = nodes.get(ptype) or resolver.analyze(ptype)
 

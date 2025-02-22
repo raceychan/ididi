@@ -10,6 +10,7 @@ from typing import (
     Any,
     AsyncContextManager,
     AsyncGenerator,
+    Awaitable,
     Callable,
     Container,
     ContextManager,
@@ -238,6 +239,20 @@ class Resolver:
         **overrides: P.kwargs,
     ) -> T: ...
     def resolve(
+        self,
+        dependent: IFactory[P, T],
+        /,
+        *args: P.args,
+        **overrides: P.kwargs,
+    ) -> T: ...
+    @overload
+    def aresolve(
+        self,
+        dependent: IDependent[T],
+        /,
+    ) -> Awaitable[T]: ...
+    @overload
+    async def aresolve(
         self,
         dependent: IFactory[P, T],
         /,
@@ -482,8 +497,6 @@ class Graph(Resolver):
         await uow.execute(build_query(command))
     ```
     """
-
-    __slots__ = GraphSlots
 
     _nodes: GraphNodes[Any]
     "Map a type to a dependent node"
