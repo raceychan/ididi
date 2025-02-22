@@ -1278,3 +1278,5 @@ the downside is that now `Graph.resolve` is 1.3x slower, we might find a way to 
 2. user might be confused by what will be automatically ignored, Ignore[T] is more explicit
 
 - rollback a behavior introduced in `version 1.4.3`, where Ignored params were not considered as dependencies, now they are dependencies again.
+
+- `Graph.resolve` no longer maintain ParamSpec, since for a factory `Callable[P, T]`, `Graph.resolve` can accept either more params than P, less params P, or no params P at all, it does not make much sense to maintain paramspec anymore
