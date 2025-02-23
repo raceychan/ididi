@@ -124,15 +124,8 @@ cdef object _resolve_dfs(
         elif param.unresolvable:
             continue
         else:
-            try:
-                params[name]= _resolve_dfs(resolver, nodes, cache, param.param_type, overrides)
-            except TopLevelBulitinTypeError: # missing overrides
-                raise UnsolvableDependencyError(
-                    dep_name=name, 
-                    factory=param.param_type, 
-                    dependent_type=pnode.dependent, 
-                    dependency_type=param.param_type
-                )
+            params[name]= _resolve_dfs(resolver, nodes, cache, param.param_type, overrides)
+
     try:
         instance = pnode.factory(**params)
     except TypeError as te:
@@ -171,15 +164,8 @@ async def _aresolve_dfs(
         elif param.unresolvable:
             continue
         else:
-            try:
-                params[name]= await _aresolve_dfs(resolver, nodes, cache, param.param_type, overrides)
-            except TopLevelBulitinTypeError:
-                raise UnsolvableDependencyError(
-                    dep_name=name, 
-                    factory=param.param_type, 
-                    dependent_type=pnode.dependent, 
-                    dependency_type=param.param_type
-                )
+            params[name]= await _aresolve_dfs(resolver, nodes, cache, param.param_type, overrides)
+
 
     instance = pnode.factory(**params)
     resolved = await resolver.aresolve_callback(
