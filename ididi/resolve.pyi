@@ -10,7 +10,6 @@ from typing import (
     Any,
     AsyncContextManager,
     AsyncGenerator,
-    Awaitable,
     Callable,
     Container,
     ContextManager,

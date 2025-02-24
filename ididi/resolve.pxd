@@ -14,7 +14,7 @@ cdef class Resolver:
 
 cdef class ResolveScope(Resolver):
     cdef readonly str _name
-    cdef readonly object _pre
+    cdef readonly object _pre # not object, either SyncScope or AsyncScope
     cdef readonly object _stack
 
 

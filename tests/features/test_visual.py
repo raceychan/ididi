@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from ididi.graph import Graph
+from ididi.resolve import Graph
 from ididi.visual import Visualizer
 
 

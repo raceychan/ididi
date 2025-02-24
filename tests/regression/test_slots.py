@@ -2,7 +2,7 @@
 
 # from ididi import AsyncScope, Graph, SyncScope
 # from ididi._node import Dependencies, Dependency, DependentNode
-# from ididi.graph import AsyncScopeSlots, GraphSlots, ScopeSlots
+# from ididi.resolve import AsyncScopeSlots, GraphSlots, ScopeSlots
 
 
 # def test_graph_valid_slots():

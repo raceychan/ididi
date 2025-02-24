@@ -3,7 +3,7 @@ from typing import Union
 from graphviz import Digraph
 
 from ._node import DependentNode as DependentNode
-from .graph import Graph
+from .resolve import Graph
 from .utils.typing_utils import T
 
 

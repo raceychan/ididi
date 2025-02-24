@@ -1,4 +1,4 @@
-EXT = ididi/graph.pyx ididi/_node.py ididi/_ds.py
+EXT = ididi/resolve.pyx ididi/_node.py ididi/_ds.py
 
 
 .PHONY: compile
@@ -68,7 +68,7 @@ minor:
 VERSION ?= x.x.x
 BRANCH = version/$(VERSION)
 
-release: check-branch check-version update-version git-commit git-merge git-tag git-push local-build 
+release: check-branch check-version update-version git-commit git-merge git-tag git-push # local-build 
 
 check-branch:
 	@if [ "$$(git rev-parse --abbrev-ref HEAD)" != "$(BRANCH)" ]; then \
@@ -123,9 +123,9 @@ git-push:
 	@git push origin master
 	@git push origin "v$(VERSION)"
 
-local-build:
-	@echo "Building version $(VERSION)..."
-	@pixi run -e publish python setup.py build_ext --inplace
+# local-build:
+# 	@echo "Building version $(VERSION)..."
+# 	@pixi run -e publish python setup.py build_ext --inplace
 
 pypi-release:
 	pixi run -e publish publish

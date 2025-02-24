@@ -1,6 +1,6 @@
 import pytest
 
-from ididi.graph import Graph
+from ididi.resolve import Graph
 
 dag = Graph()
 

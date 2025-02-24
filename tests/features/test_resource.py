@@ -1,7 +1,7 @@
 import pytest
 
 from ididi.errors import ResourceOutsideScopeError
-from ididi.graph import Graph
+from ididi.resolve import Graph
 
 dag = Graph()
 
