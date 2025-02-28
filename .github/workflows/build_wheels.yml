@@ -75,10 +75,9 @@ jobs:
           CIBW_BUILD_VERBOSITY: 1
           CIBW_BUILD: ${{ matrix.cibw_python }}-*
           CIBW_ARCHS: ${{ matrix.cibw_arch }}
-          CIBW_TEST_REQUIRES: pytest==8.3.3 pytest-asyncio==0.24.0 pytest-cov==6.0.0 python-graphviz==0.20.3
+          CIBW_TEST_REQUIRES: pytest==8.3.3 pytest-asyncio==0.24.0 pytest-cov==6.0.0 graphviz>=0.20.3
           CIBW_TEST_COMMAND: "pytest -vx --capture=fd {project}/tests"
-          # CIBW_TEST_COMMAND: "python {project}/tests/__init__.py"
-          # CIBW_TEST_COMMAND_WINDOWS: "python {project}\\tests\\__init__.py"
+
           CIBW_TEST_SKIP: "*universal2:arm64"
 
         with:
