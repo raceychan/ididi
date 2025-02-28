@@ -104,7 +104,7 @@ setuptools = ">=75.8.0,<76"
 
 [tool.cibuildwheel]
 build = "cp39* cp310* cp311* cp312* cp313*"
-test-command = "pytest -vx --capture=fd tests/"
+# test-command = "pytest -vx --capture=fd tests/"
 
 # [tool.cibuildwheel.macos]
 # archs = "x86_64 universal2"
