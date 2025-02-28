@@ -131,7 +131,6 @@ local-build:
 cibuild:
 	pixi run -e publish cibuildwheel --output-dir dist --platform linux
 
-
 pypi-release:
 	pixi run -e publish publish
 

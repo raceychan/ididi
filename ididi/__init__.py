@@ -14,10 +14,6 @@ copyright: (c) 2024 by race chan.
 license: MIT, see LICENSE for more details.
 """
 
-VERSION = "1.5.1"
-
-__version__ = VERSION
-
 from ._node import DependentNode as DependentNode
 from ._node import Ignore as Ignore
 from ._node import Scoped as Scoped
