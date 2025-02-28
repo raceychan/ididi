@@ -31,9 +31,8 @@ graphviz = ["python-graphviz>=0.20.3,<0.21"]
 requires = ["setuptools", "Cython"]
 build-backend = "setuptools.build_meta"
 
-
 [tool.hatch.version]
-path = "ididi/__init__.py"
+path = "setup.py"
 
 [tool.setuptools]
 py-modules = ["ididi"]
