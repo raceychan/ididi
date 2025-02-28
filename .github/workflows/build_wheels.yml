@@ -72,8 +72,9 @@ jobs:
           CIBW_BUILD: ${{ matrix.cibw_python }}-*
           CIBW_ARCHS: ${{ matrix.cibw_arch }}
           CIBW_TEST_EXTRAS: "test"
-          CIBW_TEST_COMMAND: "python {project}/tests/__init__.py"
-          CIBW_TEST_COMMAND_WINDOWS: "python {project}\\tests\\__init__.py"
+          CIBW_TEST_COMMAND: "pytest -vx --capture=fd tests/"
+          # CIBW_TEST_COMMAND: "python {project}/tests/__init__.py"
+          # CIBW_TEST_COMMAND_WINDOWS: "python {project}\\tests\\__init__.py"
           CIBW_TEST_SKIP: "*universal2:arm64"
 
         with:
