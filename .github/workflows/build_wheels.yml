@@ -1,11 +1,12 @@
 name: Release
 
-on:
-  pull_request:
-    branches:
-      - "build"
-      - "release"
-      - "master"
+on: [push, pull_request]
+# on:
+#   pull_request:
+#     branches:
+#       - "build"
+#       - "release"
+#       - "master"
 
 jobs:
   build-sdist:
