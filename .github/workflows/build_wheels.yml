@@ -83,5 +83,5 @@ jobs:
 
       - uses: actions/upload-artifact@v4.4.3
         with:
-          name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
+          name: dist-${{ matrix.os }}-${{ matrix.cibw_arch }}-${{ matrix.cibw_python }}
           path: wheelhouse/*.whl
