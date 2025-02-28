@@ -1280,3 +1280,23 @@ the downside is that now `Graph.resolve` is 1.3x slower, we might find a way to 
 - rollback a behavior introduced in `version 1.4.3`, where Ignored params were not considered as dependencies, now they are dependencies again.
 
 - `Graph.resolve` no longer maintain ParamSpec, since for a factory `Callable[P, T]`, `Graph.resolve` can accept either more params than P, less params P, or no params P at all, it does not make much sense to maintain paramspec anymore
+
+## version 1.5.2
+
+- Make both `Graph` and `Scope` self-injectable, when resolve `Resolver` within a graph, return the graph, if resolve it within a scope, return the scope
+
+- `Factory method`, 
+```python
+
+class InfraBuilder:
+    
+    @dg.factory
+    def repo_maker(self) -> UserRepo:
+        return UserRepo
+
+as well as
+
+dg.factory(InfraBuilder().repo_maker)
+```
+
+we need to test to see if this already works

@@ -29,6 +29,7 @@ from .config import USE_FACTORY_MARK as USE_FACTORY_MARK
 from .config import NodeConfig as NodeConfig
 from .graph import AsyncScope as AsyncScope
 from .graph import Graph as Graph
+from .graph import Resolver as Resolver
 from .graph import SyncScope as SyncScope
 from .interfaces import AsyncResource as AsyncResource
 from .interfaces import INode as INode

@@ -127,6 +127,11 @@ local-build:
 	@echo "Building version $(VERSION)..."
 	@pixi run -e publish python setup.py build_ext --inplace
 
+.PHONY: cibuild
+cibuild:
+	pixi run -e publish cibuildwheel --output-dir dist --platform linux
+
+
 pypi-release:
 	pixi run -e publish publish
 
