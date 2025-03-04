@@ -839,15 +839,16 @@ cdef class SyncScope(ResolveScope):
         pre: Maybe[Union["SyncScope", "AsyncScope"]] = MISSING,
         **args: Unpack[SharedData],
     ):
-        self._name = name
-        self._pre = pre
-        self._stack = ExitStack()
-
         super().__init__(
             **args,
             resolved_singletons=resolved_singletons,
             registered_singletons=registered_singletons,
         )
+
+
+        self._name = name
+        self._pre = pre
+        self._stack = ExitStack()
 
     def __enter__(self) -> "SyncScope":
         return self
@@ -891,16 +892,15 @@ cdef class AsyncScope(ResolveScope):
         pre: Maybe[Union["SyncScope", "AsyncScope"]] = MISSING,
         **args: Unpack[SharedData],
     ):
-        self._name = name
-        self._pre = pre
-        self._stack = AsyncExitStack()
-        self._loop = get_running_loop()
-
         super().__init__(
             **args,
             resolved_singletons=resolved_singletons,
             registered_singletons=registered_singletons,
         )
+        self._name = name
+        self._pre = pre
+        self._stack = AsyncExitStack()
+        self._loop = get_running_loop()
 
     async def __aenter__(self) -> "AsyncScope":
         return self

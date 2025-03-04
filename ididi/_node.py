@@ -227,8 +227,8 @@ class Dependencies(dict[str, Dependency]):
             params = params[1:]  # skip 'self', 'cls'
         elif isinstance(function, MethodType):
             owner = function.__self__
-            unbound = owner.__dict__[function.__name__]
-            if not isinstance(unbound, classmethod):
+            unbound = getattr(owner, function.__name__)
+            if not isinstance(owner, type):
                 params = params[1:]  # skip 'self', 'cls'
 
         dependencies: dict[str, Dependency] = {}

@@ -1283,7 +1283,10 @@ the downside is that now `Graph.resolve` is 1.3x slower, we might find a way to 
 
 ## version 1.5.2
 
-- Make both `Graph` and `Scope` self-injectable, when resolve `Resolver` within a graph, return the graph, if resolve it within a scope, return the scope
+- ~~Make both `Graph` and `Scope` self-injectable, when resolve `Resolver` within a graph, return the graph, if resolve it within a scope, return the scope~~
+
+Cancel, this would scope circular reference itself
+
 
 - `Factory method`, 
 ```python
@@ -1301,46 +1304,5 @@ dg.factory(InfraBuilder().repo_maker)
 
 NOTE: we need to test to see if this already works
 
-
-
-- Make sure  this won't break
-
-```python
-async def create_user(name: Query[str]):
-    ...
-
-dg = Graph(ignore=Query)
-dg.analyze(create_user)
-```
-
-```python
->>> from typing import *
->>> type Q[T] = Annotated[T, "aloha"]
->>> type(Q)
-<class 'typing.TypeAliasType'>
->>> type(Q[str])
-<class 'types.GenericAlias'>
-
-assert get_origin(Q[str]) is Q
-```
-
-possible solution:
-when we analyze
-```python
-def analyze_params(
-    self, ufunc: Callable[P, T], config: NodeConfig = DefaultConfig
-) -> tuple[bool, list[tuple[str, IDependent[Any]]]]:
-    deps = Dependencies.from_signature(
-        signature=get_typed_signature(ufunc), function=ufunc
-    )
-    depends_on_resource: bool = False
-    unresolved: list[tuple[str, IDependent[Any]]] = []
-
-    for i, (name, param) in enumerate(deps.items()):
-        param_type = get_origin(param.param_type) or param.param_type
-
-        if param_type in config.ignore:
-            continue
-```
 
 - remove `UnsolvableDependencyError` error, which means that we no longer try to analyze builtin types
