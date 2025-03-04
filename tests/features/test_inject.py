@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Annotated
+from typing import Annotated, NewType
 
 from ididi import Graph, entry, use
 from tests.test_data import UserService
@@ -39,24 +39,23 @@ async def test_nested_annt_entry():
     assert await f() == "aloha"
 
 
-def utc_factory() -> datetime:
-    return datetime.now(timezone.utc)
+UTC_DATETIME = NewType("UTC_DATETIME", datetime)
 
 
-UTC_DATETIME = Annotated[datetime, use(utc_factory)]
-
-import pytest
+def utc_factory() -> UTC_DATETIME:
+    return UTC_DATETIME(datetime.now(timezone.utc))
 
 
 def test_resolve_timer():
     class Timer:
-        def __init__(self, time: UTC_DATETIME):
+        def __init__(self, time: Annotated[UTC_DATETIME, use(utc_factory)]):
             self.time = time
 
     dg = Graph()
 
     dg.analyze(Timer)
-    assert dg.nodes[datetime].factory is utc_factory
+    node = dg.search("UTC_DATETIME")
+    assert node and node.factory is utc_factory
     tmer = dg.resolve(Timer)
     assert tmer.time.tzinfo == timezone.utc
 

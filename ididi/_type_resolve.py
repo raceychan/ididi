@@ -153,8 +153,6 @@ def is_unsolvable_type(t: Any) -> bool:
 
     return (
         is_builtin_type(t)
-        or t is Any
-        or t is Signature.empty
         or t in ExtraUnsolvableTypes
     )
 

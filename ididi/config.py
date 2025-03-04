@@ -1,4 +1,5 @@
 from dataclasses import FrozenInstanceError
+from inspect import Signature
 from typing import Any, Final, Iterable, Literal
 
 from .interfaces import GraphIgnore, GraphIgnoreConfig, NodeIgnore, NodeIgnoreConfig
@@ -84,7 +85,7 @@ class GraphConfig(FrozenSlot):
 
 DefaultConfig: Final[NodeConfig] = NodeConfig()
 CacheMax: Final[int] = 1024
-ExtraUnsolvableTypes: Final[set[Any]] = {Any, Literal}
+ExtraUnsolvableTypes: Final[set[Any]] = {Any, Literal, Signature.empty}
 DefaultScopeName: Final[str] = "__ididi_default_scope__"
 
 try:

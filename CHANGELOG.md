@@ -1342,3 +1342,5 @@ def analyze_params(
         if param_type in config.ignore:
             continue
 ```
+
+- remove `UnsolvableDependencyError` error, which means that we no longer try to analyze builtin types
