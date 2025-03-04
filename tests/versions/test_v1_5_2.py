@@ -25,11 +25,12 @@ async def test_ignore_alias():
 import pytest
 
 
-@pytest.mark.debug
 async def test_resolve_resolver():
     dg = Graph()
 
     current_dg = dg.resolve(Resolver)
+    assert current_dg is dg
 
     async with dg.ascope() as asc:
         asc_rv = await asc.resolve(Resolver)
+        assert asc_rv is dg
