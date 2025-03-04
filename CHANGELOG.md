@@ -1285,7 +1285,8 @@ the downside is that now `Graph.resolve` is 1.3x slower, we might find a way to 
 
 - ~~Make both `Graph` and `Scope` self-injectable, when resolve `Resolver` within a graph, return the graph, if resolve it within a scope, return the scope~~
 
-Cancel, this would scope circular reference itself
+Cancel, this would scope circular reference itself, 
+and user can use `dg.use_scope` to get the current scope, this is not worthy it.
 
 
 - `Factory method`, 
