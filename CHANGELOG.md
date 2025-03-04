@@ -1299,4 +1299,46 @@ as well as
 dg.factory(InfraBuilder().repo_maker)
 ```
 
-we need to test to see if this already works
+NOTE: we need to test to see if this already works
+
+
+
+- Make sure  this won't break
+
+```python
+async def create_user(name: Query[str]):
+    ...
+
+dg = Graph(ignore=Query)
+dg.analyze(create_user)
+```
+
+```python
+>>> from typing import *
+>>> type Q[T] = Annotated[T, "aloha"]
+>>> type(Q)
+<class 'typing.TypeAliasType'>
+>>> type(Q[str])
+<class 'types.GenericAlias'>
+
+assert get_origin(Q[str]) is Q
+```
+
+possible solution:
+when we analyze
+```python
+def analyze_params(
+    self, ufunc: Callable[P, T], config: NodeConfig = DefaultConfig
+) -> tuple[bool, list[tuple[str, IDependent[Any]]]]:
+    deps = Dependencies.from_signature(
+        signature=get_typed_signature(ufunc), function=ufunc
+    )
+    depends_on_resource: bool = False
+    unresolved: list[tuple[str, IDependent[Any]]] = []
+
+    for i, (name, param) in enumerate(deps.items()):
+        param_type = get_origin(param.param_type) or param.param_type
+
+        if param_type in config.ignore:
+            continue
+```

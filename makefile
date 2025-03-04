@@ -10,7 +10,7 @@ clean:
 	find ididi \( -name "*.c" -o -name "*.so" -o -name "*.html" \) -type f -exec rm -f {} \;
 
 .PHONY: test
-test:
+test: compile
 	pixi run -e test pytest -m "not benchmark" -vx --capture=fd tests/
 
 .PHONY: debug
@@ -125,7 +125,7 @@ git-push:
 
 local-build:
 	@echo "Building version $(VERSION)..."
-	@pixi run -e publish python setup.py build_ext --inplace
+	@pixi run -e publish python setup.py sdist bdist_wheel
 
 .PHONY: cibuild
 cibuild:

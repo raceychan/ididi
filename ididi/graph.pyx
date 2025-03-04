@@ -57,7 +57,6 @@ from .errors import (
     ResourceOutsideScopeError,
     ReusabilityConflictError,
     TopLevelBulitinTypeError,
-    UnsolvableDependencyError,
     UnsolvableNodeError,
 )
 from .interfaces import (
@@ -449,7 +448,7 @@ cdef class Resolver:
         dependent: INode[P, T],
         *,
         config: NodeConfig = DefaultConfig,
-        ignore: frozenset[str] = EmptyIgnore,
+        ignore: tuple[str] = EmptyIgnore,
     ) -> DependentNode:
         if node := self._analyzed_nodes.get(dependent):
             return node
@@ -463,7 +462,7 @@ cdef class Resolver:
 
         def dfs(dep: IDependent[T]) -> DependentNode:
             # when we register a concrete node we also register its bases to type_registry
-            cdef frozenset node_graph_ignore
+            cdef tuple node_graph_ignore
 
             if dep in self._analyzed_nodes:
                 return self._analyzed_nodes[dep]
@@ -477,7 +476,7 @@ cdef class Resolver:
             current_path.append(dep)
 
             if ignore is not self._ignore:
-                node_graph_ignore = ignore | self._ignore
+                node_graph_ignore = ignore + self._ignore
             else:
                 node_graph_ignore = ignore
 
@@ -506,12 +505,8 @@ cdef class Resolver:
                 if is_provided(param.default_):
                     continue
                 if param.unresolvable:
-                    raise UnsolvableDependencyError(
-                        dep_name=param.name,
-                        dependent_type=dep,
-                        dependency_type=param.param_type,
-                        factory=node.factory,
-                    )
+                    continue
+
                 try:
                     fnode = dfs(param_type)
                 except UnsolvableNodeError as une:
@@ -633,7 +628,7 @@ cdef class Resolver:
         if resolution := self._resolved_singletons.get(dependent):
             return resolution
 
-        provided_params = frozenset(overrides)
+        provided_params = tuple(overrides)
         node: DependentNode = self.analyze(dependent, ignore=provided_params)
 
         return _resolve_dfs(
@@ -653,7 +648,7 @@ cdef class Resolver:
         if resolution := self._resolved_singletons.get(dependent):
             return resolution
 
-        provided_params = frozenset(overrides)
+        provided_params = tuple(overrides)
         node: DependentNode = self.analyze(dependent, ignore=provided_params)
         return await _aresolve_dfs(
             self, self._nodes, self._resolved_singletons, node.dependent, overrides
@@ -663,7 +658,7 @@ cdef class Resolver:
         self, dependent: INode[P, T], config: NodeConfig = DefaultConfig
     ) -> DependentNode:
         merged_config = NodeConfig(
-            reuse=config.reuse, ignore=self._ignore | config.ignore
+            reuse=config.reuse, ignore=self._ignore + config.ignore
         )
         node = DependentNode.from_node(dependent, config=merged_config)
         if node.function_dependent:

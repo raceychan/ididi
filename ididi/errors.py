@@ -108,25 +108,25 @@ class UnsolvableParameterError(UnsolvableNodeError):
     """
 
 
-class UnsolvableDependencyError(UnsolvableParameterError):
-    """
-    Raised when a dependency parameter can't be built.
-    """
+# class UnsolvableDependencyError(UnsolvableParameterError):
+#     """
+#     Raised when a dependency parameter can't be built.
+#     """
 
-    def __init__(
-        self,
-        *,
-        dep_name: str,
-        factory: Union[Callable[..., Any], type],
-        dependent_type: Callable[..., Any],
-        dependency_type: Callable[..., Any],
-    ):
-        type_repr = getattr(dependency_type, "__name__", str(dependency_type))
-        param_repr = f" * {dependent_type.__name__}({dep_name}: {type_repr}) \n value of `{dep_name}` must be provided"
-        self.message = (
-            f"Unable to resolve dependency for parameter in {factory}, \n{param_repr}"
-        )
-        super().__init__(self.message)
+#     def __init__(
+#         self,
+#         *,
+#         dep_name: str,
+#         factory: Union[Callable[..., Any], type],
+#         dependent_type: Callable[..., Any],
+#         dependency_type: Callable[..., Any],
+#     ):
+#         type_repr = getattr(dependency_type, "__name__", str(dependency_type))
+#         param_repr = f" * {dependent_type.__name__}({dep_name}: {type_repr}) \n value of `{dep_name}` must be provided"
+#         self.message = (
+#             f"Unable to resolve dependency for parameter in {factory}, \n{param_repr}"
+#         )
+#         super().__init__(self.message)
 
 
 class ForwardReferenceNotFoundError(UnsolvableParameterError):

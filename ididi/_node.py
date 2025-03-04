@@ -348,10 +348,10 @@ class DependentNode:
         return self.factory_type in ("resource", "aresource")
 
     def analyze_unsolved_params(
-        self, ignore: frozenset[Any] = EmptyIgnore
+        self, ignore: tuple[Any] = EmptyIgnore
     ) -> Generator[Dependency, None, None]:
         "params that needs to be statically resolved"
-        ignore = ignore | self.config.ignore
+        ignore = ignore + self.config.ignore
 
         for i, (name, param) in enumerate(self.dependencies.items()):
             if i in ignore or name in ignore:

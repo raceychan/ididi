@@ -3,7 +3,7 @@ from typing import Any, Final, Iterable, Literal
 
 from .interfaces import GraphIgnore, GraphIgnoreConfig, NodeIgnore, NodeIgnoreConfig
 
-EmptyIgnore: Final[frozenset[Any]] = frozenset()
+EmptyIgnore: Final[tuple[Any]] = tuple()
 
 
 class FrozenSlot:
@@ -49,14 +49,14 @@ class NodeConfig(FrozenSlot):
         ignore: NodeIgnoreConfig = EmptyIgnore,
     ):
 
-        if not isinstance(ignore, frozenset):
+        if not isinstance(ignore, tuple):
             if isinstance(ignore, Iterable):
                 if isinstance(ignore, str):
-                    ignore = frozenset([ignore])
+                    ignore = tuple((ignore,))
                 else:
-                    ignore = frozenset(ignore)
+                    ignore = tuple(ignore)
             else:
-                ignore = frozenset([ignore])
+                ignore = (ignore,)
 
         object.__setattr__(self, "ignore", ignore)
         object.__setattr__(self, "reuse", reuse)
@@ -69,14 +69,14 @@ class GraphConfig(FrozenSlot):
 
     def __init__(self, *, self_inject: bool, ignore: GraphIgnoreConfig):
 
-        if not isinstance(ignore, frozenset):
+        if not isinstance(ignore, tuple):
             if isinstance(ignore, Iterable):
                 if isinstance(ignore, str):
-                    ignore = frozenset([ignore])
+                    ignore = tuple((ignore,))
                 else:
-                    ignore = frozenset(ignore)
+                    ignore = tuple(ignore)
             else:
-                ignore = frozenset([ignore])
+                ignore = (ignore,)
 
         object.__setattr__(self, "self_inject", self_inject)
         object.__setattr__(self, "ignore", ignore)

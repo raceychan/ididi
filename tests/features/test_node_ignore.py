@@ -1,7 +1,6 @@
 import pytest
 
 from ididi import Graph, Ignore
-from ididi.errors import UnsolvableDependencyError
 
 
 class IgnoreNode:
@@ -13,16 +12,14 @@ class IgnoreNode:
 def test_direct_resolve_fail():
     dg = Graph()
     dg.node(IgnoreNode)
-    with pytest.raises(UnsolvableDependencyError):
-        dg.analyze(IgnoreNode)
+    dg.analyze(IgnoreNode)
 
 
 def test_resolve_fail_with_partial_ignore():
     dg = Graph()
 
     dg.node(ignore=("name",))(IgnoreNode)
-    with pytest.raises(UnsolvableDependencyError):
-        dg.analyze(IgnoreNode)
+    dg.analyze(IgnoreNode)
 
 
 def test_resolve_with_ignore():

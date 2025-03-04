@@ -8,7 +8,6 @@ from ididi.errors import (
     ABCNotImplementedError,
     ForwardReferenceNotFoundError,
     ProtocolFacotryNotProvidedError,
-    UnsolvableDependencyError,
 )
 
 dg = Graph()
@@ -16,12 +15,10 @@ dg = Graph()
 
 def test_protocols():
     class Cache(ty.Protocol):
-        def get(self, key: str) -> str:
-            ...
+        def get(self, key: str) -> str: ...
 
     class MemoryCache:
-        def get(self, key: str) -> str:
-            ...
+        def get(self, key: str) -> str: ...
 
     @dg.node
     class Registry:
@@ -41,8 +38,7 @@ def test_protocols():
 def test_abc():
     class AbstractEngine(abc.ABC):
         @abc.abstractmethod
-        def run(self) -> None:
-            ...
+        def run(self) -> None: ...
 
     @dg.node
     class Database:
@@ -61,8 +57,7 @@ def test_abc_with_implementation():
 
     @dg.node
     class Engine(AbstractEngine):
-        def run(self):
-            ...
+        def run(self): ...
 
     dg.resolve(AbstractEngine)
 
@@ -75,8 +70,7 @@ def test_abc_dependency_with_implementation():
 
     @dg.node
     class Engine(AbstractEngine):
-        def run(self):
-            ...
+        def run(self): ...
 
     @dg.node
     class Database:
@@ -153,7 +147,7 @@ def test_union_type():
         def __init__(self, a: ty.Union[int, str]):
             self.a = a
 
-    with pytest.raises(UnsolvableDependencyError):
+    with pytest.raises(TypeError):
         dg.resolve(Service)
 
     @dg.node
@@ -190,7 +184,6 @@ def test_not_supported_type():
     def service_factory(ddd: ty.Any = 3) -> AnyService:
         return AnyService("test")
 
-    # with pytest.raises(UnsolvableDependencyError):
     dg.resolve(AnyService)
 
 

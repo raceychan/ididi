@@ -18,7 +18,7 @@ from ididi.errors import (
     NotSupportedError,
     PositionalOverrideError,
     TopLevelBulitinTypeError,
-    UnsolvableDependencyError,
+
 )
 
 T = ty.TypeVar("T")
@@ -396,14 +396,13 @@ def test_unsupported_annotation(dg: Graph):
         def __init__(self, bad: None):  # object is not a proper annotation
             self.bad = bad
 
-    with pytest.raises(UnsolvableDependencyError):
+    with pytest.raises(TypeError):
         dg.resolve(BadService)
 
     class New:
         def __init__(self, name: str): ...
 
-    with pytest.raises(UnsolvableDependencyError):
-        dg.resolve(New)
+    dg.resolve(New, name="aloha")
 
     class Old:
         def __init__(self, age: int = 3): ...
@@ -413,8 +412,7 @@ def test_unsupported_annotation(dg: Graph):
 
     dg.node(new_factory)
 
-    with pytest.raises(UnsolvableDependencyError):
-        dg.resolve(New)
+    dg.resolve(New, age=5)
 
 
 def test_dependency_override(dg: Graph):
@@ -623,9 +621,8 @@ def test_partial_node(dg: Graph):
             self.b = b
             self.age = age
 
-    with pytest.raises(UnsolvableDependencyError):
-        dg.node(reuse=False)(Sub)
-        dg.analyze(Sub)
+    dg.node(reuse=False)(Sub)
+    dg.analyze(Sub)
 
     dg.reset(clear_nodes=True)
 

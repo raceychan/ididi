@@ -1,6 +1,6 @@
 import pytest
 
-from ididi.errors import ForwardReferenceNotFoundError, UnsolvableDependencyError
+from ididi.errors import ForwardReferenceNotFoundError
 from ididi.graph import Graph
 
 # Create test classes with various dependency patterns
@@ -134,8 +134,7 @@ def test_analyze_would_raise_error(dg: Graph):
         def __init__(self, repository: Repository):
             self.repository = repository
 
-    with pytest.raises(UnsolvableDependencyError):
-        dg.analyze(UserService)
+    dg.analyze(UserService)
 
 
 async def test_analyze_a_factory(dg: Graph):

@@ -81,7 +81,7 @@ publish = { features = ["publish"], solve-group = "default" }
 test = { features = ["test"], solve-group = "default" }
 
 [tool.pixi.dependencies]
-python = "3.9.0.*"
+python = "==3.12"
 typing_extensions = ">=4.12.2,<5"
 cython = "==3.0.12"
 
@@ -120,8 +120,6 @@ build = "cp39* cp310* cp311* cp312* cp313*"
 build = { cmd = "hatch build", inputs = ["ididi/*"], outputs = ["dist/*"] }
 # Upload to custom GCP registry using twine
 check = { cmd = "twine check" }
-publish = { cmd = "twine upload --skip-existing dist/*", depends-on = [
-  "build",
-] }
+publish = { cmd = "twine upload --skip-existing dist/*"}
 test-publish = { cmd = "twine upload --repository testpypi --skip-existing dist/" }
 patch = { cmd = "hatch version patch" }

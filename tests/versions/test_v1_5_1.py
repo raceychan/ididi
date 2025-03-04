@@ -3,7 +3,6 @@ from typing import Annotated
 import pytest
 
 from ididi import Graph, Ignore, use
-from ididi.errors import UnsolvableDependencyError
 
 
 def test_complex_resolve():
@@ -54,5 +53,5 @@ def test_complex_resolve_fail():
         assert d == "f"
         return a + b + c
 
-    with pytest.raises(UnsolvableDependencyError):
+    with pytest.raises(TypeError):
         dg.resolve(main, a=1, b=2, k="f")

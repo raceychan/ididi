@@ -3,11 +3,7 @@ from typing import Generic, TypeVar
 import pytest
 
 from ididi import Graph, Ignore
-from ididi.errors import (
-    ForwardReferenceNotFoundError,
-    UnsolvableDependencyError,
-    UnsolvableReturnTypeError,
-)
+from ididi.errors import ForwardReferenceNotFoundError, UnsolvableReturnTypeError
 
 dg = Graph()
 # Define a generic type variable
@@ -49,23 +45,19 @@ def test_emptry_return_factory():
     with pytest.raises(UnsolvableReturnTypeError):
 
         @dg.node
-        def animal_factory(animal_type: str):
-            ...
+        def animal_factory(animal_type: str): ...
 
     with pytest.raises(ForwardReferenceNotFoundError):
 
         @dg.node
-        def animal_factory(animtal_type: str = "test") -> "Normal":
-            ...
+        def animal_factory(animtal_type: str = "test") -> "Normal": ...
 
 
-class UserService:
-    ...
+class UserService: ...
 
 
 @dg.node
-def user_service_factory() -> "UserService":
-    ...
+def user_service_factory() -> "UserService": ...
 
 
 def test_forward_factory():
@@ -82,7 +74,7 @@ def test_direct_resolve_with_override():
     dg = Graph()
     # this should not raise ididi.errors.UnsolvableDependencyError
     # since animal_type is provided, we should not care about resolvability
-    with pytest.raises(UnsolvableDependencyError):
-        dg.analyze(animal_factory)
+
+    dg.analyze(animal_factory)
 
     dg.resolve(animal_factory, animal_type="cat")

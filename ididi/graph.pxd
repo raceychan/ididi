@@ -6,7 +6,7 @@ cdef class Resolver:
     cdef readonly dict _nodes
     cdef readonly dict _analyzed_nodes
     cdef readonly TypeRegistry _type_registry
-    cdef readonly frozenset _ignore
+    cdef readonly tuple _ignore
     cdef readonly object _workers
 
     cdef readonly set _registered_singletons
