@@ -1,8 +1,10 @@
-from typing import Annotated
+from typing import Annotated, TypeVar
 
 from ididi import Graph, Ignore, use
 
-type Q[T] = Annotated[T, "Q"]
+T = TypeVar("T")
+
+Q= Annotated[T, "Q"]
 
 
 def get_q(q: Q[str]) -> Ignore[int]: ...
