@@ -9,7 +9,7 @@ from types import TracebackType
 from typing import (
     Any,
     AsyncContextManager,
-    AsyncGenerator,
+    AsyncIterator,
     Callable,
     Container,
     ContextManager,
@@ -63,7 +63,8 @@ async def aresolve_dfs(
 @asynccontextmanager
 async def syncscope_in_thread(
     loop: AbstractEventLoop, workers: ThreadPoolExecutor, cm: ContextManager[T]
-) -> AsyncGenerator[T, None]: ...
+) -> AsyncIterator[T]:
+    yield  # type: ignore
 
 class SharedData(TypedDict):
     "Data shared between graph and scope"
@@ -88,7 +89,7 @@ AsyncScopeSlots = SharedSlots + ScopeSlots + ("_loop",)
 GraphSlots = SharedSlots + ("_token",)
 
 Stack = TypeVar("Stack", ExitStack, AsyncExitStack)
-AnyScope = Union["SyncScope", "AsyncScope"]
+AnyScope = Union[SyncScope, AsyncScope]
 ScopeToken = Token[AnyScope]
 ScopeContext = ContextVar[AnyScope]
 
@@ -148,17 +149,15 @@ class Resolver:
     ) -> IDependent[T]: ...
     def _create_scope(
         self, name: Hashable = "", pre: Maybe[AnyScope] = MISSING
-    ) -> "SyncScope": ...
+    ) -> SyncScope: ...
     def _create_ascope(
         self, name: Hashable = "", pre: Maybe[AnyScope] = MISSING
-    ) -> "AsyncScope": ...
+    ) -> AsyncScope: ...
     @contextmanager
-    def scope(self, name: Hashable = "") -> Generator["SyncScope", None, None]: ...
+    def scope(self, name: Hashable = "") -> Generator[SyncScope, None, None]: ...
     @asynccontextmanager
-    async def ascope(
-        self, name: Hashable = ""
-    ) -> AsyncGenerator["AsyncScope", None]: ...
-
+    async def ascope(self, name: Hashable = "") -> AsyncIterator[AsyncScope]:
+        yield  # type: ignore
     # =================  Public =================
 
     def is_registered_singleton(self, dependent_type: IDependent[T]) -> bool: ...
@@ -250,20 +249,20 @@ class Resolver:
         name: Hashable = "",
         *,
         as_async: Literal[False] = False,
-    ) -> "SyncScope": ...
+    ) -> SyncScope: ...
     @overload
     def use_scope(
         self,
         name: Hashable = "",
         *,
         as_async: Literal[True],
-    ) -> "AsyncScope": ...
+    ) -> AsyncScope: ...
     def use_scope(
         self,
         name: Hashable = "",
         *,
         as_async: bool = False,
-    ) -> Union["SyncScope", "AsyncScope"]:
+    ) -> Union[SyncScope, AsyncScope]:
         """
         Get most recently created scope
 
@@ -386,10 +385,10 @@ class SyncScope(ScopeMixin[ExitStack], Resolver):
         resolved_singletons: ResolvedSingletons[Any],
         registered_singletons: set[type],
         name: Maybe[Hashable] = MISSING,
-        pre: Maybe[Union["SyncScope", "AsyncScope"]] = MISSING,
+        pre: Maybe[Union[SyncScope, AsyncScope]] = MISSING,
         **args: Unpack[SharedData],
     ) -> None: ...
-    def __enter__(self) -> "SyncScope": ...
+    def __enter__(self) -> SyncScope: ...
     def __exit__(
         self,
         exc_type: Union[type[Exception], None],
@@ -414,10 +413,10 @@ class AsyncScope(ScopeMixin[AsyncExitStack], Resolver):
         resolved_singletons: ResolvedSingletons[Any],
         registered_singletons: set[type],
         name: Maybe[Hashable] = MISSING,
-        pre: Maybe[Union["SyncScope", "AsyncScope"]] = MISSING,
+        pre: Maybe[Union[SyncScope, AsyncScope]] = MISSING,
         **args: Unpack[SharedData],
     ) -> None: ...
-    async def __aenter__(self) -> "AsyncScope": ...
+    async def __aenter__(self) -> AsyncScope: ...
     async def __aexit__(
         self,
         exc_type: Union[type[Exception], None],

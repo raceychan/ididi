@@ -1289,6 +1289,12 @@ Cancel, this would scope circular reference itself,
 and user can use `dg.use_scope` to get the current scope, this is not worthy it.
 
 
+- remove `UnsolvableDependencyError` error, which means that we no longer try to analyze builtin types
+
+
+
+## version 1.5.3
+
 - `Factory method`, 
 ```python
 
@@ -1303,7 +1309,4 @@ as well as
 dg.factory(InfraBuilder().repo_maker)
 ```
 
-NOTE: we need to test to see if this already works
 
-
-- remove `UnsolvableDependencyError` error, which means that we no longer try to analyze builtin types
