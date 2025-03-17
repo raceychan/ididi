@@ -41,8 +41,8 @@ INodeFactory = Union[
 ]
 INode = Union[INodeFactory[P, R], type[R]]
 
-NodeIgnore = tuple[Union[str, int, type, TypeAliasType]]
-GraphIgnore = tuple[Union[str, type, TypeAliasType]]
+NodeIgnore = tuple[Union[str, int, type, TypeAliasType], ...]
+GraphIgnore = tuple[Union[str, type, TypeAliasType], ...]
 
 NodeConfigParam = Union[str, int, type, TypeAliasType]
 GraphConfigParam = Union[str, type, TypeAliasType]

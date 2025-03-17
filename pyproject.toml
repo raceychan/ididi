@@ -21,6 +21,7 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
 ]
+dependencies = ["typing-extensions"]
 
 [project.optional-dependencies]
 graphviz = ["python-graphviz>=0.20.3,<0.21"]
@@ -120,6 +121,6 @@ build = "cp39* cp310* cp311* cp312* cp313*"
 build = { cmd = "hatch build", inputs = ["ididi/*"], outputs = ["dist/*"] }
 # Upload to custom GCP registry using twine
 check = { cmd = "twine check" }
-publish = { cmd = "twine upload --skip-existing dist/*"}
+publish = { cmd = "twine upload --skip-existing dist/*" }
 test-publish = { cmd = "twine upload --repository testpypi --skip-existing dist/" }
 patch = { cmd = "hatch version patch" }
