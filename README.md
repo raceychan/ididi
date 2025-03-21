@@ -2,7 +2,9 @@
 
 ## Genius simplicity, unmatched power
 
-**ididi is *100%* test covered and strictly typed.**
+**ididi is ~~*100%*~~ test covered and strictly typed.**
+
+(pytest-cov does not work well with cython, causing coverage to drop, would fix this when i have type, but tests are still there.)
 
 [![codecov](https://codecov.io/github/raceychan/ididi/graph/badge.svg?token=8N1AYWWN5N)](https://codecov.io/github/raceychan/ididi)
 [![PyPI version](https://badge.fury.io/py/ididi.svg)](https://badge.fury.io/py/ididi)
