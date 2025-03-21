@@ -1,22 +1,19 @@
+
 # Ididi
-
-## Genius simplicity, unmatched power
-
-**ididi is ~~*100%*~~ test covered and strictly typed.**
-
-(pytest-cov does not work well with cython, causing coverage to drop, would fix this when i have type, but tests are still there.)
-
 [![codecov](https://codecov.io/github/raceychan/ididi/graph/badge.svg?token=8N1AYWWN5N)](https://codecov.io/github/raceychan/ididi)
 [![PyPI version](https://badge.fury.io/py/ididi.svg)](https://badge.fury.io/py/ididi)
 [![Python Version](https://img.shields.io/pypi/pyversions/ididi.svg)](https://pypi.org/project/ididi/)
 [![License](https://img.shields.io/github/license/raceychan/ididi)](https://github.com/raceychan/ididi/blob/master/LICENSE)
 [![Downloads](https://img.shields.io/pypi/dm/ididi.svg)](https://pypistats.org/packages/ididi)
 
----
 
-**Documentation**: <a href="https://raceychan.github.io/ididi" target="_blank"> https://raceychan.github.io/ididi </a>
+## A type-based, full-fledged dependency injection library.
 
-**Source Code**: <a href=" https://github.com/raceychan/ididi" target="_blank">  https://github.com/raceychan/ididi</a>
+**ididi is ~~*100%*~~ test covered and strictly typed.**
+
+> coverage droped as pytest-cov does not work well with cython, but tests are still there.
+
+📚 Docs: : <a href="https://raceychan.github.io/ididi" target="_blank"> https://raceychan.github.io/ididi </a>
 
 ---
 
