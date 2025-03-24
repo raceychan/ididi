@@ -1,5 +1,7 @@
 from inspect import Signature
+from types import GenericAlias
 from typing import (
+    Annotated,
     Any,
     AsyncGenerator,
     Awaitable,
@@ -39,7 +41,9 @@ INodeFactory = Union[
     IResourceFactory[P, R],
     IAsyncResourceFactory[P, R],
 ]
-INode = Union[INodeFactory[P, R], type[R]]
+INode = Union[
+    INodeFactory[P, R], type[R], TypeAliasType, GenericAlias, Annotated[R, "Any"]
+]
 
 NodeIgnore = tuple[Union[str, int, type, TypeAliasType], ...]
 GraphIgnore = tuple[Union[str, type, TypeAliasType], ...]
@@ -53,18 +57,7 @@ GraphIgnoreConfig = Union[GraphConfigParam, Iterable[GraphConfigParam]]
 Resource = Generator[T, None, None]
 AsyncResource = AsyncGenerator[T, None]
 
-# P1 = TypeVar("P1")
-# P2 = TypeVar("P2")
-# P3 = TypeVar("P3")
-# P4 = TypeVar("P4")
-# P5 = TypeVar("P5")
-# P6 = TypeVar("P6")
-# P7 = TypeVar("P7")
-# P8 = TypeVar("P8")
-# P9 = TypeVar("P9")
 
-
-# Factory with many type params
 class TDecor(Protocol):
     @overload
     def __call__(self, factory: IResourceFactory[P, T]) -> IResourceFactory[P, T]: ...

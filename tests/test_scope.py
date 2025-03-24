@@ -3,7 +3,7 @@ import typing as ty
 
 import pytest
 
-from ididi import Graph, Resource, Ignore
+from ididi import Graph, Ignore, Resource
 from ididi.config import DefaultScopeName
 from ididi.errors import (
     AsyncResourceInSyncError,
@@ -146,8 +146,7 @@ def test_gen_factory():
 def test_sync_func_requires_async_factory():
     dg = Graph()
 
-    class AsyncResource(AsyncResourceBase):
-        ...
+    class AsyncResource(AsyncResourceBase): ...
 
     async def get_async_resource() -> ty.AsyncGenerator[AsyncResource, None]:
         ar = AsyncResource()
@@ -171,8 +170,7 @@ async def test_scope_repeat_resolve():
         def __init__(self):
             super().__init__()
 
-    class AsyncResource(AsyncResourceBase):
-        ...
+    class AsyncResource(AsyncResourceBase): ...
 
     def get_resource() -> ty.Generator[Resource, None, None]:
         resource = Resource()
@@ -236,8 +234,7 @@ async def test_nested_scope():
         def __init__(self):
             super().__init__()
 
-    class AsyncResource(AsyncResourceBase):
-        ...
+    class AsyncResource(AsyncResourceBase): ...
 
     def get_resource() -> ty.Generator[Resource, None, None]:
         resource = Resource()
@@ -278,8 +275,7 @@ async def test_context_scope():
         def __init__(self):
             super().__init__()
 
-    class AsyncResource(AsyncResourceBase):
-        ...
+    class AsyncResource(AsyncResourceBase): ...
 
     def get_resource() -> ty.Generator[Resource, None, None]:
         resource = Resource()
@@ -525,8 +521,7 @@ def test_scope_gc():
 async def test_ascope_ctx_exit():
     dg = Graph()
 
-    class Conn:
-        ...
+    class Conn: ...
 
     def get_conn() -> Resource[Conn]:
         cnn = Conn()
@@ -536,3 +531,38 @@ async def test_ascope_ctx_exit():
         async with dg.ascope() as asc:
             await asc.resolve(get_conn)
             raise TypeError
+
+
+from typing import Annotated, Generic, TypeVar
+
+T = TypeVar("T")
+E = TypeVar("E", bound=type[str])
+
+
+def test_resolve_generic():
+    class Container(Generic[T]):
+        def __init__(self, name: T):
+            self.name = name
+
+    dg = Graph()
+
+    dg.analyze(Container[str])
+
+
+def test_resolve_annotated():
+    class Engine: ...
+
+    dg = Graph()
+
+    eg = dg.resolve(Annotated[Engine, "aloha"])
+    assert isinstance(eg, Engine)
+
+
+def test_resolve_complex_generic():
+
+    class EngineFactory(Generic[E]):
+        def __init__(self, engine_class: E): ...
+
+    dg = Graph()
+
+    eg = dg.analyze(EngineFactory[type[str]])

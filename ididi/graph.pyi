@@ -224,14 +224,14 @@ class Resolver:
     ) -> T: ...
     def resolve(
         self,
-        dependent: IFactory[..., T],
+        dependent: INode[..., T],
         /,
         *args: Any,
         **overrides: Any,
     ) -> T: ...
     async def aresolve(
         self,
-        dependent: IFactory[..., T],
+        dependent: INode[..., T],
         /,
         *args: Any,
         **overrides: Any,

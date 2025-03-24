@@ -12,13 +12,11 @@ from ididi import Graph, use
 from ididi.errors import (
     ABCNotImplementedError,
     AsyncResourceInSyncError,
-    GenericDependencyNotSupportedError,
     MergeWithScopeStartedError,
     MissingAnnotationError,
     NotSupportedError,
     PositionalOverrideError,
     TopLevelBulitinTypeError,
-
 )
 
 T = ty.TypeVar("T")
@@ -582,9 +580,8 @@ class GenericService(ty.Generic[T]):
         self.item = item
 
 
-def test_generic_service_not_supported(dg: Graph):
-    with pytest.raises(GenericDependencyNotSupportedError):
-        dg.resolve(GenericService[str])
+def test_generic_service_is_supported(dg: Graph):
+    dg.resolve(GenericService[str], item=5)
 
 
 def test_generic_service_with_default(dg: Graph):
@@ -593,8 +590,7 @@ def test_generic_service_with_default(dg: Graph):
             self.item = item
 
     # this should fail, since it is confusing behavior
-    with pytest.raises(GenericDependencyNotSupportedError):
-        dg.resolve(GenericService[str])
+    dg.resolve(GenericService[str])
 
     repr(dg)
 
@@ -803,7 +799,6 @@ class Book:
 
     def dump(self) -> "Book":
         return self
-
 
 
 def test_analyze_classmethod():
