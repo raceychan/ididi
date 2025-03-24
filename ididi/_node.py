@@ -387,6 +387,7 @@ class DependentNode:
         signature: Signature,
         config: NodeConfig,
     ) -> "DependentNode":
+
         dependencies = Dependencies.from_signature(
             function=factory, signature=signature
         )

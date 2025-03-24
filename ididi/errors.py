@@ -167,17 +167,6 @@ class UnsolvableReturnTypeError(UnsolvableParameterError):
         super().__init__(msg)
 
 
-class GenericDependencyNotSupportedError(NodeError):
-    """
-    Raised when attempting to use a generic type that is not yet supported.
-    """
-
-    def __init__(self, generic_type: Union[type, TypeVar]):
-        super().__init__(
-            f"Using generic a type as a dependency is not yet supported: {generic_type}"
-        )
-
-
 # =============== Graph Errors ===============
 class GraphError(IDIDIError):
     """

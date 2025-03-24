@@ -30,7 +30,6 @@ from typing_extensions import TypeGuard, Unpack
 from .config import CacheMax, ExtraUnsolvableTypes
 from .errors import (
     ForwardReferenceNotFoundError,
-    GenericDependencyNotSupportedError,
     UnsolvableReturnTypeError,
 )
 from .interfaces import IDependent, INode, P, T
@@ -101,12 +100,18 @@ def get_typed_signature(
     )
 
 
+from typing_extensions import TypeAliasType
+
+
 def resolve_annotation(annotation: Any) -> type:
     origin = get_origin(annotation) or annotation
 
     if is_new_type(annotation):
         ntype = resolve_new_type(annotation)
         return ntype
+
+    if isinstance(origin, TypeAliasType):
+        origin = origin.__value__
 
     if origin is Annotated:  # we need to perserve __metadata__
         return annotation
@@ -119,7 +124,8 @@ def resolve_annotation(annotation: Any) -> type:
         return dependent
 
     if isinstance(annotation, TypeVar):
-        raise GenericDependencyNotSupportedError(annotation)
+        return origin
+        # raise GenericDependencyNotSupportedError(annotation)
 
     if origin in UNION_META:
         union_types = get_args(annotation)
@@ -151,10 +157,7 @@ def is_unsolvable_type(t: Any) -> bool:
     - builtin types
     """
 
-    return (
-        is_builtin_type(t)
-        or t in ExtraUnsolvableTypes
-    )
+    return is_builtin_type(t) or isinstance(t, TypeVar) or t in ExtraUnsolvableTypes
 
 
 def is_actxmgr_cls(
@@ -174,7 +177,7 @@ def is_function(obj: Any):
 
 
 def is_class(
-    obj: Union[type[T], IDependent[Union[T, Awaitable[T]]]]
+    obj: Union[type[T], IDependent[Union[T, Awaitable[T]]]],
 ) -> TypeGuard[type[T]]:
     """
     check if obj is a class, since inspect only checks if obj is a class type.
@@ -256,7 +259,10 @@ def flatten_annotated(typ: Annotated[Any, Any]) -> list[Any]:
 
 
 @lru_cache(CacheMax)
-def get_bases(dependent: type) -> tuple[type, ...]:
+def get_bases(dependent: Union[type, GenericAlias]) -> tuple[type, ...]:
+    if not isinstance(dependent, type):
+        raise TypeError(f"{dependent} must be a class")
+
     if issubclass(dependent, Protocol):
         # -3 excludes Protocol, Gener, object
         bases = cast(type, dependent).__mro__[1:-3]
