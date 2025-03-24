@@ -828,6 +828,8 @@ cdef class ResolveScope(Resolver):
         else:
             raise OutOfScopeError(name)
 
+    def register_exit_callback(self, callback: Callable[..., None]):
+        raise NotImplementedError
 
 cdef class SyncScope(ResolveScope):
     def __init__(
@@ -844,7 +846,6 @@ cdef class SyncScope(ResolveScope):
             resolved_singletons=resolved_singletons,
             registered_singletons=registered_singletons,
         )
-
 
         self._name = name
         self._pre = pre
@@ -880,6 +881,8 @@ cdef class SyncScope(ResolveScope):
             register_dependent(self._resolved_singletons, dependent, instance)
         return instance
 
+    def register_exit_callback(self, cb: Callable[P, None], *args, **kwargs):
+        self._stack.callback(cb, *args, **kwargs)
 
 cdef class AsyncScope(ResolveScope):
 
@@ -943,6 +946,9 @@ cdef class AsyncScope(ResolveScope):
         if is_reuse:
             register_dependent(self._resolved_singletons, dependent, instance)
         return instance
+
+    def register_exit_callback(self, cb: Callable[P, None], *args, **kwargs):
+        self._stack.push_async_callback(cb, *args, **kwargs)
 
 
 cdef class Graph(Resolver):

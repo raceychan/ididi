@@ -10,6 +10,7 @@ from typing import (
     Any,
     AsyncContextManager,
     AsyncIterator,
+    Awaitable,
     Callable,
     Container,
     ContextManager,
@@ -403,6 +404,9 @@ class SyncScope(ScopeMixin[ExitStack], Resolver):
         factory_type: FactoryType,
         is_reuse: bool,
     ) -> T: ...
+    def register_exit_callback(
+        self, cb: Callable[P, None], *args: P.args, **kwargs: P.kwargs
+    ) -> None: ...
 
 class AsyncScope(ScopeMixin[AsyncExitStack], Resolver):
     __slots__ = AsyncScopeSlots
@@ -441,6 +445,9 @@ class AsyncScope(ScopeMixin[AsyncExitStack], Resolver):
         factory_type: FactoryType,
         is_reuse: bool,
     ) -> T: ...
+    def register_exit_callback(
+        self, cb: Callable[P, Awaitable[None]], *args: P.args, **kwargs: P.kwargs
+    ) -> None: ...
 
 @final
 class Graph(Resolver):

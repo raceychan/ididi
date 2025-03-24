@@ -566,3 +566,36 @@ def test_resolve_complex_generic():
     dg = Graph()
 
     eg = dg.analyze(EngineFactory[type[str]])
+
+
+def test_register_random_callback():
+    dg = Graph()
+
+    side_effect = []
+
+    def my_callback(a: int, b: int):
+        nonlocal side_effect
+        side_effect.append(a)
+        side_effect.append(b)
+
+    with dg.scope() as scp:
+        scp.register_exit_callback(my_callback, 1, 2)
+
+    assert side_effect == [1, 2]
+
+
+async def test_register_random_asynccallback():
+    dg = Graph()
+
+    side_effect = []
+
+    async def my_callback(a: int, b: int)->None:
+        nonlocal side_effect
+        side_effect.append(a)
+        side_effect.append(b)
+
+    async with dg.ascope() as scp:
+        scp.register_exit_callback(my_callback, 1, 2)
+
+    assert side_effect == [1, 2]
+
