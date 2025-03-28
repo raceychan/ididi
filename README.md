@@ -56,6 +56,79 @@ Check out `tests/features/test_typing_support.py` for examples.
 
 ## Usage
 
+### CheatSheet
+
+This cheatsheet is designed to give you a quick glance at some of the basic usages of ididi.
+
+```python
+from ididi import Graph, Resolver, Ignore
+
+class Base:
+    def __init__(self, source: str = "class"):
+        self.source = source
+
+class CTX(Base): 
+    def __init__(self, source: str="class"): 
+        super().__init__(source)
+        self.status = "init"
+    async def __aenter__(self):
+        self.status = "started" 
+        return self
+    async def __aexit__(self, *args):
+        self.status = "closed"
+
+class Engine(Base): ...
+
+class Connection(CTX): 
+    def __init__(self, engine: Engine):
+        super().__init__()
+        self.engine = engine
+
+def get_engine() -> Engine:
+    return Engine("factory")
+
+async def get_conn(engine: Engine) -> Connection:
+    async with Connection(engine) as conn:
+        yield conn
+
+async def func_dep(engine: Engine, conn: Connection) -> Ignore[int]:
+    return 69
+
+async def test_ididi_cheatsheet():
+    dg = Graph()
+    assert isinstance(dg, Resolver)
+
+    engine = dg.resolve(Engine)  # resolve a class
+    assert isinstance(engine, Engine) and engine.source == "class"
+
+    faq_engine = dg.resolve(get_engine)  # resolve a factory function of a class
+    assert isinstance(faq_engine, Engine) and faq_engine.source == "factory"
+
+    side_effect: list[str] = []
+    assert not side_effect
+
+    async with dg.ascope() as ascope:
+        ascope.register_exit_callback(random_callback)
+        # register a callback to be called when scope is exited
+        assert isinstance(ascope, Resolver)
+        # NOTE: scopes are also resolvers, thus can have sub-scope
+        conn = await ascope.aresolve(get_conn)
+        # generator function will be transformed into context manager and can only be resolved within scope.
+        assert isinstance(conn, Connection)
+        assert conn.status == "started"
+        # context manager is entered when scoped is entered.
+        res = await ascope.aresolve(func_dep)
+        assert res == 69
+        # function dependencies are also supported
+
+    assert conn.status == "closed"
+    # context manager is exited when scope is exited.
+    assert side_effect[0] == "callbacked"
+    # registered callback will aslo be called.
+
+```
+
+
 ### Quick Start
 
 ```python
