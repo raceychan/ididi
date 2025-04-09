@@ -666,10 +666,10 @@ cdef class Resolver:
             reuse=config.reuse, ignore=self._ignore + config.ignore
         )
         node = DependentNode.from_node(dependent, config=merged_config)
-        if node.function_dependent:
-            self._nodes[dependent] = node
-            self._type_registry[dependent] = dependent
-            return node
+        #if node.function_dependent:
+        #    self._nodes[dependent] = node
+        #    self._type_registry[dependent] = dependent
+        #    return node
 
         if ori_node := self._nodes.get(node.dependent):
             if should_override(node, ori_node):

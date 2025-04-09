@@ -28,10 +28,7 @@ from typing import (
 from typing_extensions import TypeGuard, Unpack
 
 from .config import CacheMax, ExtraUnsolvableTypes
-from .errors import (
-    ForwardReferenceNotFoundError,
-    UnsolvableReturnTypeError,
-)
+from .errors import ForwardReferenceNotFoundError, UnsolvableReturnTypeError
 from .interfaces import IDependent, INode, P, T
 from .utils.typing_utils import T, actualize_strforward, eval_type, is_builtin_type
 
@@ -261,7 +258,7 @@ def flatten_annotated(typ: Annotated[Any, Any]) -> list[Any]:
 @lru_cache(CacheMax)
 def get_bases(dependent: Union[type, GenericAlias]) -> tuple[type, ...]:
     if not isinstance(dependent, type):
-        raise TypeError(f"{dependent} must be a class")
+        return (dependent,)
 
     if issubclass(dependent, Protocol):
         # -3 excludes Protocol, Gener, object
