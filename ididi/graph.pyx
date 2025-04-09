@@ -311,6 +311,11 @@ cdef class Resolver:
                 self.include_node(ufunc, uconfig)
 
             if is_function(dependent):
+                # if dependent in nodes just reuse
+                if node := self._nodes.get(dependent):
+                    return dependent
+
+
                 node = DependentNode.from_node(dependent, config=config)
                 self._nodes[dependent] = node
                 return dependent
@@ -662,6 +667,8 @@ cdef class Resolver:
         )
         node = DependentNode.from_node(dependent, config=merged_config)
         if node.function_dependent:
+            self._nodes[dependent] = node
+            self._type_registry[dependent] = dependent
             return node
 
         if ori_node := self._nodes.get(node.dependent):
