@@ -1310,3 +1310,9 @@ dg.factory(InfraBuilder().repo_maker)
 ```
 
 
+
+## version 1.5.5
+
+- fix 
+
+fix a bug where `dg.node(func_dep, **config)` would ignore config, as we would check if dep is in type registry during analyze time, and func dep is not registered before, so that it would be re-registered without config.
