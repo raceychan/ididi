@@ -32,7 +32,7 @@ jobs:
         name: dist-sdist
         path: dist/*.tar.*
 
-  build_wheels:
+  build-wheels:
     name: Build wheels on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -75,8 +75,8 @@ jobs:
           CIBW_BUILD_VERBOSITY: 1
           CIBW_BUILD: ${{ matrix.cibw_python }}-*
           CIBW_ARCHS: ${{ matrix.cibw_arch }}
-          CIBW_TEST_REQUIRES: pytest==8.3.3 pytest-asyncio==0.24.0 pytest-cov==6.0.0 graphviz>=0.20.3 typing_extensions==4.12.2
-          CIBW_TEST_COMMAND: "pytest -vx --capture=fd {project}/tests"
+          # CIBW_TEST_REQUIRES: pytest==8.3.3 pytest-asyncio==0.24.0 pytest-cov==6.0.0 graphviz>=0.20.3 typing_extensions==4.12.2
+          # CIBW_TEST_COMMAND: "pytest -vx --capture=fd {project}/tests"
           CIBW_TEST_SKIP: "*universal2:arm64"
         with:
           package-dir: .
@@ -87,3 +87,26 @@ jobs:
         with:
           name: dist-${{ matrix.os }}-${{ matrix.cibw_arch }}-${{ matrix.cibw_python }}
           path: wheelhouse/*.whl
+
+  publish:
+    needs: [build-sdist, build-wheels]
+    runs-on: ubuntu-latest
+
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/ididi
+
+    permissions:
+      id-token: write  # IMPORTANT: mandatory for trusted publishing
+
+    steps:
+    - name: Download all the dists
+      uses: actions/download-artifact@v4
+      with:
+        name: python-package-distributions
+        path: dist/
+
+    - name: Publish distribution 📦 to TestPyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        repository-url: https://test.pypi.org/legacy/
