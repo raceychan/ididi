@@ -10,7 +10,7 @@ clean:
 	find ididi \( -name "*.c" -o -name "*.so" -o -name "*.html" \) -type f -exec rm -f {} \;
 
 .PHONY: test
-test: compile
+test: 
 	pixi run -e test pytest -m "not benchmark" -vx --capture=fd tests/
 
 .PHONY: debug

@@ -18,17 +18,17 @@ from typing import (  # final,; Generic,
     TypedDict,
     Union,
     get_args,
-    get_origin
+    get_origin,
 )
 
 from typing_extensions import Self, Unpack
 
-from ._ds import GraphNodes, GraphNodesView, ResolvedSingletons, Visitor
-from ._ds cimport TypeRegistry
+from ._ds import GraphNodes, GraphNodesView, ResolvedSingletons, TypeRegistry, Visitor
 from ._node import (
     IGNORE_PARAM_MARK,
     DefaultConfig,
     Dependencies,
+    Dependency,
     DependentNode,
     NodeConfig,
     resolve_use,
@@ -36,13 +36,13 @@ from ._node import (
     should_override,
 )
 from ._type_resolve import (
+    flatten_annotated,
     get_bases,
     get_typed_signature,
     is_function,
     is_new_type,
     is_unsolvable_type,
     resolve_annotation,
-    flatten_annotated,
     resolve_factory,
     resolve_node_type,
 )
@@ -74,18 +74,15 @@ from .interfaces import (
 from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import P, T
 
-from ._node cimport Dependency, DependentNode
-
 AnyScope = Union["SyncScope", "AsyncScope"]
 ScopeToken = Token[AnyScope]
 ScopeContext = ContextVar[AnyScope]
 _SCOPE_CONTEXT: Final[ScopeContext] = ContextVar("idid_scope_ctx")
 
 
-cdef register_dependent(
-    dict mapping,
-    object dependent_type,
-    object instance,
+def register_dependent(mapping: dict,
+    dependent_type:object,
+    instance:object,
 ):
     if isinstance(dependent_type, type):
         base_types = get_bases(type(instance))
@@ -97,18 +94,13 @@ cdef register_dependent(
     mapping[dependent_type] = instance
 
 
-cdef object _resolve_dfs(
-    Resolver resolver,
-    dict nodes,
-    dict cache,
-    object ptype,
-    dict overrides,
+def _resolve_dfs(
+     resolver: "Resolver",
+     nodes: dict,
+     cache: dict,
+     ptype: object,
+     overrides:dict
 ):
-    cdef object resolution
-    cdef dict params
-    cdef DependentNode pnode
-    cdef str name
-    cdef Dependency param
 
     if resolution := cache.get(ptype):
         return resolution
@@ -138,17 +130,13 @@ cdef object _resolve_dfs(
     return result
 
 async def _aresolve_dfs(
-    Resolver resolver,
-    dict nodes,
-    dict cache,
-    object ptype,
-    dict overrides
+    resolver:"Resolver",
+    nodes:dict,
+    cache:dict,
+    ptype:object,
+    overrides:dict
 ):
-    cdef object resolution
-    cdef dict params
-    cdef DependentNode pnode
-    cdef str name
-    cdef Dependency param
+
 
     if resolution := cache.get(ptype):
         return resolution
@@ -202,7 +190,7 @@ class SharedData(TypedDict):
     workers: ThreadPoolExecutor
 
 
-cdef class Resolver:
+class Resolver:
 
     def __init__(
         self,
@@ -467,7 +455,7 @@ cdef class Resolver:
 
         def dfs(dep: IDependent[T]) -> DependentNode:
             # when we register a concrete node we also register its bases to type_registry
-            cdef tuple node_graph_ignore
+            node_graph_ignore: tuple
 
             if dep in self._analyzed_nodes:
                 return self._analyzed_nodes[dep]
@@ -593,10 +581,10 @@ cdef class Resolver:
 
     def resolve_callback(
         self,
-        object resolved,
-        object dependent,
-        str factory_type,
-        bint is_reuse,
+         resolved:object,
+         dependent:object,
+         factory_type:str,
+         is_reuse:bool,
     ):
         if factory_type in ("resource", "aresource"):
             raise ResourceOutsideScopeError(dependent)
@@ -607,10 +595,10 @@ cdef class Resolver:
 
     async def aresolve_callback(
         self,
-        object resolved,
-        object dependent,
-        str factory_type,
-        bint is_reuse,
+         resolved:object,
+         dependent:object,
+         factory_type:str,
+         is_reuse:bool,
     ):
         if factory_type in ("resource", "aresource"):
             raise ResourceOutsideScopeError(dependent)
@@ -795,7 +783,7 @@ cdef class Resolver:
                 self.node(node)
 
 
-cdef class ResolveScope(Resolver):
+class ResolveScope(Resolver):
     _name: "Maybe[Hashable]"
     _pre: "Maybe[ResolveScope]"
     _stack: "Union[ExitStack, AsyncExitStack]"
@@ -805,7 +793,7 @@ cdef class ResolveScope(Resolver):
         return self._name
 
     @property
-    def pre(self) -> Maybe[ResolveScope]:
+    def pre(self) -> Maybe["ResolveScope"]:
         return self._pre
 
     def __repr__(self) -> str:
@@ -834,7 +822,7 @@ cdef class ResolveScope(Resolver):
     def register_exit_callback(self, callback: Callable[..., None]):
         raise NotImplementedError
 
-cdef class SyncScope(ResolveScope):
+class SyncScope(ResolveScope):
     def __init__(
         self,
         *,
@@ -887,7 +875,7 @@ cdef class SyncScope(ResolveScope):
     def register_exit_callback(self, cb: Callable[P, None], *args, **kwargs):
         self._stack.callback(cb, *args, **kwargs)
 
-cdef class AsyncScope(ResolveScope):
+class AsyncScope(ResolveScope):
 
     def __init__(
         self,
@@ -954,7 +942,7 @@ cdef class AsyncScope(ResolveScope):
         self._stack.push_async_callback(cb, *args, **kwargs)
 
 
-cdef class Graph(Resolver):
+class Graph(Resolver):
     _nodes: GraphNodes[Any]
     _analyzed_nodes: dict[IDependent[Any], DependentNode]
     _type_registry: TypeRegistry

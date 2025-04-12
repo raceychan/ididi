@@ -847,13 +847,7 @@ def test_dg_get_node():
     assert (node := dg.get(get_conn))
     assert node.dependent is Conn
 
-    try:
-        dg._nodes = 5
-    except:
-        pass
-    else:
-        raise Exception("cython does not work")
-
+    dg._nodes = 5
 
 def test_factory_return_annt():
     dg = Graph()
