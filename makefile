@@ -68,7 +68,7 @@ minor:
 VERSION ?= x.x.x
 BRANCH = version/$(VERSION)
 
-release: check-branch check-version update-version git-commit git-merge git-tag git-push local-build 
+release: check-branch check-version update-version git-commit git-merge git-tag git-push
 
 check-branch:
 	@if [ "$$(git rev-parse --abbrev-ref HEAD)" != "$(BRANCH)" ]; then \
@@ -122,14 +122,6 @@ git-push:
 	@echo "Pushing to remote repository..."
 	@git push origin master
 	@git push origin "v$(VERSION)"
-
-local-build:
-	@echo "Building version $(VERSION)..."
-	@pixi run -e publish python setup.py sdist bdist_wheel
-
-.PHONY: cibuild
-cibuild:
-	pixi run -e publish cibuildwheel --output-dir dist --platform linux
 
 pypi-release:
 	pixi run -e publish publish
