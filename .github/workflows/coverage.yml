@@ -23,12 +23,6 @@ jobs:
       - name: Install dependencies
         run: pip install typing_extensions pytest pytest-cov pytest-asyncio setuptools
 
-      - name: Install cython
-        run: pip install cython==3.0.12
-
-      - name: compile
-        run: cythonize -i -3 ididi/graph.pyx ididi/_node.py ididi/_ds.py
-
       - name: Install graphviz
         run: pip install graphviz
 
