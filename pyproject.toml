@@ -29,17 +29,11 @@ graphviz = ["python-graphviz>=0.20.3,<0.21"]
 # ======== Build =========
 
 [build-system]
-requires = ["setuptools", "Cython"]
-build-backend = "setuptools.build_meta"
+build-backend = "hatchling.build"
+requires = ["hatchling"]
 
 [tool.hatch.version]
-path = "setup.py"
-
-[tool.setuptools]
-py-modules = ["ididi"]
-
-[tool.setuptools.packages.find]
-where = ["."]
+path = "ididi/__init__.py"
 
 
 # ======== Build =========

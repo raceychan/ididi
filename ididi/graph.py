@@ -80,7 +80,7 @@ ScopeContext = ContextVar[AnyScope]
 _SCOPE_CONTEXT: Final[ScopeContext] = ContextVar("idid_scope_ctx")
 
 
-def register_dependent(mapping: dict,
+def register_dependent(mapping: dict[Hashable, Any],
     dependent_type:object,
     instance:object,
 ):
@@ -96,7 +96,7 @@ def register_dependent(mapping: dict,
 
 def _resolve_dfs(
     resolver: "Resolver",
-    nodes: dict[type, Any],
+    nodes: dict[type, DependentNode],
     cache: dict[type, Any],
     ptype: type,
     overrides:dict[str, Any]
@@ -763,7 +763,7 @@ class Resolver:
     ) -> Union[INode[P, T], TDecor]:
         if not dependent:
             configured = partial(self.node, **config)
-            return configured
+            return configured # type: ignore
 
         if is_unsolvable_type(dependent):
             raise TopLevelBulitinTypeError(dependent)

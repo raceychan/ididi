@@ -32,6 +32,9 @@ from .interfaces import INode as INode
 from .interfaces import INodeConfig as INodeConfig
 from .interfaces import Resource as Resource
 
+
+VERSION="1.6.0"
+
 try:
     import graphviz as graphviz  # type: ignore
 except ImportError:
