@@ -95,11 +95,11 @@ def register_dependent(mapping: dict,
 
 
 def _resolve_dfs(
-     resolver: "Resolver",
-     nodes: dict,
-     cache: dict,
-     ptype: object,
-     overrides:dict
+    resolver: "Resolver",
+    nodes: dict[type, Any],
+    cache: dict[type, Any],
+    ptype: type,
+    overrides:dict[str, Any]
 ):
 
     if resolution := cache.get(ptype):
@@ -130,11 +130,11 @@ def _resolve_dfs(
     return result
 
 async def _aresolve_dfs(
-    resolver:"Resolver",
-    nodes:dict,
-    cache:dict,
-    ptype:object,
-    overrides:dict
+    resolver: "Resolver",
+    nodes: dict[type, Any],
+    cache: dict[type, Any],
+    ptype: type,
+    overrides:dict[str, Any]
 ):
 
 
@@ -191,7 +191,6 @@ class SharedData(TypedDict):
 
 
 class Resolver:
-
     def __init__(
         self,
         resolved_singletons: ResolvedSingletons[Any],
@@ -819,7 +818,7 @@ class ResolveScope(Resolver):
         else:
             raise OutOfScopeError(name)
 
-    def register_exit_callback(self, callback: Callable[..., None]):
+    def register_exit_callback(self, callback: Callable[..., None])->None:
         raise NotImplementedError
 
 class SyncScope(ResolveScope):

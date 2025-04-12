@@ -25,7 +25,7 @@ from typing import (
     get_origin,
 )
 
-from typing_extensions import TypeGuard, Unpack
+from typing_extensions import TypeAliasType, TypeGuard, Unpack
 
 from .config import CacheMax, ExtraUnsolvableTypes
 from .errors import ForwardReferenceNotFoundError, UnsolvableReturnTypeError
@@ -97,7 +97,6 @@ def get_typed_signature(
     )
 
 
-from typing_extensions import TypeAliasType
 
 
 def resolve_annotation(annotation: Any) -> type:
