@@ -1,18 +1,18 @@
 # import cython
 from types import FunctionType, MappingProxyType
-from typing import Any, Callable, Union, cast
+from typing import Any, Callable, Hashable, Union, cast
 
 from ._node import DependentNode
 from ._type_resolve import get_bases
 from .interfaces import IDependent
 from .utils.typing_utils import T
 
-GraphNodes = dict[IDependent[T], DependentNode]
+GraphNodes = dict[Hashable, DependentNode]
 """
 ### mapping a type to its corresponding node
 """
 
-GraphNodesView = MappingProxyType[IDependent[T], DependentNode]
+GraphNodesView = MappingProxyType[Hashable, DependentNode]
 """
 ### a readonly view of GraphNodes
 """
@@ -28,7 +28,7 @@ TypeMappings = dict[IDependent[T], list[IDependent[T]]]
 """
 
 
-class TypeRegistry(dict[IDependent[Any], list[IDependent[Any]]]):
+class TypeRegistry(dict[Hashable, list[IDependent[Any]]]):
     def register(self, dependent: IDependent[T]) -> None:
         try:
             self[dependent].append(dependent)
@@ -51,7 +51,7 @@ class TypeRegistry(dict[IDependent[Any], list[IDependent[Any]]]):
 class Visitor:
     __slots__ = ("_nodes",)
 
-    def __init__(self, nodes: GraphNodes[Any]):
+    def __init__(self, nodes: GraphNodes):
         self._nodes = nodes
 
     def _visit(

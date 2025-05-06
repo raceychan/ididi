@@ -1242,7 +1242,6 @@ def get_conn() -> Scoped[Connection]:
 
 ## version 1.5.1
 
-
 - support extra params to dependencies and overrides-reuse, this allows us to do complex dependency resolution, 
 
 ```python
@@ -1288,7 +1287,6 @@ the downside is that now `Graph.resolve` is 1.3x slower, we might find a way to 
 Cancel, this would scope circular reference itself, 
 and user can use `dg.use_scope` to get the current scope, this is not worthy it.
 
-
 - remove `UnsolvableDependencyError` error, which means that we no longer try to analyze builtin types
 
 
@@ -1311,8 +1309,28 @@ dg.factory(InfraBuilder().repo_maker)
 
 
 
-## version 1.5.5
+## version 1.6.0
 
 - fix 
 
 fix a bug where `dg.node(func_dep, **config)` would ignore config, as we would check if dep is in type registry during analyze time, and func dep is not registered before, so that it would be re-registered without config.
+
+
+## version 1.6.1
+
+- Fixes
+
+fix a bug where `Graph.should_be_scoped` won't ignore Ignored params
+
+```python
+def test_ignore_error():
+    class Engine:
+        def __init__(self, name: Ignore[str]):
+            self.name = name
+
+
+    dg = Graph()
+
+    assert not dg.should_be_scoped(Engine) # this would raise error before 1.6.1
+```
+

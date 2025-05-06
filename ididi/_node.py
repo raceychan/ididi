@@ -177,7 +177,7 @@ class Dependency:
 
     @property
     def type_repr(self):
-        return getattr(self.param_type, "__name__", f"{self.param_type}")
+        return self.param_type
 
     def replace_type(self, param_type: IDependent[T]) -> "Dependency":
         return Dependency(
@@ -227,7 +227,7 @@ class Dependencies(dict[str, Dependency]):
             params = params[1:]  # skip 'self', 'cls'
         elif isinstance(function, MethodType):
             owner = function.__self__
-            unbound = getattr(owner, function.__name__)
+            _ = getattr(owner, function.__name__)
             if not isinstance(owner, type):
                 params = params[1:]  # skip 'self', 'cls'
 
@@ -263,9 +263,6 @@ class Dependencies(dict[str, Dependency]):
             if param_type is Unpack:
                 dependencies.update(unpack_to_deps(param_annotation))
                 continue
-
-            # if is_unsolvable_type(param_type) and is_provided(default):
-            #     continue
 
             if param.kind in (ParameterKind.VAR_POSITIONAL, ParameterKind.VAR_KEYWORD):
                 continue
@@ -348,10 +345,10 @@ class DependentNode:
         return self.factory_type in ("resource", "aresource")
 
     def analyze_unsolved_params(
-        self, ignore: tuple[Any] = EmptyIgnore
+        self, ignore: tuple[Any, ...] = EmptyIgnore
     ) -> Generator[Dependency, None, None]:
         "params that needs to be statically resolved"
-        ignore = ignore + self.config.ignore
+        ignore += self.config.ignore
 
         for i, (name, param) in enumerate(self.dependencies.items()):
             if i in ignore or name in ignore:

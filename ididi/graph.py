@@ -17,18 +17,18 @@ from typing import (  # final,; Generic,
     Sequence,
     TypedDict,
     Union,
+    cast,
     get_args,
     get_origin,
 )
 
-from typing_extensions import Self, Unpack
+from typing_extensions import Self, TypeAliasType, Unpack
 
 from ._ds import GraphNodes, GraphNodesView, ResolvedSingletons, TypeRegistry, Visitor
 from ._node import (
     IGNORE_PARAM_MARK,
     DefaultConfig,
     Dependencies,
-    Dependency,
     DependentNode,
     NodeConfig,
     resolve_use,
@@ -106,7 +106,7 @@ def _resolve_dfs(
         return resolution
 
     params = {}
-    pnode = nodes.get(ptype) or resolver.analyze(ptype) # type: ignore
+    pnode = nodes.get(ptype) or resolver.analyze(ptype)
 
     for name, param in pnode.dependencies.items():
         if (val := overrides.get(name, MISSING)) is not MISSING:
@@ -114,7 +114,7 @@ def _resolve_dfs(
         elif param.unresolvable:
             continue
         else:
-            params[name]= _resolve_dfs(resolver, nodes, cache, param.param_type, overrides)
+            params[name]= _resolve_dfs(resolver, nodes, cache, param.param_type, overrides) # type: ignore
 
     try:
         instance = pnode.factory(**params)
@@ -125,7 +125,7 @@ def _resolve_dfs(
         instance,
         pnode.dependent,
         pnode.factory_type,
-        pnode.config.reuse, # type: ignore
+        pnode.config.reuse,
     )
     return result
 
@@ -133,11 +133,9 @@ async def _aresolve_dfs(
     resolver: "Resolver",
     nodes: dict[type, Any],
     cache: dict[type, Any],
-    ptype: type,
+    ptype: type[T],
     overrides:dict[str, Any]
-):
-
-
+) -> T:
     if resolution := cache.get(ptype):
         return resolution
 
@@ -150,8 +148,7 @@ async def _aresolve_dfs(
         elif param.unresolvable:
             continue
         else:
-            params[name]= await _aresolve_dfs(resolver, nodes, cache, param.param_type, overrides)
-
+            params[name]= await _aresolve_dfs(resolver, nodes, cache, param.param_type, overrides) # type: ignore
 
     instance = pnode.factory(**params)
     resolved = await resolver.aresolve_callback(
@@ -183,8 +180,8 @@ async def syncscope_in_thread(
 class SharedData(TypedDict):
     "Data shared between graph and scope"
 
-    nodes: GraphNodes[Any]
-    analyzed_nodes: dict[IDependent[Any], DependentNode]
+    nodes: GraphNodes
+    analyzed_nodes: dict[Hashable, DependentNode]
     type_registry: TypeRegistry
     ignore: GraphIgnore
     workers: ThreadPoolExecutor
@@ -219,7 +216,7 @@ class Resolver:
         return self._nodes.get(resolve_node_type(dep))
 
     @property
-    def nodes(self) -> GraphNodesView[Any]:
+    def nodes(self) -> GraphNodesView:
         return MappingProxyType(self._nodes)
 
     @property
@@ -231,7 +228,7 @@ class Resolver:
         return self._type_registry
 
     @property
-    def resolved_nodes(self) -> GraphNodesView[Any]:
+    def resolved_nodes(self) -> GraphNodesView:
         return MappingProxyType(self._analyzed_nodes)
 
     @property
@@ -251,14 +248,14 @@ class Resolver:
 
     def _register_node(self, node: DependentNode) -> None:
         dep_type = node.dependent
-        dependent: IDependent[Any] = get_origin(dep_type) or dep_type
+        dependent: Hashable= get_origin(dep_type) or dep_type
         if dependent in self._nodes:
             return
 
         self._nodes[dependent] = node
         self._type_registry.register(dependent)
 
-    def _resolve_concrete_node(self, dependent: IDependent[T]) -> DependentNode:
+    def _resolve_concrete_node(self, dependent: Hashable) -> DependentNode:
         # when user assign impl via factory
         if (node := self._nodes.get(dependent)) and node.factory_type != "default":
             return node
@@ -384,11 +381,15 @@ class Resolver:
 
     # =================  Public =================
 
-    def is_registered_singleton(self, dependent_type: IDependent[T]) -> bool:
+    def is_registered_singleton(self, dependent_type: Hashable) -> bool:
         return dependent_type in self._registered_singletons
 
     @lru_cache(CacheMax)
     def should_be_scoped(self, dep_type: INode[P, T]) -> bool:
+        if get_origin(dep_type) is Annotated:
+            metas = flatten_annotated(dep_type)
+            if IGNORE_PARAM_MARK in metas:
+                return False
         if not (resolved_node := self._analyzed_nodes.get(dep_type)):
             resolved_node = self.analyze(dep_type)
 
@@ -452,9 +453,9 @@ class Resolver:
 
         current_path: list[IDependent[T]] = []
 
-        def dfs(dep: IDependent[T]) -> DependentNode:
+        def dfs(dep: Hashable) -> DependentNode:
             # when we register a concrete node we also register its bases to type_registry
-            node_graph_ignore: tuple
+            node_graph_ignore: tuple[Union[str, type, TypeAliasType], ...]
 
             if dep in self._analyzed_nodes:
                 return self._analyzed_nodes[dep]
@@ -678,7 +679,7 @@ class Resolver:
     ) -> Union[EntryFunc[P, T], TEntryDecor]:
         if not func:
             configured = partial(self.entry, **iconfig)
-            return configured
+            return cast(EntryFunc[P,T], configured)
 
         config = NodeConfig(**iconfig)
         require_scope, unresolved = self.analyze_params(func, config=config)
@@ -875,6 +876,7 @@ class SyncScope(ResolveScope):
         self._stack.callback(cb, *args, **kwargs)
 
 class AsyncScope(ResolveScope):
+    _stack: AsyncExitStack
 
     def __init__(
         self,
@@ -930,7 +932,6 @@ class AsyncScope(ResolveScope):
         if factory_type == "resource":
             resolved = syncscope_in_thread(self._loop, self._workers, resolved)
 
-
         instance = await self.enter_async_context(resolved)
 
         if is_reuse:
@@ -942,8 +943,8 @@ class AsyncScope(ResolveScope):
 
 
 class Graph(Resolver):
-    _nodes: GraphNodes[Any]
-    _analyzed_nodes: dict[IDependent[Any], DependentNode]
+    _nodes: GraphNodes
+    _analyzed_nodes: dict[Hashable, DependentNode]
     _type_registry: TypeRegistry
     _resolved_singletons: ResolvedSingletons[Any]
     _registered_singletons: set[type]

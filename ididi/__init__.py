@@ -33,7 +33,7 @@ from .interfaces import INodeConfig as INodeConfig
 from .interfaces import Resource as Resource
 
 
-VERSION="1.6.0"
+VERSION="1.6.1"
 
 try:
     import graphviz as graphviz  # type: ignore

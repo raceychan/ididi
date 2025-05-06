@@ -1,9 +1,7 @@
 from dataclasses import dataclass
 from typing import Annotated
 
-import pytest
-
-from ididi import Graph, Ignore, NodeConfig, use
+from ididi import Graph, Ignore, use
 
 
 @dataclass
@@ -25,15 +23,8 @@ class EP:
     def __init__(self, user: Annotated[User, use(get_user, reuse=False)]): ...
 
 
-@pytest.mark.debug
 async def test_resolve_func():
     dg = Graph()
-
-    # # dg.analyze(EP)
-    # dg.analyze(get_user, config=NodeConfig(reuse=False))
-    # assert dg.nodes[get_user].config.reuse is False
-
-    # dg.reset(clear_nodes=True)
 
     dg.node(get_user, reuse=False)
     assert dg.nodes[get_user].config.reuse is False
