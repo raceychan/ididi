@@ -49,14 +49,14 @@ from .utils.typing_utils import P, T
 
 def resolve_dfs(
     resolver: "Resolver",
-    nodes: GraphNodes[Any],
+    nodes: GraphNodes,
     cache: ResolvedSingletons[Any],
     ptype: IDependent[T],
     overrides: dict[str, Any],
 ) -> T: ...
 async def aresolve_dfs(
     graph: "Resolver",
-    nodes: GraphNodes[Any],
+    nodes: GraphNodes,
     cache: ResolvedSingletons[Any],
     ptype: IDependent[T],
     overrides: dict[str, Any],
@@ -70,7 +70,7 @@ async def syncscope_in_thread(
 class SharedData(TypedDict):
     "Data shared between graph and scope"
 
-    nodes: GraphNodes[Any]
+    nodes: GraphNodes
     analyzed_nodes: dict[IDependent[Any], DependentNode]
     type_registry: TypeRegistry
     ignore: GraphIgnore
@@ -106,7 +106,7 @@ class Resolver:
     def __repr__(self) -> str: ...
     def get(self, dep: INode[P, T]) -> Union[DependentNode, None]: ...
     @property
-    def nodes(self) -> GraphNodesView[Any]: ...
+    def nodes(self) -> GraphNodesView: ...
     @property
     def resolution_registry(self) -> ResolvedSingletons[Any]: ...
     @property
@@ -117,7 +117,7 @@ class Resolver:
         ...
 
     @property
-    def resolved_nodes(self) -> GraphNodesView[Any]:
+    def resolved_nodes(self) -> GraphNodesView:
         """
         A node is considered resolved if all its dependencies have been resolved.
         Which means all its forward dependencies have been resolved.
@@ -361,7 +361,7 @@ class Resolver:
 class ScopeMixin(Generic[Stack]):
     __slots__ = ()
 
-    _nodes: GraphNodes[Any]
+    _nodes: GraphNodes
     _stack: Stack
     _name: Hashable
     _pre: Maybe[AnyScope]
@@ -475,7 +475,7 @@ class Graph(Resolver):
     ```
     """
 
-    _nodes: GraphNodes[Any]
+    _nodes: GraphNodes
     "Map a type to a dependent node"
     _analyzed_nodes: dict[IDependent[Any], DependentNode]
     "Nodes that have been recursively resolved and is validated to be resolvable."

@@ -97,6 +97,8 @@ def get_typed_signature(
     )
 
 
+def lexient_issubclass(t:Any, cls_or_clses: Union[type[T], tuple[type, ...]])->TypeGuard[type[T]]:
+    return isinstance(t, type) and issubclass(t, cls_or_clses)
 
 
 def resolve_annotation(annotation: Any) -> type:
@@ -159,13 +161,13 @@ def is_unsolvable_type(t: Any) -> bool:
 def is_actxmgr_cls(
     t: type[T],
 ) -> TypeGuard[type[AsyncContextManager[T]]]:
-    return issubclass(t, AsyncContextManager)
+    return lexient_issubclass(t, AsyncContextManager)
 
 
 def is_ctxmgr_cls(
     t: type[T],
 ) -> TypeGuard[type[ContextManager[T]]]:
-    return issubclass(t, ContextManager)
+    return lexient_issubclass(t, ContextManager)
 
 
 def is_function(obj: Any):
@@ -259,7 +261,7 @@ def get_bases(dependent: Union[type, GenericAlias]) -> tuple[Union[type, Generic
     if not isinstance(dependent, type):
         return (dependent,)
 
-    if issubclass(dependent, Protocol):
+    if lexient_issubclass(dependent, Protocol):
         # -3 excludes Protocol, Gener, object
         bases = cast(type, dependent).__mro__[1:-3]
     else:

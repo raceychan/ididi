@@ -124,7 +124,7 @@ git-push:
 	@git push origin "v$(VERSION)"
 
 pypi-release:
-	pixi run -e publish build && pypi run -e publish publish
+	pixi run -e publish build && pixi run -e publish publish
 
 delete-branch:
 	git branch -d $(BRANCH)
