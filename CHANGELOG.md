@@ -1334,3 +1334,11 @@ def test_ignore_error():
     assert not dg.should_be_scoped(Engine) # this would raise error before 1.6.1
 ```
 
+
+## version 1.6.2
+
+### Fixes:
+
+- [x] fix a bug where dependent is not a class, or is a complex type would raise TypeError
+- [x] fix a bug where "Ignore" does not work for complex union types
+

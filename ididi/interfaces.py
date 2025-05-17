@@ -96,14 +96,6 @@ class INodeConfig(TypedDict, total=False):
     reuse: bool
 
 
-# class Closable(Protocol):
-#     def close(self) -> None: ...
-
-
-# class AsyncClosable(Protocol):
-#     async def close(self) -> Coroutine[Any, Any, None]: ...
-
-
 class EntryFunc(Protocol[P, C]):
     __name__: str
 

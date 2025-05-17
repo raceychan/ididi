@@ -4,7 +4,7 @@ from functools import lru_cache
 from inspect import Signature
 from inspect import _ParameterKind as ParameterKind  # type: ignore
 from inspect import isasyncgenfunction, iscoroutinefunction, isgeneratorfunction
-from types import MethodType
+from types import FunctionType, MethodType
 from typing import (  # Generic,
     Annotated,
     Any,
@@ -159,7 +159,7 @@ class Dependency:
     name: str
     param_type: "IDependent[Any]"  # resolved_type
     default_: "Maybe[Any]"
-    unresolvable: bool
+    should_be_ignored: bool
 
     def __init__(
         self,
@@ -170,7 +170,10 @@ class Dependency:
         self.name = name
         self.param_type = param_type
         self.default_ = default
-        self.unresolvable = is_unsolvable_type(param_type)
+        self.should_be_ignored = (self.should_ignore(param_type) or is_unsolvable_type(param_type))
+
+    def should_ignore(self, param_type: IDependent[T])->bool:
+        return get_origin(param_type) is Annotated and IGNORE_PARAM_MARK in flatten_annotated(param_type)
 
     def __repr__(self) -> str:
         return f"Dependency({self.name}: {self.type_repr}={self.default_!r})"
@@ -178,6 +181,7 @@ class Dependency:
     @property
     def type_repr(self):
         return self.param_type
+
 
     def replace_type(self, param_type: IDependent[T]) -> "Dependency":
         return Dependency(
@@ -439,7 +443,6 @@ class DependentNode:
             factory_type = "afunction"
         else:
             factory_type = "function"
-
         signature = get_typed_signature(f, check_return=True)
         dependent: type[T] = resolve_annotation(signature.return_annotation)
 
@@ -502,6 +505,8 @@ class DependentNode:
         if is_class(factory_or_class):
             dependent = cast(type, factory_or_class)
             return cls._from_class(dependent=dependent, config=config)
-        else:
+        elif isinstance(factory_or_class, (FunctionType, MethodType)):
             factory = cast(INodeFactory[P, T], factory_or_class)
             return cls._from_function(factory=factory, config=config)
+        else:
+            raise TypeError(f"Invalid dependent type {factory_or_class}")

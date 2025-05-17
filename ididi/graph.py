@@ -108,10 +108,11 @@ def _resolve_dfs(
     params = {}
     pnode = nodes.get(ptype) or resolver.analyze(ptype)
 
+
     for name, param in pnode.dependencies.items():
         if (val := overrides.get(name, MISSING)) is not MISSING:
             params[name] = val
-        elif param.unresolvable:
+        elif param.should_be_ignored:
             continue
         else:
             params[name]= _resolve_dfs(resolver, nodes, cache, param.param_type, overrides) # type: ignore
@@ -145,7 +146,7 @@ async def _aresolve_dfs(
     for name, param in pnode.dependencies.items():
         if (val := overrides.get(name, MISSING)) is not MISSING:
             params[name] = val
-        elif param.unresolvable:
+        elif param.should_be_ignored:
             continue
         else:
             params[name]= await _aresolve_dfs(resolver, nodes, cache, param.param_type, overrides) # type: ignore
@@ -401,7 +402,7 @@ class Resolver:
 
         contain_resource = any(
             self.should_be_scoped(param.param_type)
-            for _, param in resolved_node.dependencies.items() if not param.unresolvable
+            for _, param in resolved_node.dependencies.items() if not param.should_be_ignored
         )
         return contain_resource
 
@@ -446,6 +447,7 @@ class Resolver:
         if node := self._analyzed_nodes.get(dependent):
             return node
 
+
         dependent_type = self._analyze_dep(dependent, config)
 
         if is_unsolvable_type(dependent_type):
@@ -487,17 +489,14 @@ class Resolver:
                         )
                         self.analyze(inode.factory, ignore=node_graph_ignore)
                         continue
-                    elif IGNORE_PARAM_MARK in metas:
-                        continue
                 elif is_function(param_type):
                     fnode = DependentNode.from_node(param_type, config=config)
                     self._nodes[param_type] = fnode
                     node.dependencies[param.name] = param.replace_type(fnode.dependent)
                     self.analyze(fnode.factory, ignore=node_graph_ignore)
                     continue
-                if is_provided(param.default_):
-                    continue
-                if param.unresolvable:
+
+                if is_provided(param.default_) or param.should_be_ignored:
                     continue
 
                 try:
@@ -513,6 +512,7 @@ class Resolver:
 
         return dfs(dependent_type)
 
+
     def analyze_params(
         self, ufunc: Callable[P, T], config: NodeConfig = DefaultConfig
     ) -> tuple[bool, list[tuple[str, IDependent[Any]]]]:
@@ -527,8 +527,7 @@ class Resolver:
 
             if i in config.ignore or name in config.ignore or param_type in config.ignore:
                 continue
-
-            if param.unresolvable and is_provided(param.default_):
+            if is_provided(param.default_) or param.should_be_ignored:
                 continue
 
             if get_origin(param_type) is Annotated:
@@ -653,8 +652,8 @@ class Resolver:
         merged_config = NodeConfig(
             reuse=config.reuse, ignore=self._ignore + config.ignore
         )
-        node = DependentNode.from_node(dependent, config=merged_config)
 
+        node = DependentNode.from_node(dependent, config=merged_config)
         if ori_node := self._nodes.get(node.dependent):
             if should_override(node, ori_node):
                 self._remove_node(ori_node)

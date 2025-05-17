@@ -15,7 +15,7 @@ test:
 
 .PHONY: debug
 debug:
-	pixi run -e test pytest -vx  -m debug tests/
+	pixi run -e test pytest -vx -m debug tests/
 
 .PHONY: profile
 profile:
