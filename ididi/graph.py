@@ -29,6 +29,7 @@ from ._node import (
     IGNORE_PARAM_MARK,
     DefaultConfig,
     Dependencies,
+    Dependency,
     DependentNode,
     NodeConfig,
     resolve_use,
@@ -80,9 +81,10 @@ ScopeContext = ContextVar[AnyScope]
 _SCOPE_CONTEXT: Final[ScopeContext] = ContextVar("idid_scope_ctx")
 
 
-def register_dependent(mapping: dict[Hashable, Any],
-    dependent_type:object,
-    instance:object,
+def register_dependent(
+    mapping: dict[Hashable, Any],
+    dependent_type: object,
+    instance: object,
 ):
     if isinstance(dependent_type, type):
         base_types = get_bases(type(instance))
@@ -99,7 +101,7 @@ def _resolve_dfs(
     nodes: dict[type, DependentNode],
     cache: dict[type, Any],
     ptype: type,
-    overrides:dict[str, Any]
+    overrides: dict[str, Any],
 ):
 
     if resolution := cache.get(ptype):
@@ -108,14 +110,13 @@ def _resolve_dfs(
     params = {}
     pnode = nodes.get(ptype) or resolver.analyze(ptype)
 
-
     for name, param in pnode.dependencies.items():
         if (val := overrides.get(name, MISSING)) is not MISSING:
             params[name] = val
         elif param.should_be_ignored:
             continue
         else:
-            params[name]= _resolve_dfs(resolver, nodes, cache, param.param_type, overrides) # type: ignore
+            params[name] = _resolve_dfs(resolver, nodes, cache, param.param_type, overrides)  # type: ignore
 
     try:
         instance = pnode.factory(**params)
@@ -130,12 +131,13 @@ def _resolve_dfs(
     )
     return result
 
+
 async def _aresolve_dfs(
     resolver: "Resolver",
     nodes: dict[type, Any],
     cache: dict[type, Any],
     ptype: type[T],
-    overrides:dict[str, Any]
+    overrides: dict[str, Any],
 ) -> T:
     if resolution := cache.get(ptype):
         return resolution
@@ -149,7 +151,7 @@ async def _aresolve_dfs(
         elif param.should_be_ignored:
             continue
         else:
-            params[name]= await _aresolve_dfs(resolver, nodes, cache, param.param_type, overrides) # type: ignore
+            params[name] = await _aresolve_dfs(resolver, nodes, cache, param.param_type, overrides)  # type: ignore
 
     instance = pnode.factory(**params)
     resolved = await resolver.aresolve_callback(
@@ -157,8 +159,9 @@ async def _aresolve_dfs(
         pnode.dependent,
         pnode.factory_type,
         pnode.config.reuse,
-     )
+    )
     return resolved
+
 
 @asynccontextmanager
 async def syncscope_in_thread(
@@ -249,7 +252,7 @@ class Resolver:
 
     def _register_node(self, node: DependentNode) -> None:
         dep_type = node.dependent
-        dependent: Hashable= get_origin(dep_type) or dep_type
+        dependent: Hashable = get_origin(dep_type) or dep_type
         if dependent in self._nodes:
             return
 
@@ -299,7 +302,6 @@ class Resolver:
                 # if dependent in nodes just reuse
                 if node := self._nodes.get(dependent):
                     return dependent
-
 
                 node = DependentNode.from_node(dependent, config=config)
                 self._nodes[dependent] = node
@@ -400,11 +402,19 @@ class Resolver:
         if resolved_node.is_resource:
             return True
 
-        contain_resource = any(
-            self.should_be_scoped(param.param_type)
-            for _, param in resolved_node.dependencies.items() if not param.should_be_ignored
-        )
-        return contain_resource
+        ignore_params = resolved_node.config.ignore
+        for pname, param in resolved_node.dependencies.items():
+            ptype = param.param_type
+
+            if pname in ignore_params or ptype in ignore_params:
+                continue
+
+            if param.should_be_ignored:
+                continue
+
+            if self.should_be_scoped(ptype):
+                return True
+        return False
 
     def check_param_conflict(
         self, param_type: IDependent[T], current_path: list[IDependent[T]]
@@ -446,7 +456,6 @@ class Resolver:
     ) -> DependentNode:
         if node := self._analyzed_nodes.get(dependent):
             return node
-
 
         dependent_type = self._analyze_dep(dependent, config)
 
@@ -512,7 +521,6 @@ class Resolver:
 
         return dfs(dependent_type)
 
-
     def analyze_params(
         self, ufunc: Callable[P, T], config: NodeConfig = DefaultConfig
     ) -> tuple[bool, list[tuple[str, IDependent[Any]]]]:
@@ -525,7 +533,11 @@ class Resolver:
         for i, (name, param) in enumerate(deps.items()):
             param_type = param.param_type
 
-            if i in config.ignore or name in config.ignore or param_type in config.ignore:
+            if (
+                i in config.ignore
+                or name in config.ignore
+                or param_type in config.ignore
+            ):
                 continue
             if is_provided(param.default_) or param.should_be_ignored:
                 continue
@@ -542,7 +554,6 @@ class Resolver:
                 ufunc, uconfig = use_meta
                 use_node = self.include_node(ufunc, uconfig)
                 param_type = use_node.dependent
-
 
             self.analyze(param_type, config=config)
             depends_on_resource = depends_on_resource or self.should_be_scoped(
@@ -577,13 +588,12 @@ class Resolver:
 
         self._type_registry[dependent_type] = [dependent_type]
 
-
     def resolve_callback(
         self,
-         resolved:object,
-         dependent:object,
-         factory_type:str,
-         is_reuse:bool,
+        resolved: object,
+        dependent: object,
+        factory_type: str,
+        is_reuse: bool,
     ):
         if factory_type in ("resource", "aresource"):
             raise ResourceOutsideScopeError(dependent)
@@ -594,10 +604,10 @@ class Resolver:
 
     async def aresolve_callback(
         self,
-         resolved:object,
-         dependent:object,
-         factory_type:str,
-         is_reuse:bool,
+        resolved: object,
+        dependent: object,
+        factory_type: str,
+        is_reuse: bool,
     ):
         if factory_type in ("resource", "aresource"):
             raise ResourceOutsideScopeError(dependent)
@@ -678,7 +688,7 @@ class Resolver:
     ) -> Union[EntryFunc[P, T], TEntryDecor]:
         if not func:
             configured = partial(self.entry, **iconfig)
-            return cast(EntryFunc[P,T], configured)
+            return cast(EntryFunc[P, T], configured)
 
         config = NodeConfig(**iconfig)
         require_scope, unresolved = self.analyze_params(func, config=config)
@@ -763,7 +773,7 @@ class Resolver:
     ) -> Union[INode[P, T], TDecor]:
         if not dependent:
             configured = partial(self.node, **config)
-            return configured # type: ignore
+            return configured  # type: ignore
 
         if is_unsolvable_type(dependent):
             raise TopLevelBulitinTypeError(dependent)
@@ -818,8 +828,9 @@ class ResolveScope(Resolver):
         else:
             raise OutOfScopeError(name)
 
-    def register_exit_callback(self, callback: Callable[..., None])->None:
+    def register_exit_callback(self, callback: Callable[..., None]) -> None:
         raise NotImplementedError
+
 
 class SyncScope(ResolveScope):
     def __init__(
@@ -873,6 +884,7 @@ class SyncScope(ResolveScope):
 
     def register_exit_callback(self, cb: Callable[P, None], *args, **kwargs):
         self._stack.callback(cb, *args, **kwargs)
+
 
 class AsyncScope(ResolveScope):
     _stack: AsyncExitStack
