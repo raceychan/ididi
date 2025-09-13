@@ -66,7 +66,7 @@ async def conn_factory(engine: AsyncEngine) -> AsyncGenerator[AsyncConnection, N
         yield conn
 
 class UnitOfWork:
-    def __init__(self, conn: AsyncConnection=use(conn_factory)):
+    def __init__(self, conn: Annotated[AsyncConnection, use(conn_factory)]):
         self._conn = conn
 
 @entry
