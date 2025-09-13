@@ -1342,3 +1342,38 @@ def test_ignore_error():
 - [x] fix a bug where dependent is not a class, or is a complex type would raise TypeError
 - [x] fix a bug where "Ignore" does not work for complex union types
 
+## version 1.6.3
+
+### Fixes:
+- [x] fix a bug where node.config.ignore won't work in should_be_scoped
+
+## version 1.6.4
+
+### improvements:
+
+deperecate default style `use` 
+
+```python
+from ididi import use
+class Dep: ...
+
+def get_dep() -> Dep: ...
+
+def get_repo(dep: Dep = use(get_dep)): ...
+```
+
+this style of factory is no longer recommended, and will be removed in 1.7.0
+
+use 
+```python
+from ididi import use
+from typing import Annotated
+
+class Dep: ...
+
+def get_dep() -> Dep: ...
+
+def get_repo(dep: Annotated[Dep, use(get_dep)]): ...
+```
+
+instead

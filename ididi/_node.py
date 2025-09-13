@@ -1,4 +1,5 @@
 from abc import ABC
+import warnings
 from contextlib import asynccontextmanager, contextmanager
 from functools import lru_cache
 from inspect import Signature
@@ -258,6 +259,18 @@ class Dependencies(dict[str, Dependency]):
             param_type = resolve_annotation(param_annotation)
 
             if get_origin(default) is Annotated:
+                # Deprecation: default-argument style factory (e.g. param=use(factory))
+                # Prefer Annotated style: param: Annotated[T, use(factory)]
+                metas = flatten_annotated(default)
+                if USE_FACTORY_MARK in metas:
+                    warnings.warn(
+                        (
+                            "Using factory via default argument is deprecated and will be removed in 1.7.0. "
+                            "Use Annotated style instead: param: Annotated[T, use(factory)]."
+                        ),
+                        DeprecationWarning,
+                        stacklevel=3,
+                    )
                 param_type = resolve_annotation(default)
                 default = MISSING
 
