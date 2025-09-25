@@ -1,5 +1,5 @@
-from abc import ABC
 import warnings
+from abc import ABC
 from contextlib import asynccontextmanager, contextmanager
 from functools import lru_cache
 from inspect import Signature
@@ -59,11 +59,11 @@ from .interfaces import (
     INodeFactory,
 )
 from .utils.param_utils import MISSING, Maybe
-from .utils.typing_utils import P, T
+from .utils.typing_utils import P, R, T
 
 # ============== Ididi marks ===========
 
-Ignore = Annotated[T, IGNORE_PARAM_MARK]
+Ignore = Annotated[R, IGNORE_PARAM_MARK]
 
 # ========== NotImplemented =======
 
@@ -171,10 +171,14 @@ class Dependency:
         self.name = name
         self.param_type = param_type
         self.default_ = default
-        self.should_be_ignored = (self.should_ignore(param_type) or is_unsolvable_type(param_type))
+        self.should_be_ignored = self.should_ignore(param_type) or is_unsolvable_type(
+            param_type
+        )
 
-    def should_ignore(self, param_type: IDependent[T])->bool:
-        return get_origin(param_type) is Annotated and IGNORE_PARAM_MARK in flatten_annotated(param_type)
+    def should_ignore(self, param_type: IDependent[T]) -> bool:
+        return get_origin(
+            param_type
+        ) is Annotated and IGNORE_PARAM_MARK in flatten_annotated(param_type)
 
     def __repr__(self) -> str:
         return f"Dependency({self.name}: {self.type_repr}={self.default_!r})"
@@ -182,7 +186,6 @@ class Dependency:
     @property
     def type_repr(self):
         return self.param_type
-
 
     def replace_type(self, param_type: IDependent[T]) -> "Dependency":
         return Dependency(
@@ -193,7 +196,7 @@ class Dependency:
 
 
 def unpack_to_deps(
-    param_annotation: Annotated[Any, "Unpack"]
+    param_annotation: Annotated[Any, "Unpack"],
 ) -> "dict[str, Dependency]":
     unpack = get_args(param_annotation)[0]
     fields = unpack.__annotations__
