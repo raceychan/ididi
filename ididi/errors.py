@@ -1,4 +1,4 @@
-from typing import Any, Callable, ForwardRef, Hashable, TypeVar, Union
+from typing import Any, Callable, ForwardRef, Hashable, Union
 
 
 class IDIDIError(Exception):
@@ -220,7 +220,7 @@ class TopLevelBulitinTypeError(GraphResolveError):
     >>> dag.resolve(int)
     """
 
-    def __init__(self, dependency_type: Union[type, Callable[..., Any]]):
+    def __init__(self, dependency_type: Any):
         super().__init__(
             f"Using builtin type {dependency_type} as a top level dependency is not supported"
         )

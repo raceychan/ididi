@@ -1,8 +1,9 @@
 from dataclasses import dataclass
+from typing import Annotated
 
 import pytest
 
-from ididi import Graph, Ignore, entry, resolve
+from ididi import Graph, Ignore, entry, resolve, use
 
 
 class Config:
@@ -48,20 +49,27 @@ class EventStore:
         self.db = db
 
 
-def main(email: EmailService, es: EventStore) -> str:
+def main(
+    email: Annotated[EmailService, use(EmailService)],
+    es: Annotated[EventStore, use(EventStore)],
+) -> str:
     assert isinstance(email, EmailService)
     assert isinstance(es, EventStore)
     assert email.user.auth.db.config.env == es.db.config.env
     return "ok"
 
 
-def second_entry(email: EmailService, config: Config) -> str:
+def second_entry(
+    email: Annotated[EmailService, use(EmailService)], config: Config
+) -> str:
     assert isinstance(email, EmailService)
     return "hello"
 
 
 async def third_entry(
-    notification: NotificationService, name: str = "hello", age: int = 18
+    notification: Annotated[NotificationService, use(NotificationService)],
+    name: str = "hello",
+    age: int = 18,
 ) -> str:
     assert isinstance(notification, NotificationService)
     return f"{name} is {age} years old"
@@ -84,7 +92,9 @@ def test_solve():
 async def test_entry_with_overrides():
     @entry
     async def func4(
-        notif: NotificationService, email: Ignore[str], format: Ignore[str]
+        notif: Annotated[NotificationService, use(NotificationService)],
+        email: Ignore[str],
+        format: Ignore[str],
     ):
         return email, format
 
@@ -101,7 +111,10 @@ class CreateUser:
 
 async def test_entry_with_ignore():
     @entry(ignore=CreateUser)
-    async def func4(service: NotificationService, cmd: Ignore[CreateUser]) -> str:
+    async def func4(
+        service: Annotated[NotificationService, use(EmailService)],
+        cmd: Ignore[CreateUser],
+    ) -> str:
         return cmd.user_name
 
     cmd = CreateUser(user_name="1", user_email="2")
@@ -114,7 +127,10 @@ async def test_dg_entry_with_override():
 
     @dg.entry(ignore=CreateUser)
     async def func4(
-        service: NotificationService, cmd: CreateUser, *, config: Config
+        service: Annotated[NotificationService, use(NotificationService)],
+        cmd: CreateUser,
+        *,
+        config: Config,
     ) -> str:
         return cmd.user_name
 
@@ -143,10 +159,10 @@ async def test_dg_entry_with_acm():
 
     @dg.entry(ignore=CreateUser)
     async def func4(
-        service: NotificationService,
+        service: Annotated[NotificationService, use(NotificationService)],
         cmd: CreateUser,
         *,
-        session: Session,
+        session: Annotated[Session, use(Session)],
         config: Config,
     ) -> str:
         return cmd.user_name
@@ -161,11 +177,11 @@ def test_sync_entry_with_override():
 
     @dg.entry(ignore=CreateUser)
     def func4(
-        service: NotificationService,
+        service: Annotated[NotificationService, use(NotificationService)],
         cmd: CreateUser,
         *,
         config: Config,
-        session: Session,
+        session: Annotated[Session, use(Session)],
     ) -> str:
         return cmd.user_name
 
@@ -181,7 +197,9 @@ def test_entry_reuse():
     dg.reset()
 
     def create_user(
-        user_name: Ignore[str], user_email: Ignore[str], service: UserService
+        user_name: Ignore[str],
+        user_email: Ignore[str],
+        service: Annotated[UserService, use(UserService, reuse=False)],
     ) -> UserService:
         return service
 
@@ -197,7 +215,7 @@ def test_entry_reuse():
     SERVICES.clear()
 
     dg.reset(clear_nodes=True)
-    dg.node(UserService)
+    dg.node(UserService, reuse=True)
 
     for _ in range(rounds):
         SERVICES.add(create_user("test", "email"))
@@ -209,7 +227,9 @@ async def test_entry_replace():
     dg = Graph()
 
     async def create_user(
-        user_name: Ignore[str], user_email: Ignore[str], service: UserService
+        user_name: str,
+        user_email: str,
+        service: Annotated[UserService, use(UserService)],
     ) -> UserService:
         return service
 
@@ -233,9 +253,11 @@ async def test_entry_replace():
 async def test_entry_override_with_factory():
     dg = Graph()
 
-    @dg.entry(ignore=("user_name", "user_email"))
+    @dg.entry
     async def create_user(
-        user_name: str, user_email: str, service: UserService
+        user_name: str,
+        user_email: str,
+        service: Annotated[UserService, use(UserService)],
     ) -> UserService:
         return service
 
@@ -254,7 +276,9 @@ async def test_entry_override_with_override():
 
     @dg.entry(ignore=(0, 1))
     async def create_user(
-        user_name: str, user_email: str, service: UserService
+        user_name: str,
+        user_email: str,
+        service: Annotated[UserService, use(UserService)],
     ) -> UserService:
         return service
 

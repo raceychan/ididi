@@ -476,6 +476,7 @@ def test_multiple_dependency_paths(dg: Graph):
             self.s1 = s1
             self.s2 = s2
 
+    dg.node(Shared, reuse=True)
     instance = dg.resolve(Root)
     assert dg.resolution_registry[Shared] is instance.s1.shared2
     assert dg.resolution_registry[Shared] is instance.s2.shared1
@@ -602,10 +603,10 @@ def test_node_config_non_transitive(dg: Graph):
     class Sub:
         def __init__(self, b: Base): ...
 
-    dg.node(reuse=False)(Sub)
+    dg.node(reuse=True)(Sub)
     dg.analyze(Sub)
 
-    assert dg.nodes[Base].config.reuse == True
+    assert dg.nodes[Base].config.reuse == False
 
 
 def test_partial_node(dg: Graph):
@@ -658,9 +659,12 @@ def test_graph_static_resolved_should_override():
     dg = Graph()
     dg2 = Graph()
 
+    dg.node(ComplianceChecker, reuse=True)
     dg.analyze(ComplianceChecker)
     c = dg.resolve(ComplianceChecker)
 
+    dg.node(DatabaseConfig, reuse=True)
+    dg2.node(DatabaseConfig, reuse=True)
     dg2.analyze(DatabaseConfig)
     d = dg2.resolve(DatabaseConfig)
     repr(dg.nodes[ComplianceChecker].config)
@@ -848,6 +852,7 @@ def test_dg_get_node():
     assert node.dependent is Conn
 
     dg._nodes = 5
+
 
 def test_factory_return_annt():
     dg = Graph()

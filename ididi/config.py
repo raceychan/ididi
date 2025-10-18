@@ -46,7 +46,7 @@ class NodeConfig(FrozenSlot):
     def __init__(
         self,
         *,
-        reuse: bool = True,
+        reuse: bool = False,
         ignore: NodeIgnoreConfig = EmptyIgnore,
     ):
 

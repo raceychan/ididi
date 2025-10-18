@@ -27,6 +27,8 @@ class AuthService:
 def test_singleton_uses_transilient():
     dg = Graph()
     dg.node(reuse=False)(Database)
+    dg.node(reuse=True)(AuthService)
+    
     with pytest.raises(ReusabilityConflictError):
         dg.analyze(AuthService)
 

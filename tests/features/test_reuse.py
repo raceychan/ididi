@@ -14,7 +14,7 @@ def test_config_eq():
     c1 = ng.nodes[Config].config
     ng.remove_dependent(Config)
 
-    ng.node(Config, reuse=False)
+    ng.node(Config, reuse=True)
     c2 = ng.nodes[Config].config
     assert c1 != 1
     assert c1 != c2

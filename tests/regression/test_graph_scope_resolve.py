@@ -1,5 +1,7 @@
 from typing import Generator
 
+import pytest
+
 from ididi import Graph
 
 from ..test_data import UserService
@@ -7,6 +9,8 @@ from ..test_data import UserService
 
 def test_scope_resolve_fallback():
     graph = Graph()
+
+    graph.node(UserService, reuse=True)
 
     u = graph.resolve(UserService)
 
@@ -27,21 +31,19 @@ def test_scope_resouce_fallback():
 
     u = graph.resolve(UserService)
 
-    graph.node(user_factory)
+    graph.node(user_factory, reuse=False)
 
     with graph.scope() as scope:
         u2 = scope.resolve(UserService)
 
     assert UserService not in graph._resolved_singletons
-    assert UserService in scope._resolved_singletons
-    assert UserService not in graph._resolved_singletons
+    assert UserService not in scope._resolved_singletons
 
     assert u is not u2
 
 
 class Service:
-    def __init__(self, name: str = "s", age: int = 1):
-        ...
+    def __init__(self, name: str = "s", age: int = 1): ...
 
 
 async def test_shared_registered_singleton():

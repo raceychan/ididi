@@ -1,9 +1,10 @@
 import gc
 import typing as ty
+from typing import Annotated
 
 import pytest
 
-from ididi import Graph, Ignore, Resource
+from ididi import Graph, Ignore, Resource, use
 from ididi.config import DefaultScopeName
 from ididi.errors import (
     AsyncResourceInSyncError,
@@ -122,7 +123,7 @@ async def test_async_gen_factory():
     dg.node(async_get_db)
 
     @dg.entry
-    async def main(db: AsyncDataBase) -> str:
+    async def main(db: Annotated[AsyncDataBase, use(AsyncDataBase)]) -> str:
         assert db.is_opened
         return "ok"
 
@@ -136,7 +137,7 @@ def test_gen_factory():
     dg.node(get_db)
 
     @dg.entry
-    def main(db: DataBase) -> str:
+    def main(db: Annotated[DataBase, use(DataBase)]) -> str:
         assert db.is_opened
         return "ok"
 
@@ -155,7 +156,7 @@ def test_sync_func_requires_async_factory():
     dg.node(get_async_resource)
 
     @dg.entry
-    def main(ar: AsyncResource) -> str:
+    def main(ar: Annotated[AsyncResource, use(AsyncResource)]) -> str:
         assert ar.is_opened
         return "ok"
 
@@ -177,14 +178,14 @@ async def test_scope_repeat_resolve():
         resource.open()
         yield resource
 
-    dg.node(get_resource)
+    dg.node(get_resource, reuse=True)
 
     async def get_async_resource() -> ty.AsyncGenerator[AsyncResource, None]:
         resource = AsyncResource()
         await resource.open()
         yield resource
 
-    dg.node(get_async_resource)
+    dg.node(get_async_resource, reuse=True)
 
     with dg.scope() as scope:
         resource = scope.resolve(Resource)
@@ -202,10 +203,10 @@ async def test_scope_repeat_resolve():
 async def test_resource_shared_within_scope():
     dg = Graph()
 
-    dg.node(get_db)
-    dg.node(get_client)
-    dg.node(async_get_client)
-    dg.node(async_get_db)
+    dg.node(get_db, reuse=True)
+    dg.node(get_client, reuse=True)
+    dg.node(async_get_client, reuse=True)
+    dg.node(async_get_db, reuse=True)
 
     class FirstResource(AsyncResourceBase):
         def __init__(self, database: AsyncDataBase):
@@ -216,6 +217,8 @@ async def test_resource_shared_within_scope():
             self.database = database
 
     assert dg.should_be_scoped(FirstResource)
+
+
 
     async with dg.ascope() as scope:
         first_resource = await scope.resolve(FirstResource)
@@ -283,7 +286,7 @@ async def test_context_scope():
         yield resource
         resource.close()
 
-    dg.node(get_resource)
+    dg.node(get_resource, reuse=True)
 
     async def get_async_resource() -> ty.AsyncGenerator[AsyncResource, None]:
         resource = AsyncResource()
@@ -291,7 +294,7 @@ async def test_context_scope():
         yield resource
         await resource.close()
 
-    dg.node(get_async_resource)
+    dg.node(get_async_resource, reuse=True)
 
     with pytest.raises(ResourceOutsideScopeError):
         await dg.aresolve(Resource)
@@ -367,6 +370,7 @@ def test_nested_scope_with_context_scope():
 async def test_async_nested_scope_with_context_scope():
     dg = Graph()
 
+    @dg.node(reuse=True)
     class Normal:
         def __init__(self, name: str = "normal"):
             self.name = name
@@ -410,7 +414,9 @@ async def test_db_exec():
     dg.node(async_get_db)
 
     @dg.entry
-    async def main(db: AsyncDataBase, sql: Ignore[str]) -> ty.Any:
+    async def main(
+        db: Annotated[AsyncDataBase, use(AsyncDataBase)], sql: Ignore[str]
+    ) -> ty.Any:
         res = await db.execute(sql)
         return res
 
@@ -422,6 +428,7 @@ async def test_db_exec():
 async def test_scope_different_across_context():
     dg = Graph()
 
+    @dg.node(reuse=True)
     class Normal:
         def __init__(self, name: str = "normal"):
             self.name = name
@@ -589,7 +596,7 @@ async def test_register_random_asynccallback():
 
     side_effect = []
 
-    async def my_callback(a: int, b: int)->None:
+    async def my_callback(a: int, b: int) -> None:
         nonlocal side_effect
         side_effect.append(a)
         side_effect.append(b)
@@ -598,4 +605,3 @@ async def test_register_random_asynccallback():
         scp.register_exit_callback(my_callback, 1, 2)
 
     assert side_effect == [1, 2]
-

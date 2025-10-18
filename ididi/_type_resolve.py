@@ -13,7 +13,7 @@ from typing import (
     Annotated,
     Any,
     AsyncContextManager,
-    Awaitable,
+    Callable,
     ContextManager,
     ForwardRef,
     Literal,
@@ -73,7 +73,7 @@ def get_factory_sig_from_cls(cls: type[T]) -> Signature:
 
 
 def get_typed_signature(
-    call: IDependent[T],
+    call: Callable[..., Any],
     check_return: bool = False,
 ) -> Signature:
     """
@@ -97,7 +97,9 @@ def get_typed_signature(
     )
 
 
-def lexient_issubclass(t:Any, cls_or_clses: Union[type[T], tuple[type, ...]])->TypeGuard[type[T]]:
+def lexient_issubclass(
+    t: Any, cls_or_clses: Union[type[T], tuple[type, ...]]
+) -> TypeGuard[type[T]]:
     return isinstance(t, type) and issubclass(t, cls_or_clses)
 
 
@@ -132,7 +134,7 @@ def resolve_annotation(annotation: Any) -> type:
     return origin
 
 
-def resolve_factory(factory: IDependent[T]) -> type[T]:
+def resolve_factory(factory: INode[P, T]) -> type[T]:
     """
     The dependent type from its factory, based on factory signature.
 
@@ -170,12 +172,12 @@ def is_ctxmgr_cls(
     return lexient_issubclass(t, ContextManager)
 
 
-def is_function(obj: Any):
+def is_function(obj: Any) -> TypeGuard[Callable[..., Any]]:
     return isinstance(obj, FunctionType)
 
 
 def is_class(
-    obj: Union[type[T], IDependent[Union[T, Awaitable[T]]]],
+    obj: INode[P, T],
 ) -> TypeGuard[type[T]]:
     """
     check if obj is a class, since inspect only checks if obj is a class type.
@@ -257,7 +259,9 @@ def flatten_annotated(typ: Annotated[Any, Any]) -> list[Any]:
 
 
 @lru_cache(CacheMax)
-def get_bases(dependent: Union[type, GenericAlias]) -> tuple[Union[type, GenericAlias], ...]:
+def get_bases(
+    dependent: Union[type, GenericAlias],
+) -> tuple[Union[type, GenericAlias], ...]:
     if not isinstance(dependent, type):
         return (dependent,)
 

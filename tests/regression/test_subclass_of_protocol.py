@@ -9,22 +9,17 @@ from ididi import Graph
 def test_subclass_of_protocol():
     dg = Graph()
 
-    class Uow:
-        ...
+    class Uow: ...
 
-    class IEntity(ty.Protocol):
-        ...
+    class IEntity(ty.Protocol): ...
 
-    class ChatSession(IEntity):
-        ...
+    class ChatSession(IEntity): ...
 
     E = ty.TypeVar("E", bound=IEntity)
 
-    class IRepository(ty.Protocol[E]):
-        ...
+    class IRepository(ty.Protocol[E]): ...
 
-    class ISessionRepository(IRepository[ChatSession]):
-        ...
+    class ISessionRepository(IRepository[ChatSession]): ...
 
     class SessionRepository(ISessionRepository):
         def __init__(self, uow: Uow):
@@ -37,13 +32,11 @@ def test_subclass_of_protocol():
 def test_double_protocol():
     dg = Graph()
 
-    class UserRepo(ty.Protocol):
-        ...
+    class UserRepo(ty.Protocol): ...
 
-    class SessionRepo(ty.Protocol):
-        ...
+    class SessionRepo(ty.Protocol): ...
 
-    @dg.node
+    @dg.node(reuse=True)
     class BothRepo(UserRepo, SessionRepo):
         def __init__(self, name: str = "test"):
             self.name = name
@@ -62,7 +55,7 @@ def test_double_protocol():
         assert user.repo is session.repo
 
     dg = Graph()
-    dg.node(BothRepo)
+    dg.node(BothRepo, reuse=True)
     user = dg.resolve(UserApp)
     session = dg.resolve(SessionApp)
     assert user.repo is session.repo

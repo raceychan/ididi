@@ -1,3 +1,4 @@
+import warnings
 from asyncio import AbstractEventLoop, get_running_loop
 from concurrent.futures.thread import ThreadPoolExecutor
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager, contextmanager
@@ -5,7 +6,7 @@ from contextvars import ContextVar, Token, copy_context
 from functools import lru_cache, partial, wraps
 from inspect import isawaitable, iscoroutinefunction
 from types import MappingProxyType, MethodType, TracebackType
-from typing import (  # final,; Generic,
+from typing import (
     Annotated,
     Any,
     AsyncContextManager,
@@ -14,12 +15,14 @@ from typing import (  # final,; Generic,
     ContextManager,
     Final,
     Hashable,
+    Literal,
     Sequence,
     TypedDict,
     Union,
     cast,
     get_args,
     get_origin,
+    overload,
 )
 
 from typing_extensions import Self, TypeAliasType, Unpack
@@ -29,7 +32,6 @@ from ._node import (
     IGNORE_PARAM_MARK,
     DefaultConfig,
     Dependencies,
-    Dependency,
     DependentNode,
     NodeConfig,
     resolve_use,
@@ -82,9 +84,9 @@ _SCOPE_CONTEXT: Final[ScopeContext] = ContextVar("idid_scope_ctx")
 
 
 def register_dependent(
-    mapping: dict[Hashable, Any],
-    dependent_type: object,
-    instance: object,
+    mapping: dict[IDependent[Any], Any],
+    dependent_type: IDependent[T],
+    instance: T,
 ):
     if isinstance(dependent_type, type):
         base_types = get_bases(type(instance))
@@ -98,11 +100,11 @@ def register_dependent(
 
 def _resolve_dfs(
     resolver: "Resolver",
-    nodes: dict[type, DependentNode],
-    cache: dict[type, Any],
-    ptype: type,
+    nodes: GraphNodes,
+    cache: dict[IDependent[T], T],
+    ptype: IDependent[T],
     overrides: dict[str, Any],
-):
+) -> T:
 
     if resolution := cache.get(ptype):
         return resolution
@@ -116,7 +118,9 @@ def _resolve_dfs(
         elif param.should_be_ignored:
             continue
         else:
-            params[name] = _resolve_dfs(resolver, nodes, cache, param.param_type, overrides)  # type: ignore
+            params[name] = _resolve_dfs(
+                resolver, nodes, cache, param.param_type, overrides
+            )
 
     try:
         instance = pnode.factory(**params)
@@ -134,9 +138,9 @@ def _resolve_dfs(
 
 async def _aresolve_dfs(
     resolver: "Resolver",
-    nodes: dict[type, Any],
-    cache: dict[type, Any],
-    ptype: type[T],
+    nodes: GraphNodes,
+    cache: dict[IDependent[T], T],
+    ptype: IDependent[T],
     overrides: dict[str, Any],
 ) -> T:
     if resolution := cache.get(ptype):
@@ -151,7 +155,9 @@ async def _aresolve_dfs(
         elif param.should_be_ignored:
             continue
         else:
-            params[name] = await _aresolve_dfs(resolver, nodes, cache, param.param_type, overrides)  # type: ignore
+            params[name] = await _aresolve_dfs(
+                resolver, nodes, cache, param.param_type, overrides
+            )
 
     instance = pnode.factory(**params)
     resolved = await resolver.aresolve_callback(
@@ -160,7 +166,7 @@ async def _aresolve_dfs(
         pnode.factory_type,
         pnode.config.reuse,
     )
-    return resolved
+    return cast(T, resolved)
 
 
 @asynccontextmanager
@@ -185,7 +191,7 @@ class SharedData(TypedDict):
     "Data shared between graph and scope"
 
     nodes: GraphNodes
-    analyzed_nodes: dict[Hashable, DependentNode]
+    analyzed_nodes: GraphNodes
     type_registry: TypeRegistry
     ignore: GraphIgnore
     workers: ThreadPoolExecutor
@@ -195,7 +201,7 @@ class Resolver:
     def __init__(
         self,
         resolved_singletons: ResolvedSingletons[Any],
-        registered_singletons: set[type],
+        registered_singletons: set[IDependent[Any]],
         **args: Unpack[SharedData],
     ):
         self._nodes = args["nodes"]
@@ -252,14 +258,14 @@ class Resolver:
 
     def _register_node(self, node: DependentNode) -> None:
         dep_type = node.dependent
-        dependent: Hashable = get_origin(dep_type) or dep_type
+        dependent = get_origin(dep_type) or dep_type
         if dependent in self._nodes:
             return
 
         self._nodes[dependent] = node
         self._type_registry.register(dependent)
 
-    def _resolve_concrete_node(self, dependent: Hashable) -> DependentNode:
+    def _resolve_concrete_node(self, dependent: IDependent[Any]) -> DependentNode:
         # when user assign impl via factory
         if (node := self._nodes.get(dependent)) and node.factory_type != "default":
             return node
@@ -269,7 +275,7 @@ class Resolver:
         concrete_node.check_for_implementations()
         return concrete_node
 
-    def _analyze_dep(self, dependent: INode[P, T], config: NodeConfig) -> IDependent[T]:
+    def _analyze_dep(self, dependent: INode[P, T], config: NodeConfig) -> INode[P, T]:
         if isinstance(dependent, MethodType):
             dep_method = dependent
             bound_obj = dep_method.__self__
@@ -452,7 +458,7 @@ class Resolver:
         dependent: INode[P, T],
         *,
         config: NodeConfig = DefaultConfig,
-        ignore: tuple[str] = EmptyIgnore,
+        ignore: tuple[Union[str, type, TypeAliasType], ...] = EmptyIgnore,
     ) -> DependentNode:
         if node := self._analyzed_nodes.get(dependent):
             return node
@@ -464,7 +470,7 @@ class Resolver:
 
         current_path: list[IDependent[T]] = []
 
-        def dfs(dep: Hashable) -> DependentNode:
+        def dfs(dep: INode[P, T]) -> DependentNode:
             # when we register a concrete node we also register its bases to type_registry
             node_graph_ignore: tuple[Union[str, type, TypeAliasType], ...]
 
@@ -532,28 +538,26 @@ class Resolver:
 
         for i, (name, param) in enumerate(deps.items()):
             param_type = param.param_type
-
-            if (
-                i in config.ignore
-                or name in config.ignore
-                or param_type in config.ignore
-            ):
-                continue
-            if is_provided(param.default_) or param.should_be_ignored:
-                continue
-
-            if get_origin(param_type) is Annotated:
-                metas = flatten_annotated(param_type)
-                if use_meta := search_meta(metas):
-                    ufunc, uconfig = use_meta
-                    use_node = self.include_node(ufunc, uconfig)
-                    param_type = use_node.dependent
-                elif IGNORE_PARAM_MARK in metas:
+            use_meta = resolve_use(param.param_type)
+            if not use_meta:
+                use_meta = resolve_use(param.default_)
+                if not use_meta:
                     continue
-            elif use_meta := resolve_use(param.default_):
-                ufunc, uconfig = use_meta
-                use_node = self.include_node(ufunc, uconfig)
-                param_type = use_node.dependent
+                warnings.warn(
+                    (
+                        "Using factory via default argument is deprecated and will be removed in 1.7.0. "
+                        "Use Annotated style instead: param: Annotated[T, use(factory)]."
+                    ),
+                    DeprecationWarning,
+                    stacklevel=3,
+                )
+
+            ufunc, uconfig = use_meta
+            use_node = self.include_node(ufunc, uconfig)
+            param_type = use_node.dependent
+
+            if any(x in config.ignore for x in (i, name, param_type)):
+                continue
 
             self.analyze(param_type, config=config)
             depends_on_resource = depends_on_resource or self.should_be_scoped(
@@ -563,10 +567,10 @@ class Resolver:
         return depends_on_resource, unresolved
 
     def analyze_nodes(self) -> None:
-        unsolved_nodes: set[IDependent[Any]] = (
+        unsolved_node_types: set[IDependent[Any]] = (
             self._nodes.keys() - self._analyzed_nodes.keys()
         )
-        for node_type in unsolved_nodes:
+        for node_type in unsolved_node_types:
             self.analyze(node_type)
 
     def register_singleton(
@@ -590,11 +594,11 @@ class Resolver:
 
     def resolve_callback(
         self,
-        resolved: object,
-        dependent: object,
-        factory_type: str,
+        resolved: T,
+        dependent: IDependent[T],
+        factory_type: FactoryType,
         is_reuse: bool,
-    ):
+    ) -> T:
         if factory_type in ("resource", "aresource"):
             raise ResourceOutsideScopeError(dependent)
 
@@ -604,11 +608,11 @@ class Resolver:
 
     async def aresolve_callback(
         self,
-        resolved: object,
-        dependent: object,
-        factory_type: str,
+        resolved: Any,
+        dependent: IDependent[T],
+        factory_type: FactoryType,
         is_reuse: bool,
-    ):
+    ) -> T:
         if factory_type in ("resource", "aresource"):
             raise ResourceOutsideScopeError(dependent)
 
@@ -619,10 +623,10 @@ class Resolver:
 
     def resolve(
         self,
-        dependent,
+        dependent: IFactory[P, T],
         /,
-        *args,
-        **overrides,
+        *args: P.args,
+        **overrides: P.kwargs,
     ):
         if args:
             raise PositionalOverrideError(args)
@@ -643,7 +647,7 @@ class Resolver:
         /,
         *args: P.args,
         **overrides: P.kwargs,
-    ):
+    ) -> T:
         if args:
             raise PositionalOverrideError(args)
 
@@ -669,6 +673,22 @@ class Resolver:
                 self._remove_node(ori_node)
         self._register_node(node)
         return node
+
+    @overload
+    def use_scope(
+        self,
+        name: Hashable = "",
+        *,
+        as_async: Literal[False] = False,
+    ) -> "SyncScope": ...
+
+    @overload
+    def use_scope(
+        self,
+        name: Hashable = "",
+        *,
+        as_async: Literal[True],
+    ) -> "AsyncScope": ...
 
     def use_scope(
         self,
@@ -765,6 +785,14 @@ class Resolver:
 
         setattr(f, replace.__name__, replace)
         return f
+    @overload
+    def node(self, dependent: type[T], **config: Unpack[INodeConfig]) -> type[T]: ...
+    @overload
+    def node(
+        self, dependent: INode[P, T], **config: Unpack[INodeConfig]
+    ) -> INode[P, T]: ...
+    @overload
+    def node(self, **config: Unpack[INodeConfig]) -> TDecor: ...
 
     def node(
         self,
@@ -786,6 +814,7 @@ class Resolver:
     ) -> None:
         for node in nodes:
             if isinstance(node, tuple):
+                node = cast(tuple[IDependent[T], INodeConfig], node)
                 node, nconfig = node
                 self.node(node, **nconfig)
             else:
@@ -816,7 +845,7 @@ class ResolveScope(Resolver):
     def enter_context(self, context: ContextManager[T]) -> T:
         return self._stack.enter_context(context)
 
-    def get_scope(self, name: Hashable) -> Self:
+    def get_scope(self, name: Hashable) -> "Self":
         if name == self._name:
             return self
 
@@ -828,7 +857,7 @@ class ResolveScope(Resolver):
         else:
             raise OutOfScopeError(name)
 
-    def register_exit_callback(self, callback: Callable[..., None]) -> None:
+    def register_exit_callback(self, callback: IDependent[None]) -> None:
         raise NotImplementedError
 
 
@@ -837,7 +866,7 @@ class SyncScope(ResolveScope):
         self,
         *,
         resolved_singletons: ResolvedSingletons[Any],
-        registered_singletons: set[type],
+        registered_singletons: set[IDependent[Any]],
         name: Maybe[Hashable] = MISSING,
         pre: Maybe[Union["SyncScope", "AsyncScope"]] = MISSING,
         **args: Unpack[SharedData],
@@ -869,7 +898,7 @@ class SyncScope(ResolveScope):
         dependent: IDependent[T],
         factory_type: FactoryType,
         is_reuse: bool,
-    ):
+    ) -> T:
         if factory_type in ("default", "function"):
             if is_reuse:
                 register_dependent(self._resolved_singletons, dependent, resolved)
@@ -882,7 +911,9 @@ class SyncScope(ResolveScope):
             register_dependent(self._resolved_singletons, dependent, instance)
         return instance
 
-    def register_exit_callback(self, cb: Callable[P, None], *args, **kwargs):
+    def register_exit_callback(
+        self, cb: Callable[P, None], *args: P.args, **kwargs: P.kwargs
+    ):
         self._stack.callback(cb, *args, **kwargs)
 
 
@@ -893,7 +924,7 @@ class AsyncScope(ResolveScope):
         self,
         *,
         resolved_singletons: ResolvedSingletons[Any],
-        registered_singletons: set[type],
+        registered_singletons: set[IDependent[Any]],
         name: Maybe[Hashable] = MISSING,
         pre: Maybe[Union["SyncScope", "AsyncScope"]] = MISSING,
         **args: Unpack[SharedData],
@@ -919,7 +950,9 @@ class AsyncScope(ResolveScope):
     ) -> None:
         await self._stack.__aexit__(exc_type, exc_value, traceback)
 
-    async def enter_async_context(self, context: AsyncContextManager[T]) -> T:
+    async def enter_async_context(
+        self, context: Union[ContextManager[T], AsyncContextManager[T]]
+    ) -> T:
         return await self._stack.enter_async_context(context)
 
     async def resolve(
@@ -949,7 +982,9 @@ class AsyncScope(ResolveScope):
             register_dependent(self._resolved_singletons, dependent, instance)
         return instance
 
-    def register_exit_callback(self, cb: Callable[P, None], *args, **kwargs):
+    def register_exit_callback(
+        self, cb: Callable[P, None], *args: P.args, **kwargs: P.kwargs
+    ):
         self._stack.push_async_callback(cb, *args, **kwargs)
 
 

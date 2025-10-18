@@ -6,7 +6,7 @@ from inspect import Signature
 from inspect import _ParameterKind as ParameterKind  # type: ignore
 from inspect import isasyncgenfunction, iscoroutinefunction, isgeneratorfunction
 from types import FunctionType, MethodType
-from typing import (  # Generic,
+from typing import (
     Annotated,
     Any,
     AsyncGenerator,
@@ -34,7 +34,7 @@ from ._type_resolve import (
     resolve_annotation,
     resolve_forwardref,
 )
-from .config import (  # FrozenSlot,
+from .config import (
     IGNORE_PARAM_MARK,
     USE_FACTORY_MARK,
     CacheMax,
@@ -83,6 +83,25 @@ def use(func: INodeFactory[P, T], **iconfig: Unpack[INodeConfig]) -> T:
     def func(service: Annotated[UserService, use(factory)]): ...
     ```
     """
+
+    config = NodeConfig(**iconfig)
+    annt = Annotated[T, USE_FACTORY_MARK, func, config]
+    return cast(T, annt)
+
+
+def reuse(func: INodeFactory[P, T], **iconfig: Unpack[INodeConfig]) -> T:
+    """
+    An annotation to let ididi knows what factory method to use
+    without explicitly register it.
+
+    These two are equivalent
+    ```
+    def func(service: UserService = use(factory)): ...
+    def func(service: Annotated[UserService, use(factory)]): ...
+    ```
+    """
+    if iconfig.get("reuse", MISSING) is MISSING:
+        iconfig["reuse"] = True
 
     config = NodeConfig(**iconfig)
     annt = Annotated[T, USE_FACTORY_MARK, func, config]

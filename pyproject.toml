@@ -3,7 +3,6 @@ authors = [{ name = "raceychan", email = "raceychan@gmail.com" }]
 description = "A dependency injection library for Python, Optimized for serverless applications"
 dynamic = ["version"]
 name = "ididi"
-# license = "MIT"
 readme = "README.md"
 requires-python = ">= 3.9"
 
@@ -78,8 +77,6 @@ test = { features = ["test"], solve-group = "default" }
 [tool.pixi.dependencies]
 python = "==3.9"
 typing_extensions = ">=4.12.2,<5"
-cython = "==3.0.12"
-setuptools = ">=75.8.2,<76"
 
 [tool.pixi.feature.dev.dependencies]
 jupyter = ">=1.1.1,<2"
@@ -95,24 +92,8 @@ pyinstrument = ">=5.0.0,<6"
 [tool.pixi.feature.publish.dependencies]
 hatch = ">=1.13.0,<2"
 twine = ">=6.1"
-cibuildwheel = ">=2.21.3,<3"
 setuptools = ">=75.8.0,<76"
 
-[tool.cibuildwheel]
-build = "cp39* cp310* cp311* cp312* cp313*"
-
-[tool.cython]
-linetrace = true
-# test-command = "pytest -vx --capture=fd tests/"
-
-# [tool.cibuildwheel.macos]
-# archs = "x86_64 universal2"
-
-# [tool.cibuildwheel.windows]
-# archs = "AMD64 x86 ARM64"
-# test-command = "pytext -vs tests"
-
-[tool.cibuildwheel.linux]
 
 [tool.pixi.feature.publish.tasks]
 # Build into a wheel using hatch

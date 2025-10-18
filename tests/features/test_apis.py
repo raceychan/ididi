@@ -1,6 +1,8 @@
+from typing import Annotated
+
 import ididi
-from ididi import Graph
-from tests.features.services import UserService, Config
+from ididi import Graph, use
+from tests.features.services import UserService
 
 
 def test_ididi_solve():
@@ -9,7 +11,7 @@ def test_ididi_solve():
     assert isinstance(ididi.resolve(UserService), UserService)
 
 
-def main(user_service: UserService):
+def main(user_service: Annotated[UserService, use(UserService)]):
     assert isinstance(user_service, UserService)
     return user_service
 

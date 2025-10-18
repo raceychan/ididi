@@ -35,6 +35,8 @@ def test_scope_resolve_inheritance():
     class Cache:
         ...
 
+    dg.node(User, reuse=True)
+    dg.node(Cache, reuse=True)
     dg_u = dg.resolve(User)
 
     with dg.scope() as s1:

@@ -1377,3 +1377,53 @@ def get_repo(dep: Annotated[Dep, use(get_dep)]): ...
 ```
 
 instead
+
+
+
+## version 1.7.0
+
+!!!BREAKING CHANGES!!!
+
+1. change `Graph.entry` dependency declarition to opt-out
+
+before 1.7.0:
+
+```python
+from ididi import Graph, Ignore
+dg = Graph()
+
+@dg.entry
+async def create_user(
+    user_name: Ignore[str],
+    user_email: Ignore[str],
+    service: UserService,
+) -> UserService:
+    return service
+```
+
+before 1.7.0, every param is treated as depenedency, unless declared with "idid.Ignore"
+
+now:
+
+```python
+from ididi import Graph, use
+dg = Graph()
+
+@dg.entry
+async def create_user(
+    user_name: str,
+    user_email: str,
+    service: Annotated[UserService, use(UserService)],
+) -> UserService:
+    return service
+```
+
+only params declared with `Annotated[T, use(Callable[..., T])]` is considered dependency.
+
+2. `NodeConfig.reuse` default to `False`
+
+It turns out that, after months of usage in production, I realized people almost always set reuse=False
+the reason being that, in most application you would need to resolve scoped object, and since 
+
+1. scoped object often should not be reused(such as `sqlalchemy.AsyncConnection`), and 
+2. once an object is transient, all of its parents have to be transient as well.
