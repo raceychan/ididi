@@ -58,7 +58,7 @@ from .interfaces import (
     INodeConfig,
     INodeFactory,
 )
-from .utils.param_utils import MISSING, Maybe
+from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import P, R, T
 
 # ============== Ididi marks ===========
@@ -72,7 +72,7 @@ Scoped = Annotated[Union[Generator[T, None, None], AsyncGenerator[T, None]], "sc
 # ========== NotImplemented =======
 
 
-def use(func: Union[INodeFactory[P, T], None] = None, **iconfig: Unpack[INodeConfig]) -> T:
+def use(func: Maybe[INodeFactory[P, T]] = MISSING, **iconfig: Unpack[INodeConfig]) -> T:
     """
     An annotation to let ididi knows what factory method to use
     without explicitly register it.
@@ -125,8 +125,8 @@ def resolve_marks(annt: Any) -> IDependent[Any]:
 
     if use_meta := search_meta(annotate_meta):
         ufunc, _ = use_meta
-        if ufunc is None:
-            func_return =  get_args(annt)[0]
+        if not is_provided(ufunc):
+            func_return = get_args(annt)[0]
         else:
             func_return = get_typed_signature(ufunc).return_annotation
 

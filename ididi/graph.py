@@ -1,4 +1,3 @@
-import warnings
 from asyncio import AbstractEventLoop, get_running_loop
 from concurrent.futures.thread import ThreadPoolExecutor
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager, contextmanager
@@ -312,6 +311,8 @@ class Resolver:
         if annt_dep:
             if use_meta := resolve_use(annt_dep):
                 ufunc, uconfig = use_meta
+                if not is_provided(ufunc):
+                    ufunc = annt_dep.__args__[0]
                 self.include_node(ufunc, uconfig)
 
             if is_function(dependent):
@@ -508,7 +509,10 @@ class Resolver:
                     metas = flatten_annotated(param_type)
                     if use_meta := search_meta(metas):
                         ufunc, uconfig = use_meta
-                        node_factory = param_type.__args__[0] if ufunc is None else ufunc
+                        if is_provided(ufunc):
+                            node_factory = ufunc
+                        else:
+                            node_factory = param_type.__args__[0]
                         inode = self.include_node(node_factory, uconfig)
                         node.dependencies[param.name] = param.replace_type(
                             inode.dependent
@@ -559,15 +563,12 @@ class Resolver:
             if resolve_use(param.default_):
                 raise NotSupportedError(f"Using default value {param} for `use` is not longer supported")
 
-            ufunc, uconfig = use_meta
-            # if ufunc is None:
-                # ufunc = param_type.__args__[0]
-            # else:
-                # factory = ufunc
-            if ufunc is None:
-                ufunc = param_type.__args__[0]
+            use_dep, uconfig = use_meta
 
-            use_node = self.include_node(ufunc, uconfig)
+            if not is_provided(use_dep):
+                use_dep = param_type.__args__[0]
+
+            use_node = self.include_node(use_dep, uconfig)
             param_type = use_node.dependent
 
             if any(x in config.ignore for x in (i, name, param_type)):

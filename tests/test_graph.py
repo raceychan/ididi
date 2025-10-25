@@ -1008,6 +1008,19 @@ async def test_dependent_conflicts():
     assert t1 is t2
 
 
+def test_graph_analyze_reuse_dependent():
+    dg = Graph()
+
+    class User: ...
+
+    def user_factory() -> Annotated[User, use(reuse=True)]:
+        return User()
+
+        
+    assert dg.resolve(user_factory) is dg.resolve(user_factory)
+
+
+       
 
     
 

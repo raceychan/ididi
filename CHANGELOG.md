@@ -1,5 +1,7 @@
 # Changelog
 
+
+
 ## [0.1.1] - 2024-10-29
 
 ### Added
@@ -1431,37 +1433,58 @@ the reason being that, in most application you would need to resolve scoped obje
 
 ## version 1.7.1
 
+### Highlights
+- Graph.merge now raises `ConfigConflictError` when two graphs offer the same dependency with conflicting node config.
+- `use()` can be called with configuration overrides only; the annotated type becomes the default target.
+- `use` markers now work in return annotations, so factories can tune node config directly from their type hints.
 
-### Improvements
+### Details
+- **ConfigConflictError on merge**: merging graphs that both provide a dependency at the same resolve priority now fails fast if the configs disagree. The regression test below (`tests/test_graph.py::test_merge_rejects_conflicting_configs`) captures the behaviour:
+  ```python
+  import pytest
+  from ididi import Graph
+  from ididi.errors import ConfigConflictError
 
+  def test_merge_rejects_conflicting_configs():
+      g1 = Graph()
+      g2 = Graph()
 
-- `Graph.merge` now merges non-default `NodeConfig` values from the incoming graph.  Configuration such as `reuse`, `scope`, or custom factories is preserved instead of silently resetting to defaults, so merged graphs behave exactly like their sources without extra manual patching.
-    - Before: only nodes that arrived with a higher resolve order would overwrite the current graph, meaning equal-or-lower priority nodes failed to propagate their tuned config.
-    - After: resolve-order ties still absorb the incoming node’s non-default config values (while skipping defaults), keeping lifetime and factory settings in sync across graphs.
-    ```python
-    async def test_graph_merge_with_node():
-        g1 = Graph()
-        g2 = Graph()
-        
-        class Connection: ...
-        class Resource: ...
-    
-        @g1.node(reuse=True)
-        @g2.node
-        async def get_conn() -> AsyncResource[Connection]:
-            yield Connection()
-    
-        @g1.node
-        @g2.node(reuse=True)
-        async def get_resource() -> AsyncResource[Resource]:
-            yield Resource()
-    
-        g2.merge(g1)
-    
-        assert g2.nodes[Connection].config.reuse
-        assert g2.nodes[Resource].config.reuse
-    ```
-    *Benefit*: graph composition keeps the intent of the original nodes, preventing subtle lifetime regressions when federating graphs across services or test fixtures.
+      class Cache: ...
 
-- The typing for `Graph.resolve` drops the `ParamSpec` passthrough (`P.args` / `P.kwargs`).  Callers can now resolve dependencies with only the arguments they need without mypy/pyright errors, reflecting how the resolver is used in practice.
-    *Benefit*: smoother IDE and type-checker experience when partially supplying dependencies, while runtime behaviour stays the same.
+      g1.node(Cache, reuse=True)
+      g2.node(Cache, reuse=False)
+
+      with pytest.raises(ConfigConflictError):
+          g1.merge(g2)
+  ```
+- **Default `use` target**: when only config keywords are supplied (`use(reuse=True)`), the annotated dependency is used automatically. See `tests/features/test_entry.py::test_entry_with_default_use`:
+  ```python
+  from typing import Annotated
+
+  from ididi import Graph, use
+
+  async def test_entry_with_default_use():
+      class A: ...
+
+      async def main(a: Annotated[A, use(reuse=True)]) -> None:
+          assert isinstance(a, A)
+
+      graph = Graph()
+      await graph.entry(main)()
+  ```
+- **Return-annotation support**: factories can embed `use()` markers in their return type to config resolvability of its output:
+
+```python
+from typing import Annotated
+from ididi import Graph, use
+
+def test_graph_analyze_reuse_dependent():
+    dg = Graph()
+
+    class User: ...
+
+    def user_factory() -> Annotated[User, use(reuse=True)]:
+        return User()
+
+    assert dg.resolve(user_factory) is dg.resolve(user_factory)
+```
