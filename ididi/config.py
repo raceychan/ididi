@@ -5,6 +5,7 @@ from typing import Any, Final, Iterable, Literal
 from .interfaces import GraphIgnore, GraphIgnoreConfig, NodeIgnore, NodeIgnoreConfig
 
 EmptyIgnore: Final[tuple[Any]] = tuple()
+DEFAULT_REUSABILITY: bool = False
 
 
 class FrozenSlot:
@@ -46,7 +47,7 @@ class NodeConfig(FrozenSlot):
     def __init__(
         self,
         *,
-        reuse: bool = False,
+        reuse: bool = DEFAULT_REUSABILITY,
         ignore: NodeIgnoreConfig = EmptyIgnore,
     ):
 
@@ -61,6 +62,12 @@ class NodeConfig(FrozenSlot):
 
         object.__setattr__(self, "ignore", ignore)
         object.__setattr__(self, "reuse", reuse)
+
+    def merge(self, other: "NodeConfig") -> "NodeConfig":
+        reuse = other.reuse if other.reuse != DEFAULT_REUSABILITY else self.reuse
+        ignore = self.ignore + other.ignore
+        return NodeConfig(reuse=reuse, ignore=ignore)
+
 
 
 class GraphConfig(FrozenSlot):
@@ -122,3 +129,8 @@ ResolveOrder: Final[dict[FactoryType, int]] = {
     RESOURCE_FACTORY: 3,
     ARESOURCE_FACTORY: 3,
 }
+"""
+This defines the order of resolving node factory when conflict happens
+The idea is that, when a specific factory is provided, then the default node 
+would be override
+"""

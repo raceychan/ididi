@@ -8,7 +8,7 @@ from unittest import mock
 
 import pytest
 
-from ididi import Graph, Ignore, Resolver, use
+from ididi import AsyncResource, Graph, Ignore, Resolver, use
 from ididi.errors import (
     ABCNotImplementedError,
     AsyncResourceInSyncError,
@@ -831,7 +831,8 @@ def test_resolve_instance_method_raise_error():
 
 
 class Conn:
-    def __init__(self, url: str): ...
+    def __init__(self, url: str): 
+        self.url = url
 
 
 async def get_conn() -> Conn:
@@ -842,6 +843,7 @@ async def test_aresolve_override():
     dg = Graph()
 
     c = await dg.aresolve(Conn, url="url")
+    assert c.url == "url"
 
 
 def test_dg_get_node():
@@ -858,7 +860,7 @@ def test_factory_return_annt():
     dg = Graph()
 
     def get_conn() -> ty.Annotated[Conn, "aloha"]:
-        return Conn()
+        return Conn("ahh")
 
     class DB:
         def __init__(self, conn: ty.Annotated[Conn, use(get_conn)]): ...
@@ -937,3 +939,47 @@ async def test_ididi_cheatsheet():
     # context manager is exited when scope is exited.
     assert side_effect[0] == "callbacked"
     # registered callback will aslo be called.
+
+
+async def test_graph_add_nodes():
+
+    class Connection: ...
+
+    async def get_conn() -> AsyncResource[Connection]:
+        yield Connection()
+
+    basic_graph = Graph()
+    basic_graph.add_nodes((get_conn, {"reuse": True}))
+
+    
+    main_graph = Graph()
+    main_graph.merge(basic_graph)
+    assert main_graph.nodes[Connection].config.reuse
+
+
+async def test_graph_merge_with_node():
+    g1 = Graph()
+    g2 = Graph()
+    
+    class Connection: ...
+    class Resource: ...
+
+
+    @g1.node(reuse=True)
+    @g2.node
+    async def get_conn() -> AsyncResource[Connection]:
+        yield Connection()
+
+    @g1.node
+    @g2.node(reuse=True)
+    async def get_resource() -> AsyncResource[Resource]:
+        yield Resource()
+
+    g2.merge(g1)
+
+    assert g2.nodes[Connection].config.reuse
+    assert g2.nodes[Resource].config.reuse
+
+
+
+        

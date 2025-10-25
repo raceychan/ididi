@@ -91,7 +91,7 @@ def test_entry(dg: Graph, dependents: list[type]):
     def create_user(
         user_name: Ignore[str],
         user_email: Ignore[str],
-        service: UserService,
+        service: ty.Annotated[UserService, use(UserService)],
         conn: ty.Annotated[Conn, use(get_conn)],
         repo: ty.Annotated[Repo, use(get_repo)],
         cache: ty.Annotated[Cache, use(get_cache)],

@@ -261,7 +261,7 @@ def flatten_annotated(typ: Annotated[Any, Any]) -> list[Any]:
 @lru_cache(CacheMax)
 def get_bases(
     dependent: Union[type, GenericAlias],
-) -> tuple[Union[type, GenericAlias], ...]:
+) -> tuple[type, ...]:
     if not isinstance(dependent, type):
         return (dependent,)
 

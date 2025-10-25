@@ -1427,3 +1427,47 @@ the reason being that, in most application you would need to resolve scoped obje
 
 1. scoped object often should not be reused(such as `sqlalchemy.AsyncConnection`), and 
 2. once an object is transient, all of its parents have to be transient as well.
+
+
+## version 1.7.1
+
+
+### Improvements
+
+
+1. merge node config upon graph merge
+
+rule:
+only merge non-default values
+
+```python
+async def test_graph_merge_with_node():
+    g1 = Graph()
+    g2 = Graph()
+    
+    class Connection: ...
+    class Resource: ...
+
+
+    @g1.node(reuse=True)
+    @g2.node
+    async def get_conn() -> AsyncResource[Connection]:
+        yield Connection()
+
+    @g1.node
+    @g2.node(reuse=True)
+    async def get_resource() -> AsyncResource[Resource]:
+        yield Resource()
+
+    g2.merge(g1)
+
+    assert g2.nodes[Connection].config.reuse
+    assert g2.nodes[Resource].config.reuse
+```
+
+
+2. typing
+
+no longer perserve P.args and P.kwargs for resolve
+this is because user use graph.resolve mostly without
+all params, and type checker would complain 

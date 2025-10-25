@@ -1,10 +1,11 @@
-from typing import Any, ForwardRef, Mapping, TypeVar, Union
+from typing import Any, ForwardRef, Hashable, Mapping, TypeVar, Union
 from typing import _eval_type as ty_eval_type  # type: ignore
-from typing import cast, Hashable
+from typing import cast
 
 from typing_extensions import ParamSpec, TypeGuard
 
-T = TypeVar("T", bound=Hashable)
+H = TypeVar("H", bound=Hashable)
+T = TypeVar("T")
 R = TypeVar("R")
 P = ParamSpec("P")
 C = TypeVar("C", covariant=True)

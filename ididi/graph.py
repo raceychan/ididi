@@ -10,8 +10,7 @@ from typing import (
     Annotated,
     Any,
     AsyncContextManager,
-    AsyncGenerator,
-    Callable,
+    Awaitable,
     ContextManager,
     Final,
     Hashable,
@@ -68,11 +67,11 @@ from .interfaces import (
     GraphIgnoreConfig,
     IAsyncFactory,
     IDependent,
-    IFactory,
     INode,
     INodeConfig,
     TDecor,
     TEntryDecor,
+    IFactory,
 )
 from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import P, T
@@ -81,6 +80,7 @@ AnyScope = Union["SyncScope", "AsyncScope"]
 ScopeToken = Token[AnyScope]
 ScopeContext = ContextVar[AnyScope]
 _SCOPE_CONTEXT: Final[ScopeContext] = ContextVar("idid_scope_ctx")
+
 
 
 def register_dependent(
@@ -172,7 +172,7 @@ async def _aresolve_dfs(
 @asynccontextmanager
 async def syncscope_in_thread(
     loop: AbstractEventLoop, workers: ThreadPoolExecutor, cm: ContextManager[T]
-) -> AsyncGenerator[T, None]:
+):
     exc_type, exc, tb = None, None, None
     ctx = copy_context()
     cm_enter = partial(ctx.run, cm.__enter__)
@@ -220,7 +220,7 @@ class Resolver:
             f"resolved={len(self._resolved_singletons)})"
         )
 
-    def get(self, dep: INode[P, T]) -> Union[DependentNode, None]:
+    def get(self, dep: IDependent[Any]) -> Union[DependentNode, None]:
         if node := self._nodes.get(dep):
             return node
         return self._nodes.get(resolve_node_type(dep))
@@ -394,7 +394,7 @@ class Resolver:
         return dependent_type in self._registered_singletons
 
     @lru_cache(CacheMax)
-    def should_be_scoped(self, dep_type: INode[P, T]) -> bool:
+    def should_be_scoped(self, dep_type: IDependent[Any]) -> bool:
         if get_origin(dep_type) is Annotated:
             metas = flatten_annotated(dep_type)
             if IGNORE_PARAM_MARK in metas:
@@ -455,7 +455,7 @@ class Resolver:
 
     def analyze(
         self,
-        dependent: INode[P, T],
+        dependent: IDependent[Any],
         *,
         config: NodeConfig = DefaultConfig,
         ignore: tuple[Union[str, type, TypeAliasType], ...] = EmptyIgnore,
@@ -468,9 +468,9 @@ class Resolver:
         if is_unsolvable_type(dependent_type):
             raise TopLevelBulitinTypeError(dependent_type)
 
-        current_path: list[IDependent[T]] = []
+        current_path: list[IDependent[Any]] = []
 
-        def dfs(dep: INode[P, T]) -> DependentNode:
+        def dfs(dep: IDependent[Any]) -> DependentNode:
             # when we register a concrete node we also register its bases to type_registry
             node_graph_ignore: tuple[Union[str, type, TypeAliasType], ...]
 
@@ -528,7 +528,7 @@ class Resolver:
         return dfs(dependent_type)
 
     def analyze_params(
-        self, ufunc: Callable[P, T], config: NodeConfig = DefaultConfig
+        self, ufunc: IFactory[P, T], config: NodeConfig = DefaultConfig
     ) -> tuple[bool, list[tuple[str, IDependent[Any]]]]:
         deps = Dependencies.from_signature(
             signature=get_typed_signature(ufunc), function=ufunc
@@ -621,13 +621,29 @@ class Resolver:
             register_dependent(self._resolved_singletons, dependent, instance)
         return instance
 
+    @overload
     def resolve(
         self,
-        dependent: IFactory[P, T],
+        dependent: INode[P, T],
+        /,
+    ) -> T: ...
+
+    @overload
+    def resolve(
+        self,
+        dependent: INode[P, T],
         /,
         *args: P.args,
         **overrides: P.kwargs,
-    ):
+    ) -> T: ...
+
+    def resolve(
+        self,
+        dependent: INode[P, T],
+        /,
+        *args: Any,
+        **overrides: Any,
+    ) -> T:
         if args:
             raise PositionalOverrideError(args)
 
@@ -640,13 +656,28 @@ class Resolver:
         return _resolve_dfs(
             self, self._nodes, self._resolved_singletons, node.dependent, overrides
         )
-
+    @overload
     async def aresolve(
         self,
-        dependent: IFactory[P, T],
+        dependent: INode[P, T],
+        /,
+    ) -> T: ...
+
+    @overload
+    async def aresolve(
+        self,
+        dependent: INode[P, T],
         /,
         *args: P.args,
         **overrides: P.kwargs,
+    ) -> T: ...
+
+    async def aresolve(
+        self,
+        dependent: INode[P, T],
+        /,
+        *args: Any,
+        **overrides: Any,
     ) -> T:
         if args:
             raise PositionalOverrideError(args)
@@ -671,6 +702,8 @@ class Resolver:
         if ori_node := self._nodes.get(node.dependent):
             if should_override(node, ori_node):
                 self._remove_node(ori_node)
+            else:
+                return node
         self._register_node(node)
         return node
 
@@ -703,7 +736,7 @@ class Resolver:
 
     def entry(
         self,
-        func: Union[Callable[P, T], IAsyncFactory[P, T], None] = None,
+        func: Union[IFactory[P, T], IAsyncFactory[P, T], None] = None,
         **iconfig: Unpack[INodeConfig],
     ) -> Union[EntryFunc[P, T], TEntryDecor]:
         if not func:
@@ -756,7 +789,7 @@ class Resolver:
 
                 f = _async_wrapper
         else:
-            sync_func = func
+            sync_func = cast(IFactory[P, T], func)
             if require_scope:
 
                 @wraps(sync_func)
@@ -785,6 +818,7 @@ class Resolver:
 
         setattr(f, replace.__name__, replace)
         return f
+
     @overload
     def node(self, dependent: type[T], **config: Unpack[INodeConfig]) -> type[T]: ...
     @overload
@@ -810,11 +844,11 @@ class Resolver:
         return dependent
 
     def add_nodes(
-        self, *nodes: Union[IDependent[T], tuple[IDependent[T], INodeConfig]]
+        self, *nodes: Union[IDependent[Any], tuple[IDependent[Any], INodeConfig]]
     ) -> None:
         for node in nodes:
             if isinstance(node, tuple):
-                node = cast(tuple[IDependent[T], INodeConfig], node)
+                node = cast(tuple[IDependent[Any], INodeConfig], node)
                 node, nconfig = node
                 self.node(node, **nconfig)
             else:
@@ -824,7 +858,7 @@ class Resolver:
 class ResolveScope(Resolver):
     _name: "Maybe[Hashable]"
     _pre: "Maybe[ResolveScope]"
-    _stack: "Union[ExitStack, AsyncExitStack]"
+    # _stack: "Union[ExitStack, AsyncExitStack]"
 
     @property
     def name(self) -> Hashable:
@@ -842,8 +876,7 @@ class ResolveScope(Resolver):
             f"resolved={len(self._resolved_singletons)})"
         )
 
-    def enter_context(self, context: ContextManager[T]) -> T:
-        return self._stack.enter_context(context)
+
 
     def get_scope(self, name: Hashable) -> "Self":
         if name == self._name:
@@ -892,6 +925,9 @@ class SyncScope(ResolveScope):
     ) -> None:
         self._stack.__exit__(exc_type, exc_value, traceback)
 
+    def enter_context(self, context: ContextManager[T]) -> T:
+        return self._stack.enter_context(context)
+
     def resolve_callback(
         self,
         resolved: ContextManager[T],
@@ -902,7 +938,7 @@ class SyncScope(ResolveScope):
         if factory_type in ("default", "function"):
             if is_reuse:
                 register_dependent(self._resolved_singletons, dependent, resolved)
-            return resolved
+            return cast(T, resolved)
 
         if factory_type == "aresource":
             raise AsyncResourceInSyncError(dependent)
@@ -912,7 +948,7 @@ class SyncScope(ResolveScope):
         return instance
 
     def register_exit_callback(
-        self, cb: Callable[P, None], *args: P.args, **kwargs: P.kwargs
+        self, cb: IFactory[P, None], *args: P.args, **kwargs: P.kwargs
     ):
         self._stack.callback(cb, *args, **kwargs)
 
@@ -950,13 +986,32 @@ class AsyncScope(ResolveScope):
     ) -> None:
         await self._stack.__aexit__(exc_type, exc_value, traceback)
 
+    def enter_context(self, context: ContextManager[T]) -> T:
+        return self._stack.enter_context(context)
+
     async def enter_async_context(
         self, context: Union[ContextManager[T], AsyncContextManager[T]]
     ) -> T:
         return await self._stack.enter_async_context(context)
 
+    @overload
     async def resolve(
-        self, dependent: IFactory[P, T], /, *args: P.args, **kwargs: P.kwargs
+        self,
+        dependent: INode[P, T],
+        /,
+    ) -> T: ...
+
+    @overload
+    async def resolve(
+        self,
+        dependent: INode[P, T],
+        /,
+        *args: P.args,
+        **overrides: P.kwargs,
+    ) -> T: ...
+
+    async def resolve(
+        self, dependent: INode[P, T], /, *args: Any, **kwargs:Any 
     ) -> T:
         return await super().aresolve(dependent, *args, **kwargs)
 
@@ -968,13 +1023,19 @@ class AsyncScope(ResolveScope):
         is_reuse: bool,
     ) -> T:
         if factory_type in ("default", "function", "afunction"):
-            instance = await resolved if isawaitable(resolved) else resolved
+            fac = cast(Union[T, Awaitable[T]], resolved)
+            if isawaitable(fac):
+                instance: T = await fac
+            else:
+                instance: T = fac
             if is_reuse:
                 register_dependent(self._resolved_singletons, dependent, instance)
             return instance
 
         if factory_type == "resource":
-            resolved = syncscope_in_thread(self._loop, self._workers, resolved)
+            resolved = cast(ContextManager[T], resolved)
+            wrapped  = syncscope_in_thread(self._loop, self._workers, resolved)
+            resolved = cast(AsyncContextManager[T], wrapped)
 
         instance = await self.enter_async_context(resolved)
 
@@ -983,7 +1044,7 @@ class AsyncScope(ResolveScope):
         return instance
 
     def register_exit_callback(
-        self, cb: Callable[P, None], *args: P.args, **kwargs: P.kwargs
+        self, cb: IFactory[P, Awaitable[None]], *args: P.args, **kwargs: P.kwargs
     ):
         self._stack.push_async_callback(cb, *args, **kwargs)
 
@@ -1032,7 +1093,8 @@ class Graph(Resolver):
                     self._analyzed_nodes[dep_type] = other_resolved
                 continue
 
-            # the conflict case, we only update if current node is not resolved
+            current_node.config = current_node.config.merge(other_node.config)
+
             if not current_resolved and other_resolved:
                 self._analyzed_nodes[dep_type] = other_resolved
 

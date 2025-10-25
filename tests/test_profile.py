@@ -261,7 +261,7 @@ async def test_create_root_reuse():
     }
 
     for c in classes.values():
-        dg.node(c)
+        dg.node(c, reuse=True)
 
     dg.remove_dependent(RootService)
     dg.node(RootService, reuse=False)
@@ -275,5 +275,5 @@ async def test_create_root_reuse():
     print(f"ididi resolve {res}")
 
     print(
-        f"current implementation(reuse dependencies) is {round(res / menual, 6)} times slower"
+        f"current implementation is {round(res / menual, 6)} times slower"
     )
