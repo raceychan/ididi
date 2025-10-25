@@ -107,6 +107,11 @@ class UnsolvableParameterError(UnsolvableNodeError):
     Raised when a parameter is unsolveable.
     """
 
+class ConfigConflictError(UnsolvableNodeError):
+    """
+    Raised when two nodes with same resolve order 
+    but different config
+    """
     
 
 

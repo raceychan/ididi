@@ -63,12 +63,6 @@ class NodeConfig(FrozenSlot):
         object.__setattr__(self, "ignore", ignore)
         object.__setattr__(self, "reuse", reuse)
 
-    def merge(self, other: "NodeConfig") -> "NodeConfig":
-        reuse = other.reuse if other.reuse != DEFAULT_REUSABILITY else self.reuse
-        ignore = self.ignore + other.ignore
-        return NodeConfig(reuse=reuse, ignore=ignore)
-
-
 
 class GraphConfig(FrozenSlot):
     __slots__ = ("self_inject", "ignore")

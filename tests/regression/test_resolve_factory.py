@@ -41,7 +41,7 @@ async def test_graph_resolve_complex_factory():
         u = User(1, address)
         yield u
 
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError): # ignoring address, so missing params
         async with dg.ascope() as scope:
             user = await scope.resolve(user_factory)
 

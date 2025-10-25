@@ -957,9 +957,10 @@ async def test_graph_add_nodes():
     assert main_graph.nodes[Connection].config.reuse
 
 
+@pytest.mark.debug
 async def test_graph_merge_with_node():
-    g1 = Graph()
-    g2 = Graph()
+    g1 = Graph("g1")
+    g2 = Graph("g2")
     
     class Connection: ...
     class Resource: ...
@@ -969,6 +970,7 @@ async def test_graph_merge_with_node():
     @g2.node
     async def get_conn() -> AsyncResource[Connection]:
         yield Connection()
+
 
     @g1.node
     @g2.node(reuse=True)

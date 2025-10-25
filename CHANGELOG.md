@@ -1435,39 +1435,33 @@ the reason being that, in most application you would need to resolve scoped obje
 ### Improvements
 
 
-1. merge node config upon graph merge
-
-rule:
-only merge non-default values
-
-```python
-async def test_graph_merge_with_node():
-    g1 = Graph()
-    g2 = Graph()
+- `Graph.merge` now merges non-default `NodeConfig` values from the incoming graph.  Configuration such as `reuse`, `scope`, or custom factories is preserved instead of silently resetting to defaults, so merged graphs behave exactly like their sources without extra manual patching.
+    - Before: only nodes that arrived with a higher resolve order would overwrite the current graph, meaning equal-or-lower priority nodes failed to propagate their tuned config.
+    - After: resolve-order ties still absorb the incoming node’s non-default config values (while skipping defaults), keeping lifetime and factory settings in sync across graphs.
+    ```python
+    async def test_graph_merge_with_node():
+        g1 = Graph()
+        g2 = Graph()
+        
+        class Connection: ...
+        class Resource: ...
     
-    class Connection: ...
-    class Resource: ...
+        @g1.node(reuse=True)
+        @g2.node
+        async def get_conn() -> AsyncResource[Connection]:
+            yield Connection()
+    
+        @g1.node
+        @g2.node(reuse=True)
+        async def get_resource() -> AsyncResource[Resource]:
+            yield Resource()
+    
+        g2.merge(g1)
+    
+        assert g2.nodes[Connection].config.reuse
+        assert g2.nodes[Resource].config.reuse
+    ```
+    *Benefit*: graph composition keeps the intent of the original nodes, preventing subtle lifetime regressions when federating graphs across services or test fixtures.
 
-
-    @g1.node(reuse=True)
-    @g2.node
-    async def get_conn() -> AsyncResource[Connection]:
-        yield Connection()
-
-    @g1.node
-    @g2.node(reuse=True)
-    async def get_resource() -> AsyncResource[Resource]:
-        yield Resource()
-
-    g2.merge(g1)
-
-    assert g2.nodes[Connection].config.reuse
-    assert g2.nodes[Resource].config.reuse
-```
-
-
-2. typing
-
-no longer perserve P.args and P.kwargs for resolve
-this is because user use graph.resolve mostly without
-all params, and type checker would complain 
+- The typing for `Graph.resolve` drops the `ParamSpec` passthrough (`P.args` / `P.kwargs`).  Callers can now resolve dependencies with only the arguments they need without mypy/pyright errors, reflecting how the resolver is used in practice.
+    *Benefit*: smoother IDE and type-checker experience when partially supplying dependencies, while runtime behaviour stays the same.

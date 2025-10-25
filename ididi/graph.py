@@ -52,6 +52,7 @@ from .config import CacheMax, DefaultScopeName, EmptyIgnore, FactoryType, GraphC
 from .errors import (
     AsyncResourceInSyncError,
     CircularDependencyDetectedError,
+    ConfigConflictError,
     MergeWithScopeStartedError,
     NotSupportedError,
     OutOfScopeError,
@@ -67,11 +68,11 @@ from .interfaces import (
     GraphIgnoreConfig,
     IAsyncFactory,
     IDependent,
+    IFactory,
     INode,
     INodeConfig,
     TDecor,
     TEntryDecor,
-    IFactory,
 )
 from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import P, T
@@ -198,12 +199,15 @@ class SharedData(TypedDict):
 
 
 class Resolver:
+
     def __init__(
         self,
+        name: Maybe[Hashable],
         resolved_singletons: ResolvedSingletons[Any],
         registered_singletons: set[IDependent[Any]],
         **args: Unpack[SharedData],
     ):
+        self._name = name
         self._nodes = args["nodes"]
         self._analyzed_nodes = args["analyzed_nodes"]
         self._type_registry = args["type_registry"]
@@ -213,9 +217,15 @@ class Resolver:
         self._registered_singletons = registered_singletons
         self._resolved_singletons = resolved_singletons
 
+    @property
+    def name(self) -> Hashable:
+        return self._name
+
     def __repr__(self) -> str:
+        name = f"name={self._name!r}, " if self._name is not MISSING else ""
         return (
             f"{self.__class__.__name__}("
+            f"{name}"
             f"nodes={len(self._nodes)}, "
             f"resolved={len(self._resolved_singletons)})"
         )
@@ -858,7 +868,6 @@ class Resolver:
 class ResolveScope(Resolver):
     _name: "Maybe[Hashable]"
     _pre: "Maybe[ResolveScope]"
-    # _stack: "Union[ExitStack, AsyncExitStack]"
 
     @property
     def name(self) -> Hashable:
@@ -905,12 +914,12 @@ class SyncScope(ResolveScope):
         **args: Unpack[SharedData],
     ):
         super().__init__(
+            name=name,
             **args,
             resolved_singletons=resolved_singletons,
             registered_singletons=registered_singletons,
         )
 
-        self._name = name
         self._pre = pre
         self._stack = ExitStack()
 
@@ -966,11 +975,11 @@ class AsyncScope(ResolveScope):
         **args: Unpack[SharedData],
     ):
         super().__init__(
+            name=name,
             **args,
             resolved_singletons=resolved_singletons,
             registered_singletons=registered_singletons,
         )
-        self._name = name
         self._pre = pre
         self._stack = AsyncExitStack()
         self._loop = get_running_loop()
@@ -1058,6 +1067,7 @@ class Graph(Resolver):
 
     def __init__(
         self,
+        name: Maybe[str] = MISSING,
         *,
         self_inject: bool = True,
         ignore: GraphIgnoreConfig = EmptyIgnore,
@@ -1066,6 +1076,7 @@ class Graph(Resolver):
         config = GraphConfig(self_inject=self_inject, ignore=ignore)
 
         super().__init__(
+            name=name,
             nodes=dict(),
             analyzed_nodes=dict(),
             type_registry=TypeRegistry(),
@@ -1093,7 +1104,10 @@ class Graph(Resolver):
                     self._analyzed_nodes[dep_type] = other_resolved
                 continue
 
-            current_node.config = current_node.config.merge(other_node.config)
+            if other_node.config != current_node.config:
+                pass
+                # raise ConfigConflictError(f"{other}[{other_node.factory}, {other_node.config}] has the same resolve order as {self}[{current_node.factory}, {current_node.config}], but differs in configuration")
+
 
             if not current_resolved and other_resolved:
                 self._analyzed_nodes[dep_type] = other_resolved
