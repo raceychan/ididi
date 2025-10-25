@@ -14,6 +14,7 @@ from typing import (
     Union,
     cast,
     get_origin,
+    overload,
 )
 
 from typing_extensions import Unpack
@@ -71,8 +72,13 @@ Scoped = Annotated[Union[Generator[T, None, None], AsyncGenerator[T, None]], "sc
 
 # ========== NotImplemented =======
 
+@overload
+def use(**iconfig: Unpack[INodeConfig]) -> Any: ...
 
-def use(func: Maybe[INodeFactory[P, T]] = MISSING, **iconfig: Unpack[INodeConfig]) -> T:
+@overload
+def use(func: Maybe[INode[P, T]], **iconfig: Unpack[INodeConfig]) -> T: ...
+
+def use(func: Maybe[INode[P, T]] = MISSING, **iconfig: Unpack[INodeConfig]) -> T:
     """
     An annotation to let ididi knows what factory method to use
     without explicitly register it.
@@ -115,8 +121,6 @@ def should_override(other_node: "DependentNode", current_node: "DependentNode") 
 
     other_priority = ResolveOrder[other_node.factory_type]
     current_priority = ResolveOrder[current_node.factory_type]
-
-
     return  other_priority > current_priority
 
 
@@ -124,16 +128,17 @@ def resolve_marks(annt: Any) -> IDependent[Any]:
     annotate_meta = flatten_annotated(annt)
 
     if use_meta := search_meta(annotate_meta):
-        ufunc, _ = use_meta
-        if not is_provided(ufunc):
-            func_return = get_args(annt)[0]
-        else:
-            func_return = get_typed_signature(ufunc).return_annotation
+        param_type = annt
+        # ufunc, _ = use_meta
+        # if not is_provided(ufunc):
+        #     func_return = get_args(annt)[0]
+        # else:
+        #     func_return = get_typed_signature(ufunc).return_annotation
 
-        if get_origin(func_return) is Annotated:
-            param_type = ufunc
-        else:
-            param_type = annt
+        # if get_origin(func_return) is Annotated:
+        #     param_type = ufunc
+        # else:
+        #     param_type = annt
     elif IGNORE_PARAM_MARK in annotate_meta:
         return annt
     else:

@@ -514,6 +514,8 @@ class Resolver:
                         else:
                             node_factory = param_type.__args__[0]
                         inode = self.include_node(node_factory, uconfig)
+                        if inode.config != uconfig:
+                            raise ConfigConflictError(f"Dependency {param.name!r} from {node.factory.__qualname__} has config {uconfig} which differs from {inode.config} of {inode.factory.__qualname__}")
                         node.dependencies[param.name] = param.replace_type(
                             inode.dependent
                         )
@@ -521,7 +523,7 @@ class Resolver:
                         continue
                 elif is_function(param_type):
                     fnode = DependentNode.from_node(param_type, config=config)
-                    self._nodes[param_type] = fnode
+                    self._nodes[fnode.dependent] = fnode
                     node.dependencies[param.name] = param.replace_type(fnode.dependent)
                     self.analyze(fnode.factory, ignore=node_graph_ignore)
                     continue

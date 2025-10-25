@@ -12,6 +12,7 @@ from ididi import AsyncResource, Graph, Ignore, NodeConfig, Resolver, use
 from ididi.errors import (
     ABCNotImplementedError,
     AsyncResourceInSyncError,
+    ConfigConflictError,
     MergeWithScopeStartedError,
     MissingAnnotationError,
     NotSupportedError,
@@ -957,7 +958,6 @@ async def test_graph_add_nodes():
     assert main_graph.nodes[Connection].config.reuse
 
 
-@pytest.mark.debug
 async def test_graph_merge_with_node():
     g1 = Graph("g1")
     g2 = Graph("g2")
@@ -972,7 +972,6 @@ async def test_graph_merge_with_node():
     assert g1.nodes[Resource].config.reuse
         
 
-@pytest.mark.debug
 async def test_dependent_conflicts():
     g = Graph("g1")
 
@@ -1020,7 +1019,33 @@ def test_graph_analyze_reuse_dependent():
     assert dg.resolve(user_factory) is dg.resolve(user_factory)
 
 
-       
+@pytest.mark.debug
+def test_graph_analyze_reuse_dependentcy():
+    dg = Graph()
+
+    class User: ...
+
+    # @dg.node
+    def user_factory() -> Annotated[User, use(reuse=True, ignore=(5))]:
+        return User()
+
+    class UserManager:
+        def __init__(self, user: User):
+            self.user = user
+
+
+    # BUG: if user_factory is registred once, it won't be registered again
+    # we actually want it to raise exception here
+    @dg.node
+    def user_manager_factory(user: Annotated[User, use(user_factory, reuse=False, ignore=(1,2,3))]) -> UserManager:
+        return UserManager(user)
+
+
+    with pytest.raises(ConfigConflictError):
+        dg.analyze(user_manager_factory)
+
+
+    # t adassert dg.nodes[User].config.ignore == (1,2,3)
 
     
 
