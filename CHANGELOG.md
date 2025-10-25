@@ -1488,3 +1488,35 @@ def test_graph_analyze_reuse_dependent():
 
     assert dg.resolve(user_factory) is dg.resolve(user_factory)
 ```
+
+## version 1.7.2
+
+### Fix:
+
+a quick fix, now raise node config conflicts error for case like this:
+
+```python
+@pytest.mark.debug
+def test_graph_analyze_reuse_dependentcy():
+    dg = Graph()
+
+    class User: ...
+
+    @dg.node
+    def user_factory() -> Annotated[User, use(reuse=True, ignore=(5))]:
+        return User()
+
+    class UserManager:
+        def __init__(self, user: User):
+            self.user = user
+
+
+    @dg.node
+    def user_manager_factory(user: Annotated[User, use(user_factory, reuse=False, ignore=(1,2,3))]) -> UserManager:
+        return UserManager(user)
+
+
+    with pytest.raises(ConfigConflictError):
+        dg.analyze(user_manager_factory)
+```
+

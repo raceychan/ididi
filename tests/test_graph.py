@@ -1025,7 +1025,7 @@ def test_graph_analyze_reuse_dependentcy():
 
     class User: ...
 
-    # @dg.node
+    @dg.node
     def user_factory() -> Annotated[User, use(reuse=True, ignore=(5))]:
         return User()
 
@@ -1034,8 +1034,6 @@ def test_graph_analyze_reuse_dependentcy():
             self.user = user
 
 
-    # BUG: if user_factory is registred once, it won't be registered again
-    # we actually want it to raise exception here
     @dg.node
     def user_manager_factory(user: Annotated[User, use(user_factory, reuse=False, ignore=(1,2,3))]) -> UserManager:
         return UserManager(user)
@@ -1045,7 +1043,7 @@ def test_graph_analyze_reuse_dependentcy():
         dg.analyze(user_manager_factory)
 
 
-    # t adassert dg.nodes[User].config.ignore == (1,2,3)
+    # assert dg.nodes[User].config.ignore == (1,2,3)
 
     
 
