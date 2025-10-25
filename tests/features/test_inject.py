@@ -9,7 +9,7 @@ def get_user_service() -> UserService:
     return UserService(db=1, auth=2)  # type: ignore
 
 
-async def create_user(service: UserService = use(get_user_service)):
+async def create_user(service: Annotated[UserService , use(get_user_service)]):
     assert isinstance(service, UserService)
     assert service.db == 1
     assert service.auth == 2
@@ -80,17 +80,17 @@ def a_f(time: UTC_DATETIME) -> A:
 
 
 class B:
-    def __init__(self, *, a: A = use(a_f), age: int = 7):
+    def __init__(self, *, a: Annotated[A, use(a_f)], age: int = 7):
         self.alice = a
         self.age = age
 
 
-def b_f(a: A = use(a_f)) -> B:
+def b_f(a: Annotated[A , use(a_f)]) -> B:
     return B(a=a, age=5)
 
 
 class C:
-    def __init__(self, b: B = use(b_f)):
+    def __init__(self, b: Annotated[B , use(b_f)]):
         self.berry = b
 
 

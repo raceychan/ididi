@@ -27,7 +27,7 @@ def test_resolve():
         return Database(config=dg.resolve(DatabaseConfig))
 
     def service_factory(
-        *, db: Database = use(db_fact), auth: AuthenticationService, name: str
+        *, db: Annotated[Database, use(db_fact)], auth: AuthenticationService, name: str
     ) -> UserService:
         return UserService(db=db, auth=auth)
 

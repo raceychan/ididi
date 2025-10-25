@@ -1,4 +1,4 @@
-from typing import NewType
+from typing import Annotated, NewType
 from uuid import uuid4
 
 from ididi import Graph, use
@@ -38,8 +38,8 @@ def default_postal_factory() -> PostalCode:
 class Address:
     def __init__(
         self,
-        postal_code: PostalCode = use(default_postal_factory),
-        address_id: AddressID = use(address_id_factory),
+        postal_code: Annotated[PostalCode, use(default_postal_factory)],
+        address_id: Annotated[AddressID, use(address_id_factory)],
     ):
         self.postal_code = postal_code
         self.address_id = address_id
@@ -49,9 +49,9 @@ class User:
     def __init__(
         self,
         address: Address,
-        name: UserName = use(default_name_factory),
-        age: UserAge = use(default_age_factory),
-        user_id: UserID = use(user_id_factory),
+        name: Annotated[UserName, use(default_name_factory)],
+        age: Annotated[UserAge, use(default_age_factory)],
+        user_id: Annotated[UserID, use(user_id_factory)],
     ):
         self.name = name
         self.age = age

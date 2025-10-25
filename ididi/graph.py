@@ -559,13 +559,15 @@ class Resolver:
             if resolve_use(param.default_):
                 raise NotSupportedError(f"Using default value {param} for `use` is not longer supported")
 
-            factory, uconfig = use_meta
+            ufunc, uconfig = use_meta
+            # if ufunc is None:
+                # ufunc = param_type.__args__[0]
+            # else:
+                # factory = ufunc
             if ufunc is None:
                 ufunc = param_type.__args__[0]
-            else:
-                factory = ufunc
 
-            use_node = self.include_node(factory, uconfig)
+            use_node = self.include_node(ufunc, uconfig)
             param_type = use_node.dependent
 
             if any(x in config.ignore for x in (i, name, param_type)):
@@ -745,6 +747,13 @@ class Resolver:
         if name and name != scope.name:
             return scope.get_scope(name)
         return scope
+
+    @overload
+    def entry(self, **iconfig: Unpack[INodeConfig]) -> TEntryDecor: ...
+    @overload
+    def entry(
+        self, func: IFactory[P, T], **iconfig: Unpack[INodeConfig]
+    ) -> EntryFunc[P, T]: ...
 
     def entry(
         self,

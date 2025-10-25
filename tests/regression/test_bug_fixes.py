@@ -1,5 +1,6 @@
 import abc
 import typing as ty
+from typing import Annotated
 
 import pytest
 
@@ -213,7 +214,7 @@ async def test_resource_across_scope():
         await conn.close()
 
     class Service:
-        def __init__(self, conn: Connection = use(conn_factory)):
+        def __init__(self, conn: Annotated[Connection, use(conn_factory)]):
             self._conn = conn
 
     dg = Graph()

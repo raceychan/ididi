@@ -79,7 +79,6 @@ def use(func: Union[INodeFactory[P, T], None] = None, **iconfig: Unpack[INodeCon
 
     These two are equivalent
     ```
-    def func(service: UserService = use(factory)): ...
     def func(service: Annotated[UserService, use(factory)]): ...
     ```
     """

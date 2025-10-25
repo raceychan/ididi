@@ -292,3 +292,17 @@ async def test_entry_override_with_override():
 
     service_res = await create_user("1", "2")
     assert isinstance(service_res, FakeUserService)
+
+
+
+async def test_entry_with_default_use():
+    class A: ...
+    
+    async def main(a: Annotated[A, use(reuse=True)]) -> None:
+        ...
+
+    graph= Graph()
+
+    main = graph.entry(main)
+
+    await main()
