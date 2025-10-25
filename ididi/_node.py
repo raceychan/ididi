@@ -1,4 +1,3 @@
-import warnings
 from abc import ABC
 from contextlib import asynccontextmanager, contextmanager
 from functools import lru_cache
@@ -47,6 +46,7 @@ from .config import (
 from .errors import (
     ABCNotImplementedError,
     MissingAnnotationError,
+    NotSupportedError,
     ProtocolFacotryNotProvidedError,
 )
 from .interfaces import (
@@ -72,7 +72,7 @@ Scoped = Annotated[Union[Generator[T, None, None], AsyncGenerator[T, None]], "sc
 # ========== NotImplemented =======
 
 
-def use(func: INodeFactory[P, T], **iconfig: Unpack[INodeConfig]) -> T:
+def use(func: Union[INodeFactory[P, T], None] = None, **iconfig: Unpack[INodeConfig]) -> T:
     """
     An annotation to let ididi knows what factory method to use
     without explicitly register it.
@@ -88,24 +88,6 @@ def use(func: INodeFactory[P, T], **iconfig: Unpack[INodeConfig]) -> T:
     annt = Annotated[T, USE_FACTORY_MARK, func, config]
     return cast(T, annt)
 
-
-def reuse(func: INodeFactory[P, T], **iconfig: Unpack[INodeConfig]) -> T:
-    """
-    An annotation to let ididi knows what factory method to use
-    without explicitly register it.
-
-    These two are equivalent
-    ```
-    def func(service: UserService = use(factory)): ...
-    def func(service: Annotated[UserService, use(factory)]): ...
-    ```
-    """
-    if iconfig.get("reuse", MISSING) is MISSING:
-        iconfig["reuse"] = True
-
-    config = NodeConfig(**iconfig)
-    annt = Annotated[T, USE_FACTORY_MARK, func, config]
-    return cast(T, annt)
 
 
 # ============== Ididi marks ===========
@@ -119,7 +101,7 @@ def search_meta(meta: list[Any]) -> Union[tuple[IDependent[Any], NodeConfig], No
     return None
 
 
-def resolve_use(annotation: Any) -> Union[tuple[IDependent[Any], NodeConfig], None]:
+def resolve_use(annotation: Any) -> Union[tuple[Union[IDependent[Any], None], NodeConfig], None]:
     if get_origin(annotation) is not Annotated:
         return
 
@@ -144,7 +126,11 @@ def resolve_marks(annt: Any) -> IDependent[Any]:
 
     if use_meta := search_meta(annotate_meta):
         ufunc, _ = use_meta
-        func_return = get_typed_signature(ufunc).return_annotation
+        if ufunc is None:
+            func_return =  get_args(annt)[0]
+        else:
+            func_return = get_typed_signature(ufunc).return_annotation
+
         if get_origin(func_return) is Annotated:
             param_type = ufunc
         else:
@@ -283,20 +269,8 @@ class Dependencies(dict[str, Dependency]):
             param_type = resolve_annotation(param_annotation)
 
             if get_origin(default) is Annotated:
-                # Deprecation: default-argument style factory (e.g. param=use(factory))
-                # Prefer Annotated style: param: Annotated[T, use(factory)]
-                metas = flatten_annotated(default)
-                if USE_FACTORY_MARK in metas:
-                    warnings.warn(
-                        (
-                            "Using factory via default argument is deprecated and will be removed in 1.7.0. "
-                            "Use Annotated style instead: param: Annotated[T, use(factory)]."
-                        ),
-                        DeprecationWarning,
-                        stacklevel=3,
-                    )
-                param_type = resolve_annotation(default)
-                default = MISSING
+                if resolve_use(default):
+                    raise NotSupportedError(f"Using default value `{param}` for `use` is no longer supported")
 
             if get_origin(param_type) is Annotated:
                 param_type = resolve_marks(param_type)
@@ -483,6 +457,7 @@ class DependentNode:
         signature = get_typed_signature(f, check_return=True)
         dependent: type[T] = resolve_annotation(signature.return_annotation)
 
+
         if get_origin(dependent) is Annotated:
             metas = flatten_annotated(dependent)
             if IGNORE_PARAM_MARK in metas:
@@ -490,6 +465,10 @@ class DependentNode:
                     f, signature=signature, factory_type=factory_type, config=config
                 )
                 return node
+
+            for meta in metas:
+                if isinstance(meta, NodeConfig):
+                    config = meta
 
             dependent, *_ = get_args(dependent)
 

@@ -3,12 +3,12 @@ import sys
 import typing as ty
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Optional
+from typing import Annotated, Optional
 from unittest import mock
 
 import pytest
 
-from ididi import AsyncResource, Graph, Ignore, Resolver, use
+from ididi import AsyncResource, Graph, Ignore, NodeConfig, Resolver, use
 from ididi.errors import (
     ABCNotImplementedError,
     AsyncResourceInSyncError,
@@ -962,26 +962,54 @@ async def test_graph_merge_with_node():
     g1 = Graph("g1")
     g2 = Graph("g2")
     
-    class Connection: ...
     class Resource: ...
 
-
-    @g1.node(reuse=True)
-    @g2.node
-    async def get_conn() -> AsyncResource[Connection]:
-        yield Connection()
-
-
+    # @g2.node(reuse=True)
     @g1.node
-    @g2.node(reuse=True)
-    async def get_resource() -> AsyncResource[Resource]:
+    async def get_resource() -> ty.Annotated[AsyncResource[Resource], NodeConfig(reuse=True)]:
         yield Resource()
 
-    g2.merge(g1)
-
-    assert g2.nodes[Connection].config.reuse
-    assert g2.nodes[Resource].config.reuse
-
-
-
+    assert g1.nodes[Resource].config.reuse
         
+
+@pytest.mark.debug
+async def test_dependent_conflicts():
+    g = Graph("g1")
+
+    
+    class Test:
+        ...
+
+    class B:
+        def __init__(self, t: Test):
+            self.t = t 
+
+    class C:
+        def __init__(self, t: Test):
+            self.t = t
+    
+    #@g.node
+    #def get_b(t: Annotated[Test, use(Test, reuse=False)]) -> B:
+    #    return B(t)
+
+    @g.node
+    def get_c(t: Annotated[Test, use(reuse=True)]) -> C:
+        return C(t)
+
+
+
+    g.analyze_nodes()
+    assert g.nodes[Test].config.reuse
+    # t_node = g.nodes[Test]
+
+    t1 = g.resolve(get_c).t
+    t2 = g.resolve(get_c).t
+
+    assert t1 is t2
+
+
+
+    
+
+    
+    

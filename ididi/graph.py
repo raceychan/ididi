@@ -508,7 +508,8 @@ class Resolver:
                     metas = flatten_annotated(param_type)
                     if use_meta := search_meta(metas):
                         ufunc, uconfig = use_meta
-                        inode = self.include_node(ufunc, uconfig)
+                        node_factory = param_type.__args__[0] if ufunc is None else ufunc
+                        inode = self.include_node(node_factory, uconfig)
                         node.dependencies[param.name] = param.replace_type(
                             inode.dependent
                         )
@@ -540,6 +541,9 @@ class Resolver:
     def analyze_params(
         self, ufunc: IFactory[P, T], config: NodeConfig = DefaultConfig
     ) -> tuple[bool, list[tuple[str, IDependent[Any]]]]:
+        """
+        Used solely in `entry`
+        """
         deps = Dependencies.from_signature(
             signature=get_typed_signature(ufunc), function=ufunc
         )
@@ -550,20 +554,18 @@ class Resolver:
             param_type = param.param_type
             use_meta = resolve_use(param.param_type)
             if not use_meta:
-                use_meta = resolve_use(param.default_)
-                if not use_meta:
-                    continue
-                warnings.warn(
-                    (
-                        "Using factory via default argument is deprecated and will be removed in 1.7.0. "
-                        "Use Annotated style instead: param: Annotated[T, use(factory)]."
-                    ),
-                    DeprecationWarning,
-                    stacklevel=3,
-                )
+                continue
 
-            ufunc, uconfig = use_meta
-            use_node = self.include_node(ufunc, uconfig)
+            if resolve_use(param.default_):
+                raise NotSupportedError(f"Using default value {param} for `use` is not longer supported")
+
+            factory, uconfig = use_meta
+            if ufunc is None:
+                ufunc = param_type.__args__[0]
+            else:
+                factory = ufunc
+
+            use_node = self.include_node(factory, uconfig)
             param_type = use_node.dependent
 
             if any(x in config.ignore for x in (i, name, param_type)):
@@ -1105,8 +1107,7 @@ class Graph(Resolver):
                 continue
 
             if other_node.config != current_node.config:
-                pass
-                # raise ConfigConflictError(f"{other}[{other_node.factory}, {other_node.config}] has the same resolve order as {self}[{current_node.factory}, {current_node.config}], but differs in configuration")
+                raise ConfigConflictError(f"{other}[{other_node.factory}, {other_node.config}] has the same resolve order as {self}[{current_node.factory}, {current_node.config}], but differs in configuration")
 
 
             if not current_resolved and other_resolved:
