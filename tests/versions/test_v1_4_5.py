@@ -64,7 +64,7 @@ def test_dg_add_nodes():
         yield conn
 
     dg.add_nodes(
-        (DB, {"reuse": False, "ignore": "name"}),
+        use(DB, reuse=False, ignore=["name"]),
         auth_factory,
         conn_factory,
     )

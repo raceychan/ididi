@@ -1,5 +1,7 @@
 from typing import Union
 
+import pytest
+
 from ididi import Graph, Ignore
 
 
@@ -9,6 +11,7 @@ def myfact(a: Ignore[Union[int, str, None]] = None) -> MyConfig:
     return MyConfig()
 
 
+@pytest.mark.debug
 def test_resolve():
     graph = Graph()
     graph.node(myfact)

@@ -1,6 +1,7 @@
 import inspect
 import sys
 import typing as ty
+import warnings
 from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Annotated, Optional
@@ -950,12 +951,40 @@ async def test_graph_add_nodes():
         yield Connection()
 
     basic_graph = Graph()
-    basic_graph.add_nodes((get_conn, {"reuse": True}))
+    basic_graph.add_nodes(use(get_conn, reuse=True))
 
-    
+
     main_graph = Graph()
     main_graph.merge(basic_graph)
     assert main_graph.nodes[Connection].config.reuse
+
+
+def test_graph_add_nodes_tuple_deprecation_warning():
+    graph = Graph()
+
+    class Service: ...
+
+    with pytest.warns(DeprecationWarning, match="Passing \\(node, config\\) tuples"):
+        graph.add_nodes((Service, {"reuse": True, "ignore": [1, 2, 3]}))
+
+    node_config = graph.nodes[Service].config
+    assert node_config.reuse is True
+    assert node_config.ignore == (1, 2, 3)
+
+
+def test_graph_add_nodes_use_no_warning():
+    graph = Graph()
+
+    class Service: ...
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        graph.add_nodes(use(Service, reuse=True, ignore=[1, 2, 3]))
+
+    assert not caught
+    node_config = graph.nodes[Service].config
+    assert node_config.reuse is True
+    assert node_config.ignore == (1, 2, 3)
 
 
 async def test_graph_merge_with_node():
@@ -1042,10 +1071,18 @@ def test_graph_analyze_reuse_dependentcy():
     with pytest.raises(ConfigConflictError):
         dg.analyze(user_manager_factory)
 
+    with pytest.raises(ConfigConflictError):
+        dg.resolve(user_manager_factory)
+
 
     # assert dg.nodes[User].config.ignore == (1,2,3)
 
     
+def test_node_from_use():
+    dg = Graph()
 
     
-    
+    class Service: ...
+
+    dg.add_nodes(Annotated[Service, "hello"])
+    assert dg.nodes[Service]

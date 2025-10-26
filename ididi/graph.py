@@ -1,3 +1,4 @@
+import warnings
 from asyncio import AbstractEventLoop, get_running_loop
 from concurrent.futures.thread import ThreadPoolExecutor
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager, contextmanager
@@ -33,7 +34,6 @@ from ._node import (
     DependentNode,
     NodeConfig,
     resolve_use,
-    search_meta,
     should_override,
 )
 from ._type_resolve import (
@@ -310,10 +310,7 @@ class Resolver:
 
         if annt_dep:
             if use_meta := resolve_use(annt_dep):
-                ufunc, uconfig = use_meta
-                if not is_provided(ufunc):
-                    ufunc = annt_dep.__args__[0]
-                self.include_node(ufunc, uconfig)
+                self.include_node(*use_meta)
 
             if is_function(dependent):
                 # if dependent in nodes just reuse
@@ -505,22 +502,17 @@ class Resolver:
                 if (param_type := param.param_type) in self._analyzed_nodes:
                     continue
                 self.check_param_conflict(param_type, current_path)
-                if get_origin(param_type) is Annotated:
-                    metas = flatten_annotated(param_type)
-                    if use_meta := search_meta(metas):
-                        ufunc, uconfig = use_meta
-                        if is_provided(ufunc):
-                            node_factory = ufunc
-                        else:
-                            node_factory = param_type.__args__[0]
-                        inode = self.include_node(node_factory, uconfig)
-                        if inode.config != uconfig:
-                            raise ConfigConflictError(f"Dependency {param.name!r} from {node.factory.__qualname__} has config {uconfig} which differs from {inode.config} of {inode.factory.__qualname__}")
-                        node.dependencies[param.name] = param.replace_type(
-                            inode.dependent
-                        )
-                        self.analyze(inode.factory, ignore=node_graph_ignore)
-                        continue
+                if use_meta := resolve_use(param_type):
+                    ufactory, uconfig = use_meta
+                    inode = self.include_node(ufactory, uconfig)
+                    if inode.config != uconfig:
+                        raise ConfigConflictError(f"Dependency {param.name!r} from {node.factory.__qualname__} has config {uconfig} which differs from {inode.config} of {inode.factory.__qualname__}")
+
+                    node.dependencies[param.name] = param.replace_type(
+                        inode.dependent
+                    )
+                    self.analyze(inode.factory, ignore=node_graph_ignore)
+                    continue
                 elif is_function(param_type):
                     fnode = DependentNode.from_node(param_type, config=config)
                     self._nodes[fnode.dependent] = fnode
@@ -561,16 +553,10 @@ class Resolver:
             use_meta = resolve_use(param.param_type)
             if not use_meta:
                 continue
-
             if resolve_use(param.default_):
                 raise NotSupportedError(f"Using default value {param} for `use` is not longer supported")
 
-            use_dep, uconfig = use_meta
-
-            if not is_provided(use_dep):
-                use_dep = param_type.__args__[0]
-
-            use_node = self.include_node(use_dep, uconfig)
+            use_node = self.include_node(*use_meta)
             param_type = use_node.dependent
 
             if any(x in config.ignore for x in (i, name, param_type)):
@@ -757,7 +743,6 @@ class Resolver:
     def entry(
         self, func: IFactory[P, T], **iconfig: Unpack[INodeConfig]
     ) -> EntryFunc[P, T]: ...
-
     def entry(
         self,
         func: Union[IFactory[P, T], IAsyncFactory[P, T], None] = None,
@@ -861,6 +846,14 @@ class Resolver:
             configured = partial(self.node, **config)
             return configured  # type: ignore
 
+        if get_origin(dependent) is Annotated:
+            use_meta = resolve_use(dependent)
+            if use_meta:
+                self.include_node(*use_meta)
+                return dependent
+            else:
+                dependent = get_args(dependent)[0]
+                
         if is_unsolvable_type(dependent):
             raise TopLevelBulitinTypeError(dependent)
 
@@ -868,15 +861,16 @@ class Resolver:
         return dependent
 
     def add_nodes(
-        self, *nodes: Union[IDependent[Any], tuple[IDependent[Any], INodeConfig]]
+        self, *nodes: Any
     ) -> None:
         for node in nodes:
             if isinstance(node, tuple):
-                node = cast(tuple[IDependent[Any], INodeConfig], node)
-                node, nconfig = node
-                self.node(node, **nconfig)
-            else:
-                self.node(node)
+                raise NotSupportedError(
+                        "Passing (node, config) tuples to Graph.add_nodes is no longer supported,"
+                        "Use idid.use instead, e.g. "
+                        "add_nodes(use(Service, reuse=True, ignore=[1, 2, 3]))."
+                )
+            self.node(node)
 
 
 class ResolveScope(Resolver):
@@ -1120,7 +1114,6 @@ class Graph(Resolver):
 
             if other_node.config != current_node.config:
                 raise ConfigConflictError(f"{other}[{other_node.factory}, {other_node.config}] has the same resolve order as {self}[{current_node.factory}, {current_node.config}], but differs in configuration")
-
 
             if not current_resolved and other_resolved:
                 self._analyzed_nodes[dep_type] = other_resolved

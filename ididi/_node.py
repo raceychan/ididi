@@ -98,7 +98,7 @@ def use(func: Maybe[INode[P, T]] = MISSING, **iconfig: Unpack[INodeConfig]) -> T
 # ============== Ididi marks ===========
 
 
-def search_meta(meta: list[Any]) -> Union[tuple[IDependent[Any], NodeConfig], None]:
+def _search_meta(meta: list[Any]) -> Union[tuple[IDependent[Any], NodeConfig], None]:
     for i, v in enumerate(meta):
         if v == USE_FACTORY_MARK:
             func, config = meta[i + 1], meta[i + 2]
@@ -111,7 +111,14 @@ def resolve_use(annotation: Any) -> Union[tuple[Union[IDependent[Any], None], No
         return
 
     metas: list[Any] = flatten_annotated(annotation)
-    return search_meta(metas)
+    use_meta = _search_meta(metas)
+    if use_meta is None:
+        return None
+    
+    factory, config = use_meta
+    if not is_provided(factory):
+        factory = get_args(annotation)[0]
+    return factory, config
 
 
 def should_override(other_node: "DependentNode", current_node: "DependentNode") -> bool:
@@ -123,27 +130,23 @@ def should_override(other_node: "DependentNode", current_node: "DependentNode") 
     current_priority = ResolveOrder[current_node.factory_type]
     return  other_priority > current_priority
 
+def resolve_type_from_meta(annt: Any) -> IDependent[Any]:
+    """
+    resolve types from Annotated[T, ...]
+    such as 
+    user_serivce: Annotated[UserService, ...]
 
-def resolve_marks(annt: Any) -> IDependent[Any]:
+    if use mark or ignore mark in meta, don't handle, leave it to later
+    otherwise, meaning that it is something user leave for them self, so return first param_type 
+
+    """
     annotate_meta = flatten_annotated(annt)
 
-    if use_meta := search_meta(annotate_meta):
-        param_type = annt
-        # ufunc, _ = use_meta
-        # if not is_provided(ufunc):
-        #     func_return = get_args(annt)[0]
-        # else:
-        #     func_return = get_typed_signature(ufunc).return_annotation
-
-        # if get_origin(func_return) is Annotated:
-        #     param_type = ufunc
-        # else:
-        #     param_type = annt
-    elif IGNORE_PARAM_MARK in annotate_meta:
+    if IGNORE_PARAM_MARK in annotate_meta:
         return annt
-    else:
-        param_type = get_args(annt)[0]
-    return param_type
+    if USE_FACTORY_MARK in annotate_meta:
+        return annt
+    return get_args(annt)[0]
 
 
 # ======================= Signature =====================================
@@ -277,7 +280,7 @@ class Dependencies(dict[str, Dependency]):
                     raise NotSupportedError(f"Using default value `{param}` for `use` is no longer supported")
 
             if get_origin(param_type) is Annotated:
-                param_type = resolve_marks(param_type)
+                param_type = resolve_type_from_meta(param_type)
 
             if param_type is Unpack:
                 dependencies.update(unpack_to_deps(param_annotation))
