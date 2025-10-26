@@ -1,28 +1,28 @@
 from functools import partial
 from typing import Any, Awaitable, Callable, Union, cast, overload
 
-from typing_extensions import Unpack
-
 from .graph import Graph as Graph
-from .interfaces import IDependent, INodeConfig, TEntryDecor
+from .interfaces import IDependent, NodeIgnoreConfig, TEntryDecor
 from .utils.typing_utils import P, T
 
 
 @overload
-def entry(**iconfig: Unpack[INodeConfig]) -> TEntryDecor: ...
+def entry(*, reuse:bool = False, ignore: NodeIgnoreConfig = ()) -> TEntryDecor: ...
 
 
 @overload
-def entry(func: Callable[P, T]) -> IDependent[T]: ...
-
+def entry(func: Callable[P, T], /) -> IDependent[T]: ...
 
 def entry(
     func: Union[Callable[P, T], None] = None,
-    **iconfig: Unpack[INodeConfig],
+    /,
+    *,
+    reuse: bool = False, 
+    ignore: NodeIgnoreConfig = (),
 ) -> Union[Callable[..., Union[T, Awaitable[T]]], TEntryDecor]:
     if not func:
-        return cast(TEntryDecor, partial(entry, **iconfig))
-    return Graph().entry(func, **iconfig)
+        return cast(TEntryDecor, partial(entry, reuse=reuse, ignore=ignore))
+    return Graph().entry(func, reuse=reuse, ignore=ignore)
 
 
 @overload

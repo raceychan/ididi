@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from ididi import Graph, use
 
 dg = Graph()
@@ -11,11 +13,11 @@ class Config:
 def test_config_eq():
     ng = Graph()
     ng.node(Config)
-    c1 = ng.nodes[Config].config
+    c1 = ng.nodes[Config].reuse
     ng.remove_dependent(Config)
 
-    ng.node(Config, reuse=True)
-    c2 = ng.nodes[Config].config
+    ng.node(use(Config, reuse=True))
+    c2 = ng.nodes[Config].reuse
     assert c1 != 1
     assert c1 != c2
 
@@ -34,16 +36,15 @@ class Engine:
         self.config = config
 
 
-@dg.node(reuse=False)
 class Database:
     def __init__(self, engine: Engine):
         self.engine = engine
 
 
 def test_reuse():
-    @dg.node(reuse=False)
+
     class Service:
-        def __init__(self, database: Database):
+        def __init__(self, database: Annotated[Database, use(reuse=False)]):
             self.database = database
 
     service1 = dg.resolve(Service)
@@ -51,13 +52,12 @@ def test_reuse():
     assert id(service2) != id(service1)
     assert id(service2.database) != id(service1.database)
 
-    @dg.node(reuse=True)
-    def service_factory() -> Service:
+    def service_factory() -> Annotated[Service, use(reuse=True)]:
         return Service(Database(Engine(Config())))
 
     assert service_factory
 
-    service3 = dg.resolve(Service)
-    service4 = dg.resolve(Service)
+    service3 = dg.resolve(service_factory)
+    service4 = dg.resolve(service_factory)
     assert id(service3) == id(service4)
     assert id(service2.database) != id(service1.database)

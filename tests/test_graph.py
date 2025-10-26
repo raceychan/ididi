@@ -9,11 +9,12 @@ from unittest import mock
 
 import pytest
 
-from ididi import AsyncResource, Graph, Ignore, NodeConfig, Resolver, use
+from ididi import AsyncResource, Graph, Ignore, Resolver, use
 from ididi.errors import (
     ABCNotImplementedError,
     AsyncResourceInSyncError,
     ConfigConflictError,
+    DeprecatedError,
     MergeWithScopeStartedError,
     MissingAnnotationError,
     NotSupportedError,
@@ -82,7 +83,7 @@ def auth_service_factory(database: Database) -> AuthService:
 
 
 def test_dag_resolve(dg: Graph):
-    @dg.node(reuse=False)
+    @dg.node
     class UserService:
         def __init__(self, repo: UserRepository, auth: AuthService, name: str = "user"):
             self.repo = repo
@@ -478,7 +479,7 @@ def test_multiple_dependency_paths(dg: Graph):
             self.s1 = s1
             self.s2 = s2
 
-    dg.node(Shared, reuse=True)
+    dg.node(use(Shared, reuse=True))
     instance = dg.resolve(Root)
     assert dg.resolution_registry[Shared] is instance.s1.shared2
     assert dg.resolution_registry[Shared] is instance.s2.shared1
@@ -511,7 +512,7 @@ async def test_graph_without_static_resolve(dg: Graph):
     # This test specifically needs a new dag instance
     dg = Graph()
 
-    @dg.node(reuse=False)
+    @dg.node
     class UserService:
         def __init__(self, repo: UserRepository, auth: AuthService, name: str = "user"):
             self.repo = repo
@@ -605,10 +606,10 @@ def test_node_config_non_transitive(dg: Graph):
     class Sub:
         def __init__(self, b: Base): ...
 
-    dg.node(reuse=True)(Sub)
+    dg.node(use(Sub, reuse=True))
     dg.analyze(Sub)
 
-    assert dg.nodes[Base].config.reuse == False
+    assert dg.nodes[Base].reuse == False
 
 
 def test_partial_node(dg: Graph):
@@ -620,7 +621,7 @@ def test_partial_node(dg: Graph):
             self.b = b
             self.age = age
 
-    dg.node(reuse=False)(Sub)
+    dg.node(Sub)
     dg.analyze(Sub)
 
     dg.reset(clear_nodes=True)
@@ -661,15 +662,15 @@ def test_graph_static_resolved_should_override():
     dg = Graph()
     dg2 = Graph()
 
-    dg.node(ComplianceChecker, reuse=True)
+    dg.node(use(ComplianceChecker, reuse=True))
     dg.analyze(ComplianceChecker)
     c = dg.resolve(ComplianceChecker)
 
-    dg.node(DatabaseConfig, reuse=True)
-    dg2.node(DatabaseConfig, reuse=True)
+    dg.node(use(DatabaseConfig, reuse=True))
+    dg2.node(use(DatabaseConfig, reuse=True))
     dg2.analyze(DatabaseConfig)
     d = dg2.resolve(DatabaseConfig)
-    repr(dg.nodes[ComplianceChecker].config)
+    repr(dg.nodes[ComplianceChecker].reuse)
 
     dg.merge(dg2)
     assert ComplianceChecker in dg and DatabaseConfig in dg
@@ -956,7 +957,7 @@ async def test_graph_add_nodes():
 
     main_graph = Graph()
     main_graph.merge(basic_graph)
-    assert main_graph.nodes[Connection].config.reuse
+    assert main_graph.nodes[Connection].reuse
 
 
 def test_graph_add_nodes_tuple_deprecation_warning():
@@ -964,27 +965,12 @@ def test_graph_add_nodes_tuple_deprecation_warning():
 
     class Service: ...
 
-    with pytest.warns(DeprecationWarning, match="Passing \\(node, config\\) tuples"):
+
+    with pytest.raises(DeprecatedError):
         graph.add_nodes((Service, {"reuse": True, "ignore": [1, 2, 3]}))
 
-    node_config = graph.nodes[Service].config
-    assert node_config.reuse is True
-    assert node_config.ignore == (1, 2, 3)
 
 
-def test_graph_add_nodes_use_no_warning():
-    graph = Graph()
-
-    class Service: ...
-
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        graph.add_nodes(use(Service, reuse=True, ignore=[1, 2, 3]))
-
-    assert not caught
-    node_config = graph.nodes[Service].config
-    assert node_config.reuse is True
-    assert node_config.ignore == (1, 2, 3)
 
 
 async def test_graph_merge_with_node():
@@ -995,10 +981,10 @@ async def test_graph_merge_with_node():
 
     # @g2.node(reuse=True)
     @g1.node
-    async def get_resource() -> ty.Annotated[AsyncResource[Resource], NodeConfig(reuse=True)]:
+    async def get_resource() -> ty.Annotated[AsyncResource[Resource], use(reuse=True)]:
         yield Resource()
 
-    assert g1.nodes[Resource].config.reuse
+    assert g1.nodes[Resource].reuse
         
 
 async def test_dependent_conflicts():
@@ -1027,7 +1013,7 @@ async def test_dependent_conflicts():
 
 
     g.analyze_nodes()
-    assert g.nodes[Test].config.reuse
+    assert g.nodes[Test].reuse
     # t_node = g.nodes[Test]
 
     t1 = g.resolve(get_c).t
@@ -1055,7 +1041,7 @@ def test_graph_analyze_reuse_dependentcy():
     class User: ...
 
     @dg.node
-    def user_factory() -> Annotated[User, use(reuse=True, ignore=(5))]:
+    def user_factory() -> Annotated[User, use(reuse=True)]:
         return User()
 
     class UserManager:
@@ -1064,8 +1050,9 @@ def test_graph_analyze_reuse_dependentcy():
 
 
     @dg.node
-    def user_manager_factory(user: Annotated[User, use(user_factory, reuse=False, ignore=(1,2,3))]) -> UserManager:
+    def user_manager_factory(user: Annotated[User, use(user_factory, reuse=False)]) -> UserManager:
         return UserManager(user)
+
 
 
     with pytest.raises(ConfigConflictError):

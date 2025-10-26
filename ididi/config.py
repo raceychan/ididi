@@ -2,7 +2,7 @@ from dataclasses import FrozenInstanceError
 from inspect import Signature
 from typing import Any, Final, Iterable, Literal
 
-from .interfaces import GraphIgnore, GraphIgnoreConfig, NodeIgnore, NodeIgnoreConfig
+from .interfaces import GraphIgnore, GraphIgnoreConfig
 
 EmptyIgnore: Final[tuple[Any]] = tuple()
 DEFAULT_REUSABILITY: bool = False
@@ -38,30 +38,30 @@ class FrozenSlot:
         return hash(attrs)
 
 
-class NodeConfig(FrozenSlot):
-    __slots__ = ("reuse", "ignore")
+# class NodeConfig(FrozenSlot):
+#     __slots__ = ("reuse", "ignore")
 
-    ignore: NodeIgnore
-    reuse: bool
+#     ignore: NodeIgnore
+#     reuse: bool
 
-    def __init__(
-        self,
-        *,
-        reuse: bool = DEFAULT_REUSABILITY,
-        ignore: NodeIgnoreConfig = EmptyIgnore,
-    ):
+#     def __init__(
+#         self,
+#         *,
+#         reuse: bool = DEFAULT_REUSABILITY,
+#         ignore: NodeIgnoreConfig = EmptyIgnore,
+#     ):
 
-        if not isinstance(ignore, tuple):
-            if isinstance(ignore, Iterable):
-                if isinstance(ignore, str):
-                    ignore = tuple((ignore,))
-                else:
-                    ignore = tuple(ignore)
-            else:
-                ignore = (ignore,)
+#         if not isinstance(ignore, tuple):
+#             if isinstance(ignore, Iterable):
+#                 if isinstance(ignore, str):
+#                     ignore = tuple((ignore,))
+#                 else:
+#                     ignore = tuple(ignore)
+#             else:
+#                 ignore = (ignore,)
 
-        object.__setattr__(self, "ignore", ignore)
-        object.__setattr__(self, "reuse", reuse)
+#         object.__setattr__(self, "ignore", ignore)
+#         object.__setattr__(self, "reuse", reuse)
 
 
 class GraphConfig(FrozenSlot):
@@ -84,7 +84,7 @@ class GraphConfig(FrozenSlot):
         object.__setattr__(self, "ignore", ignore)
 
 
-DefaultConfig: Final[NodeConfig] = NodeConfig()
+# DefaultConfig: Final[NodeConfig] = NodeConfig()
 CacheMax: Final[int] = 1024
 ExtraUnsolvableTypes: Final[set[Any]] = {Any, Literal, Signature.empty}
 DefaultScopeName: Final[str] = "__ididi_default_scope__"

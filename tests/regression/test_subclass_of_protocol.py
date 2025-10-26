@@ -3,7 +3,7 @@ import typing as ty
 
 import pytest
 
-from ididi import Graph
+from ididi import Annotated, Graph, use
 
 
 def test_subclass_of_protocol():
@@ -36,7 +36,6 @@ def test_double_protocol():
 
     class SessionRepo(ty.Protocol): ...
 
-    @dg.node(reuse=True)
     class BothRepo(UserRepo, SessionRepo):
         def __init__(self, name: str = "test"):
             self.name = name
@@ -49,13 +48,16 @@ def test_double_protocol():
         def __init__(self, repo: SessionRepo):
             self.repo = repo
 
+
+    dg.node(use(BothRepo, reuse=True))
+
     with dg.scope() as scope:
         user = scope.resolve(UserApp)
         session = scope.resolve(SessionApp)
         assert user.repo is session.repo
 
     dg = Graph()
-    dg.node(BothRepo, reuse=True)
+    dg.node(use(BothRepo, reuse=True))
     user = dg.resolve(UserApp)
     session = dg.resolve(SessionApp)
     assert user.repo is session.repo

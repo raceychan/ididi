@@ -2,7 +2,7 @@ from typing import Annotated
 
 import pytest
 
-from ididi import Graph, Ignore, NodeConfig, Scoped, use
+from ididi import Graph, Ignore, Scoped, use
 from ididi.config import IGNORE_PARAM_MARK, USE_FACTORY_MARK
 
 
@@ -36,7 +36,7 @@ def get_config() -> Config:
 
 class DB:
     def __init__(
-        self, config: Annotated[Config, USE_FACTORY_MARK, get_config, NodeConfig()]
+        self, config: Annotated[Config, use(get_config)]
     ):
         self.config = config
 
@@ -64,7 +64,7 @@ def test_dg_add_nodes():
         yield conn
 
     dg.add_nodes(
-        use(DB, reuse=False, ignore=["name"]),
+        use(DB, reuse=False),
         auth_factory,
         conn_factory,
     )

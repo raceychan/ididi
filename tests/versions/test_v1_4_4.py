@@ -1,4 +1,4 @@
-from ididi import Graph
+from ididi import Graph, use
 
 
 def test_scope_graph_share_data():
@@ -35,8 +35,8 @@ def test_scope_resolve_inheritance():
     class Cache:
         ...
 
-    dg.node(User, reuse=True)
-    dg.node(Cache, reuse=True)
+    dg.node(use(User, reuse=True))
+    dg.node(use(Cache, reuse=True))
     dg_u = dg.resolve(User)
 
     with dg.scope() as s1:

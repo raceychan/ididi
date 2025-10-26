@@ -26,7 +26,7 @@ class EP:
 async def test_resolve_func():
     dg = Graph()
 
-    dg.node(get_user, reuse=False)
-    assert dg.nodes[get_user].config.reuse is False
+    dg.node(get_user)
+    assert dg.nodes[get_user].reuse is False
     dg.analyze(get_user)
-    assert dg.nodes[get_user].config.reuse is False
+    assert dg.nodes[get_user].reuse is False

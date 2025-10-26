@@ -2,7 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from ididi import Graph
+from ididi import Graph ,use
 
 
 class Config:
@@ -43,7 +43,7 @@ def pool(max_workers: int):
 def test_repeat_resolve(dg: Graph):
     instances: list[object] = []
 
-    dg.node(reuse=False)(AuthService)
+    dg.node(AuthService)
     dg.analyze(AuthService)
 
     def resolve(dg: Graph):
@@ -63,7 +63,7 @@ def test_threading_resolve_non_reuse(
     # Create a thread pool executor
     results: list[object] = []
 
-    dg.node(reuse=False)(AuthService)
+    dg.node(AuthService)
     dg.analyze(AuthService)
 
     def resolve(dg: Graph):
@@ -85,7 +85,7 @@ def test_threading_resolve_reuse(dg: Graph, pool: ThreadPoolExecutor, max_worker
     # Create a thread pool executor
     results: list[object] = []
 
-    dg.node(reuse=True)(AuthService)
+    dg.node(use(AuthService, reuse=True))
 
     def resolve(dg: Graph):
         return id(dg.resolve(AuthService))

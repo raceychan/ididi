@@ -1,6 +1,6 @@
 import pytest
 
-from ididi import Graph
+from ididi import Graph, use
 from ididi.errors import ReusabilityConflictError
 
 
@@ -26,8 +26,8 @@ class AuthService:
 
 def test_singleton_uses_transilient():
     dg = Graph()
-    dg.node(reuse=False)(Database)
-    dg.node(reuse=True)(AuthService)
+    dg.node(Database)
+    dg.node(use(AuthService, reuse=True))
     
     with pytest.raises(ReusabilityConflictError):
         dg.analyze(AuthService)
@@ -35,13 +35,13 @@ def test_singleton_uses_transilient():
 
 def test_nonreuse_before_nonreuse():
     dg = Graph()
-    dg.node(reuse=False)(Database)
-    dg.node(reuse=False)(Repository)
-    dg.node(reuse=False)(AuthService)
+    dg.node(Database)
+    dg.node(Repository)
+    dg.node(AuthService)
     dg.analyze(AuthService)
 
 
 def test_nonreuse_before_reuse():
     dg = Graph()
-    dg.node(reuse=False)(AuthService)
+    dg.node(AuthService)
     dg.analyze(AuthService)

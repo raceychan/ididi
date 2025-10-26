@@ -24,7 +24,7 @@ def db_factory() -> DataBase:
 
 def test_resolve():
     dg = Graph()
-    dg.node(reuse=False)(UserRepository)
+    dg.node(UserRepository)
     assert isinstance(dg.resolve(UserRepository).db, DataBase)
 
     dg.node(db_factory)

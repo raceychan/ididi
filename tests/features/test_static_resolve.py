@@ -99,7 +99,7 @@ def test_forward_dependency(dg: Graph):
 
 @pytest.mark.asyncio
 async def test_async_enter(dg: Graph):
-    @dg.node(reuse=False)
+    @dg.node
     class AsyncService:
         pass
 

@@ -178,14 +178,14 @@ async def test_scope_repeat_resolve():
         resource.open()
         yield resource
 
-    dg.node(get_resource, reuse=True)
+    dg.node(use(get_resource, reuse=True))
 
     async def get_async_resource() -> ty.AsyncGenerator[AsyncResource, None]:
         resource = AsyncResource()
         await resource.open()
         yield resource
 
-    dg.node(get_async_resource, reuse=True)
+    dg.node(use(get_async_resource, reuse=True))
 
     with dg.scope() as scope:
         resource = scope.resolve(Resource)
@@ -203,10 +203,10 @@ async def test_scope_repeat_resolve():
 async def test_resource_shared_within_scope():
     dg = Graph()
 
-    dg.node(get_db, reuse=True)
-    dg.node(get_client, reuse=True)
-    dg.node(async_get_client, reuse=True)
-    dg.node(async_get_db, reuse=True)
+    dg.node(use(get_db, reuse=True))
+    dg.node(use(get_client, reuse=True))
+    dg.node(use(async_get_client, reuse=True))
+    dg.node(use(async_get_db, reuse=True))
 
     class FirstResource(AsyncResourceBase):
         def __init__(self, database: AsyncDataBase):
@@ -286,7 +286,7 @@ async def test_context_scope():
         yield resource
         resource.close()
 
-    dg.node(get_resource, reuse=True)
+    dg.node(use(get_resource, reuse=True))
 
     async def get_async_resource() -> ty.AsyncGenerator[AsyncResource, None]:
         resource = AsyncResource()
@@ -294,7 +294,7 @@ async def test_context_scope():
         yield resource
         await resource.close()
 
-    dg.node(get_async_resource, reuse=True)
+    dg.node(use(get_async_resource, reuse=True))
 
     with pytest.raises(ResourceOutsideScopeError):
         await dg.aresolve(Resource)
@@ -340,7 +340,7 @@ def test_non_reuse_resource():
         yield resource
         resource.close()
 
-    dg.node(get_resource, reuse=False)
+    dg.node(use(get_resource, reuse=False))
 
     with dg.scope() as s:
         r1 = s.resolve(Resource)
@@ -370,10 +370,11 @@ def test_nested_scope_with_context_scope():
 async def test_async_nested_scope_with_context_scope():
     dg = Graph()
 
-    @dg.node(reuse=True)
     class Normal:
         def __init__(self, name: str = "normal"):
             self.name = name
+
+    dg.node(use(Normal, reuse=True))
 
     async with dg.ascope() as dg1:
         await dg1.__aenter__()
@@ -428,11 +429,11 @@ async def test_db_exec():
 async def test_scope_different_across_context():
     dg = Graph()
 
-    @dg.node(reuse=True)
     class Normal:
         def __init__(self, name: str = "normal"):
             self.name = name
 
+    dg.node(use(Normal, reuse=True))
     dg.resolve(Normal)
 
     with dg.scope("1") as s1:

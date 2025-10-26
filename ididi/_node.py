@@ -38,16 +38,14 @@ from .config import (
     IGNORE_PARAM_MARK,
     USE_FACTORY_MARK,
     CacheMax,
-    DefaultConfig,
     EmptyIgnore,
     FactoryType,
-    NodeConfig,
     ResolveOrder,
 )
 from .errors import (
     ABCNotImplementedError,
+    DeprecatedError,
     MissingAnnotationError,
-    NotSupportedError,
     ProtocolFacotryNotProvidedError,
 )
 from .interfaces import (
@@ -56,8 +54,8 @@ from .interfaces import (
     IDependent,
     INode,
     INodeAnyFactory,
-    INodeConfig,
     INodeFactory,
+    NodeIgnoreConfig,
 )
 from .utils.param_utils import MISSING, Maybe, is_provided
 from .utils.typing_utils import P, R, T
@@ -73,12 +71,12 @@ Scoped = Annotated[Union[Generator[T, None, None], AsyncGenerator[T, None]], "sc
 # ========== NotImplemented =======
 
 @overload
-def use(**iconfig: Unpack[INodeConfig]) -> Any: ...
+def use(*, reuse: bool) -> Any: ...
 
 @overload
-def use(func: Maybe[INode[P, T]], **iconfig: Unpack[INodeConfig]) -> T: ...
+def use(func: Maybe[INode[P, T]], /, *, reuse: bool = False) -> T: ...
 
-def use(func: Maybe[INode[P, T]] = MISSING, **iconfig: Unpack[INodeConfig]) -> T:
+def use(func: Maybe[INode[P, T]] = MISSING, /, *,  reuse: bool = False) -> T:
     """
     An annotation to let ididi knows what factory method to use
     without explicitly register it.
@@ -89,8 +87,7 @@ def use(func: Maybe[INode[P, T]] = MISSING, **iconfig: Unpack[INodeConfig]) -> T
     ```
     """
 
-    config = NodeConfig(**iconfig)
-    annt = Annotated[T, USE_FACTORY_MARK, func, config]
+    annt = Annotated[T, USE_FACTORY_MARK, func, reuse]
     return cast(T, annt)
 
 
@@ -98,15 +95,15 @@ def use(func: Maybe[INode[P, T]] = MISSING, **iconfig: Unpack[INodeConfig]) -> T
 # ============== Ididi marks ===========
 
 
-def _search_meta(meta: list[Any]) -> Union[tuple[IDependent[Any], NodeConfig], None]:
+def _search_meta(meta: list[Any]) -> Union[tuple[IDependent[Any], bool], None]:
     for i, v in enumerate(meta):
         if v == USE_FACTORY_MARK:
-            func, config = meta[i + 1], meta[i + 2]
-            return func, config
+            func, reuse = meta[i + 1], meta[i + 2]
+            return func, reuse
     return None
 
 
-def resolve_use(annotation: Any) -> Union[tuple[Union[IDependent[Any], None], NodeConfig], None]:
+def resolve_use(annotation: Any) -> Union[tuple[Union[IDependent[Any], None], bool], None]:
     if get_origin(annotation) is not Annotated:
         return
 
@@ -115,10 +112,10 @@ def resolve_use(annotation: Any) -> Union[tuple[Union[IDependent[Any], None], No
     if use_meta is None:
         return None
     
-    factory, config = use_meta
+    factory, reuse = use_meta
     if not is_provided(factory):
         factory = get_args(annotation)[0]
-    return factory, config
+    return factory, reuse
 
 
 def should_override(other_node: "DependentNode", current_node: "DependentNode") -> bool:
@@ -277,7 +274,7 @@ class Dependencies(dict[str, Dependency]):
 
             if get_origin(default) is Annotated:
                 if resolve_use(default):
-                    raise NotSupportedError(f"Using default value `{param}` for `use` is no longer supported")
+                    raise DeprecatedError(f"Using default value `{param}` for `use` is no longer supported")
 
             if get_origin(param_type) is Annotated:
                 param_type = resolve_type_from_meta(param_type)
@@ -345,20 +342,31 @@ class DependentNode:
         factory_type: FactoryType,
         function_dependent: bool = False,
         dependencies: Dependencies,
-        config: NodeConfig,
+        reuse: bool, 
+        ignore: NodeIgnoreConfig, 
+        
     ):
         self.dependent = dependent
         self.factory = factory
         self.factory_type: FactoryType = factory_type
         self.function_dependent = function_dependent
         self.dependencies = dependencies
-        self.config = config
+        self._reuse = reuse
+        self._ignore = ignore
+
+    @property
+    def reuse(self):
+        return self._reuse
+
+    @property
+    def ignore(self):
+        return self._ignore
 
     def __repr__(self) -> str:
         str_repr = f"{self.__class__.__name__}(type: {self.dependent}"
         if self.factory_type != "default":
             str_repr += f", factory: {self.factory}"
-        str_repr += f", function_dependent: {self.function_dependent}"
+        str_repr += f", function_dependent: {self.function_dependent}, reuse: {self._reuse}"
         str_repr += ")"
         return str_repr
 
@@ -370,7 +378,7 @@ class DependentNode:
         self, ignore: tuple[Any, ...] = EmptyIgnore
     ) -> Generator[Dependency, None, None]:
         "params that needs to be statically resolved"
-        ignore += self.config.ignore
+        ignore += self._ignore # type: ignore
 
         for i, (name, param) in enumerate(self.dependencies.items()):
             if i in ignore or name in ignore:
@@ -404,7 +412,8 @@ class DependentNode:
         factory: INodeFactory[P, T],
         factory_type: FactoryType,
         signature: Signature,
-        config: NodeConfig,
+        reuse: bool, 
+        ignore: NodeIgnoreConfig,
     ) -> "DependentNode":
 
         dependencies = Dependencies.from_signature(
@@ -415,7 +424,8 @@ class DependentNode:
             factory=factory,
             factory_type=factory_type,
             dependencies=dependencies,
-            config=config,
+            reuse=reuse,
+            ignore=ignore
         )
         return node
 
@@ -426,7 +436,8 @@ class DependentNode:
         *,
         signature: Signature,
         factory_type: FactoryType,
-        config: NodeConfig = DefaultConfig,
+        reuse: bool,
+        ignore: NodeIgnoreConfig,
     ):
         deps = Dependencies.from_signature(function=function, signature=signature)
         node = DependentNode(
@@ -435,7 +446,8 @@ class DependentNode:
             factory_type=factory_type,
             function_dependent=True,
             dependencies=deps,
-            config=config,
+            reuse=reuse,
+            ignore=ignore
         )
         return node
 
@@ -444,7 +456,8 @@ class DependentNode:
         cls,
         *,
         factory: INodeFactory[P, T],
-        config: NodeConfig,
+        reuse: bool,
+        ignore: NodeIgnoreConfig
     ) -> "DependentNode":
 
         f = factory
@@ -469,27 +482,33 @@ class DependentNode:
             metas = flatten_annotated(dependent)
             if IGNORE_PARAM_MARK in metas:
                 node = cls._from_function_dep(
-                    f, signature=signature, factory_type=factory_type, config=config
+                    f, signature=signature, factory_type=factory_type, reuse=reuse, ignore=ignore
                 )
                 return node
 
-            for meta in metas:
-                if isinstance(meta, NodeConfig):
-                    config = meta
+            base_dependent, *_ = get_args(dependent)
+            use_meta = resolve_use(dependent)
+            if use_meta:
+                use_factory, use_reuse = use_meta
+                if use_reuse:
+                    reuse = True
+                if use_factory not in (base_dependent, factory):
+                    return cls.from_node(use_factory, reuse=reuse, ignore=ignore)
 
-            dependent, *_ = get_args(dependent)
+            dependent = base_dependent
 
         node = cls.create(
             dependent=dependent,
             factory=cast(INodeFactory[P, T], f),
             factory_type=factory_type,
             signature=signature,
-            config=config,
+            reuse=reuse,
+            ignore=ignore
         )
         return node
 
     @classmethod
-    def _from_class(cls, *, dependent: type[T], config: NodeConfig) -> "DependentNode":
+    def _from_class(cls, *, dependent: type[T], reuse: bool, ignore: NodeIgnoreConfig) -> "DependentNode":
         if is_class_with_empty_init(dependent):
             signature = EMPTY_SIGNATURE
         else:
@@ -507,7 +526,8 @@ class DependentNode:
             factory=dependent,
             factory_type=factory_type,
             signature=signature,
-            config=config,
+            reuse=reuse,
+            ignore=ignore
         )
 
     @classmethod
@@ -516,7 +536,8 @@ class DependentNode:
         cls,
         factory_or_class: INode[P, T],
         *,
-        config: NodeConfig = DefaultConfig,
+        reuse: bool = False,
+        ignore: NodeIgnoreConfig = EmptyIgnore,
     ) -> "DependentNode":
         """
         Build a node Nonrecursively
@@ -524,12 +545,14 @@ class DependentNode:
             - class,
             - async / factory function of the class
         """
+        if not is_provided(ignore):
+            ignore = tuple[Any, ...]()
 
         if is_class(factory_or_class):
             dependent = cast(type, factory_or_class)
-            return cls._from_class(dependent=dependent, config=config)
+            return cls._from_class(dependent=dependent, reuse=reuse,ignore=ignore)
         elif isinstance(factory_or_class, (FunctionType, MethodType)):
             factory = cast(INodeFactory[P, T], factory_or_class)
-            return cls._from_function(factory=factory, config=config)
+            return cls._from_function(factory=factory, reuse=reuse, ignore=ignore)
         else:
             raise TypeError(f"Invalid dependent type {factory_or_class}")

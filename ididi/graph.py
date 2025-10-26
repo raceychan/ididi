@@ -1,4 +1,3 @@
-import warnings
 from asyncio import AbstractEventLoop, get_running_loop
 from concurrent.futures.thread import ThreadPoolExecutor
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager, contextmanager
@@ -24,15 +23,13 @@ from typing import (
     overload,
 )
 
-from typing_extensions import Self, TypeAliasType, Unpack
+from typing_extensions import Self, Unpack
 
 from ._ds import GraphNodes, GraphNodesView, ResolvedSingletons, TypeRegistry, Visitor
 from ._node import (
     IGNORE_PARAM_MARK,
-    DefaultConfig,
     Dependencies,
     DependentNode,
-    NodeConfig,
     resolve_use,
     should_override,
 )
@@ -58,10 +55,11 @@ from .errors import (
     PositionalOverrideError,
     ResourceOutsideScopeError,
     ReusabilityConflictError,
+    DeprecatedError,
     TopLevelBulitinTypeError,
     UnsolvableNodeError,
 )
-from .interfaces import (
+from .interfaces import (  # INodeConfig,
     EntryFunc,
     GraphIgnore,
     GraphIgnoreConfig,
@@ -69,7 +67,7 @@ from .interfaces import (
     IDependent,
     IFactory,
     INode,
-    INodeConfig,
+    NodeIgnoreConfig,
     TDecor,
     TEntryDecor,
 )
@@ -131,7 +129,7 @@ def _resolve_dfs(
         instance,
         pnode.dependent,
         pnode.factory_type,
-        pnode.config.reuse,
+        pnode.reuse,
     )
     return result
 
@@ -164,7 +162,7 @@ async def _aresolve_dfs(
         instance,
         pnode.dependent,
         pnode.factory_type,
-        pnode.config.reuse,
+        pnode.reuse,
     )
     return cast(T, resolved)
 
@@ -284,13 +282,13 @@ class Resolver:
         concrete_node.check_for_implementations()
         return concrete_node
 
-    def _analyze_dep(self, dependent: INode[P, T], config: NodeConfig) -> INode[P, T]:
+    def _analyze_dep(self, dependent: INode[P, T], reuse: bool, ignore: NodeIgnoreConfig) -> INode[P, T]:
         if isinstance(dependent, MethodType):
             dep_method = dependent
             bound_obj = dep_method.__self__
             if not isinstance(bound_obj, type):
                 raise NotSupportedError("Instance method is not supported")
-            self.include_node(dep_method)
+            self.include_node(dep_method, reuse, ignore)
             dependent = bound_obj
             resolved_type = resolve_annotation(dependent)
         elif is_function(dependent):
@@ -298,7 +296,7 @@ class Resolver:
                 resolved_type = resolve_annotation(dependent)
             else:
                 if dependent not in self._nodes:
-                    self.include_node(dependent, config)
+                    self.include_node(dependent, reuse, ignore)
                 resolved_type = resolve_factory(dependent)
         else:
             resolved_type = resolve_annotation(dependent)
@@ -317,7 +315,7 @@ class Resolver:
                 if node := self._nodes.get(dependent):
                     return dependent
 
-                node = DependentNode.from_node(dependent, config=config)
+                node = DependentNode.from_node(dependent, reuse=reuse, ignore=ignore)
                 self._nodes[dependent] = node
                 return dependent
 
@@ -416,7 +414,7 @@ class Resolver:
         if resolved_node.is_resource:
             return True
 
-        ignore_params = resolved_node.config.ignore
+        ignore_params = resolved_node.ignore
         for pname, param in resolved_node.dependencies.items():
             ptype = param.param_type
 
@@ -438,8 +436,8 @@ class Resolver:
             cycle = current_path[i:] + [param_type]
             raise CircularDependencyDetectedError(cycle)
 
-        if (subnode := self._nodes.get(param_type)) and not subnode.config.reuse:
-            if any(self._nodes[p].config.reuse for p in current_path):
+        if (subnode := self._nodes.get(param_type)) and not subnode.reuse:
+            if any(self._nodes[p].reuse for p in current_path):
                 raise ReusabilityConflictError(current_path, param_type)
 
     def remove_singleton(self, dependent_type: type) -> None:
@@ -465,13 +463,13 @@ class Resolver:
         self,
         dependent: IDependent[Any],
         *,
-        config: NodeConfig = DefaultConfig,
-        ignore: tuple[Union[str, type, TypeAliasType], ...] = EmptyIgnore,
+        reuse: Maybe[bool] = MISSING,
+        ignore: NodeIgnoreConfig = EmptyIgnore,
     ) -> DependentNode:
         if node := self._analyzed_nodes.get(dependent):
             return node
 
-        dependent_type = self._analyze_dep(dependent, config)
+        dependent_type = self._analyze_dep(dependent, reuse, ignore)
 
         if is_unsolvable_type(dependent_type):
             raise TopLevelBulitinTypeError(dependent_type)
@@ -480,12 +478,12 @@ class Resolver:
 
         def dfs(dep: IDependent[Any]) -> DependentNode:
             # when we register a concrete node we also register its bases to type_registry
-            node_graph_ignore: tuple[Union[str, type, TypeAliasType], ...]
+            node_graph_ignore: NodeIgnoreConfig
 
             if dep in self._analyzed_nodes:
                 return self._analyzed_nodes[dep]
             if dep not in self._type_registry:
-                self.include_node(dep, config)
+                self.include_node(dep, reuse=reuse, ignore=ignore)
 
             node = self._resolve_concrete_node(dep)
             if self.is_registered_singleton(dep):
@@ -503,10 +501,10 @@ class Resolver:
                     continue
                 self.check_param_conflict(param_type, current_path)
                 if use_meta := resolve_use(param_type):
-                    ufactory, uconfig = use_meta
-                    inode = self.include_node(ufactory, uconfig)
-                    if inode.config != uconfig:
-                        raise ConfigConflictError(f"Dependency {param.name!r} from {node.factory.__qualname__} has config {uconfig} which differs from {inode.config} of {inode.factory.__qualname__}")
+                    ufactory, is_reuse = use_meta
+                    inode = self.include_node(ufactory, is_reuse)
+                    if inode.reuse != is_reuse:
+                        raise ConfigConflictError(f"Dependency {param.name!r} from {node.factory.__qualname__} has reuse={is_reuse} which differs from reuse={inode.reuse} of {inode.factory.__qualname__}")
 
                     node.dependencies[param.name] = param.replace_type(
                         inode.dependent
@@ -514,7 +512,7 @@ class Resolver:
                     self.analyze(inode.factory, ignore=node_graph_ignore)
                     continue
                 elif is_function(param_type):
-                    fnode = DependentNode.from_node(param_type, config=config)
+                    fnode = DependentNode.from_node(param_type, reuse=reuse, ignore=ignore)
                     self._nodes[fnode.dependent] = fnode
                     node.dependencies[param.name] = param.replace_type(fnode.dependent)
                     self.analyze(fnode.factory, ignore=node_graph_ignore)
@@ -537,7 +535,7 @@ class Resolver:
         return dfs(dependent_type)
 
     def analyze_params(
-        self, ufunc: IFactory[P, T], config: NodeConfig = DefaultConfig
+        self, ufunc: IFactory[P, T], reuse: bool, ignore: NodeIgnoreConfig,
     ) -> tuple[bool, list[tuple[str, IDependent[Any]]]]:
         """
         Used solely in `entry`
@@ -554,15 +552,15 @@ class Resolver:
             if not use_meta:
                 continue
             if resolve_use(param.default_):
-                raise NotSupportedError(f"Using default value {param} for `use` is not longer supported")
+                raise DeprecatedError(f"Using default value {param} for `use` is not longer supported")
 
             use_node = self.include_node(*use_meta)
             param_type = use_node.dependent
 
-            if any(x in config.ignore for x in (i, name, param_type)):
+            if any(x in ignore for x in (i, name, param_type)):
                 continue
 
-            self.analyze(param_type, config=config)
+            self.analyze(param_type, reuse=reuse, ignore=ignore)
             depends_on_resource = depends_on_resource or self.should_be_scoped(
                 param_type
             )
@@ -590,7 +588,8 @@ class Resolver:
             factory=dependent_type,
             factory_type="function",
             dependencies=Dependencies(),
-            config=DefaultConfig,
+            reuse=True,
+            ignore=EmptyIgnore,
         )
 
         self._type_registry[dependent_type] = [dependent_type]
@@ -695,13 +694,13 @@ class Resolver:
         )
 
     def include_node(
-        self, dependent: INode[P, T], config: NodeConfig = DefaultConfig
+        self, dependent: INode[P, T], reuse: Maybe[bool] = MISSING, ignore: NodeIgnoreConfig=EmptyIgnore
     ) -> DependentNode:
-        merged_config = NodeConfig(
-            reuse=config.reuse, ignore=self._ignore + config.ignore
-        )
+        merged_ignore: NodeIgnoreConfig = self._ignore + ignore # type: ignore
+        if not is_provided(reuse):
+            reuse = False
 
-        node = DependentNode.from_node(dependent, config=merged_config)
+        node = DependentNode.from_node(dependent, reuse=reuse, ignore=merged_ignore)
         if ori_node := self._nodes.get(node.dependent):
             if should_override(node, ori_node):
                 self._remove_node(ori_node)
@@ -738,22 +737,25 @@ class Resolver:
         return scope
 
     @overload
-    def entry(self, **iconfig: Unpack[INodeConfig]) -> TEntryDecor: ...
+    def entry(self, *, reuse: bool, ignore: NodeIgnoreConfig) -> TEntryDecor: ...
     @overload
     def entry(
-        self, func: IFactory[P, T], **iconfig: Unpack[INodeConfig]
+        self, func: IFactory[P, T], *, reuse: bool, ignore: NodeIgnoreConfig
     ) -> EntryFunc[P, T]: ...
     def entry(
         self,
         func: Union[IFactory[P, T], IAsyncFactory[P, T], None] = None,
-        **iconfig: Unpack[INodeConfig],
+        *,
+        reuse: bool=False,
+        ignore: NodeIgnoreConfig = EmptyIgnore
     ) -> Union[EntryFunc[P, T], TEntryDecor]:
         if not func:
-            configured = partial(self.entry, **iconfig)
+            configured = partial(self.entry, reuse=reuse, ignore=ignore)
             return cast(EntryFunc[P, T], configured)
 
-        config = NodeConfig(**iconfig)
-        require_scope, unresolved = self.analyze_params(func, config=config)
+        if not isinstance(ignore, tuple):
+            ignore = (ignore, )
+        require_scope, unresolved = self.analyze_params(func, reuse=reuse, ignore=ignore)
 
         def replace(
             before: Maybe[IDependent[T]] = MISSING,
@@ -829,21 +831,22 @@ class Resolver:
         return f
 
     @overload
-    def node(self, dependent: type[T], **config: Unpack[INodeConfig]) -> type[T]: ...
+    def node(self, dependent: type[T],*, ignore: NodeIgnoreConfig = EmptyIgnore) -> type[T]: ...
     @overload
     def node(
-        self, dependent: INode[P, T], **config: Unpack[INodeConfig]
+        self, dependent: INode[P, T], *, ignore: NodeIgnoreConfig=EmptyIgnore
     ) -> INode[P, T]: ...
     @overload
-    def node(self, **config: Unpack[INodeConfig]) -> TDecor: ...
+    def node(self, *, ignore: NodeIgnoreConfig) -> TDecor: ...
 
     def node(
         self,
         dependent: Union[INode[P, T], None] = None,
-        **config: Unpack[INodeConfig],
+        *,
+        ignore: NodeIgnoreConfig = EmptyIgnore,
     ) -> Union[INode[P, T], TDecor]:
         if not dependent:
-            configured = partial(self.node, **config)
+            configured = partial(self.node, ignore=ignore)
             return configured  # type: ignore
 
         if get_origin(dependent) is Annotated:
@@ -857,7 +860,9 @@ class Resolver:
         if is_unsolvable_type(dependent):
             raise TopLevelBulitinTypeError(dependent)
 
-        self.include_node(dependent, config=NodeConfig(**config))
+        if not isinstance(ignore, tuple):
+            ignore = (ignore, )
+        self.include_node(dependent, ignore=ignore)
         return dependent
 
     def add_nodes(
@@ -865,7 +870,7 @@ class Resolver:
     ) -> None:
         for node in nodes:
             if isinstance(node, tuple):
-                raise NotSupportedError(
+                raise DeprecatedError(
                         "Passing (node, config) tuples to Graph.add_nodes is no longer supported,"
                         "Use idid.use instead, e.g. "
                         "add_nodes(use(Service, reuse=True, ignore=[1, 2, 3]))."
@@ -1112,8 +1117,8 @@ class Graph(Resolver):
                     self._analyzed_nodes[dep_type] = other_resolved
                 continue
 
-            if other_node.config != current_node.config:
-                raise ConfigConflictError(f"{other}[{other_node.factory}, {other_node.config}] has the same resolve order as {self}[{current_node.factory}, {current_node.config}], but differs in configuration")
+            if other_node.reuse != current_node.reuse:
+                raise ConfigConflictError(f"{other}[{other_node.factory}, {other_node.reuse}] has the same resolve order as {self}[{current_node.factory}, {current_node.reuse}], but differs in configuration")
 
             if not current_resolved and other_resolved:
                 self._analyzed_nodes[dep_type] = other_resolved

@@ -2,7 +2,7 @@ from typing import Generator
 
 import pytest
 
-from ididi import Graph
+from ididi import Graph, use
 
 from ..test_data import UserService
 
@@ -10,7 +10,7 @@ from ..test_data import UserService
 def test_scope_resolve_fallback():
     graph = Graph()
 
-    graph.node(UserService, reuse=True)
+    graph.node(use(UserService, reuse=True))
 
     u = graph.resolve(UserService)
 
@@ -31,7 +31,7 @@ def test_scope_resouce_fallback():
 
     u = graph.resolve(UserService)
 
-    graph.node(user_factory, reuse=False)
+    graph.node(user_factory)
 
     with graph.scope() as scope:
         u2 = scope.resolve(UserService)

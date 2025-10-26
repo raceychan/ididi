@@ -110,7 +110,7 @@ class CreateUser:
 
 
 async def test_entry_with_ignore():
-    @entry(ignore=CreateUser)
+    @entry(ignore=(CreateUser,))
     async def func4(
         service: Annotated[NotificationService, use(EmailService)],
         cmd: Ignore[CreateUser],
@@ -125,7 +125,7 @@ async def test_entry_with_ignore():
 async def test_dg_entry_with_override():
     dg = Graph()
 
-    @dg.entry(ignore=CreateUser)
+    @dg.entry(ignore=(CreateUser,))
     async def func4(
         service: Annotated[NotificationService, use(NotificationService)],
         cmd: CreateUser,
@@ -215,7 +215,7 @@ def test_entry_reuse():
     SERVICES.clear()
 
     dg.reset(clear_nodes=True)
-    dg.node(UserService, reuse=True)
+    dg.node(use(UserService, reuse=True))
 
     for _ in range(rounds):
         SERVICES.add(create_user("test", "email"))

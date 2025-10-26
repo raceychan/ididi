@@ -19,6 +19,11 @@ class NotSupportedError(IDIDIError):
     Base class for all not supported exceptions.
     """
 
+class DeprecatedError(IDIDIError):
+    """
+    Base class for all deprecated error
+    """
+
 
 # =============== Node Errors ===============
 

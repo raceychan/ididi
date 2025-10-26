@@ -7,9 +7,7 @@ from typing import (
     Awaitable,
     Callable,
     Generator,
-    Iterable,
     Protocol,
-    TypedDict,
     Union,
     overload,
 )
@@ -51,8 +49,8 @@ GraphIgnore = tuple[Union[str, type, TypeAliasType], ...]
 NodeConfigParam = Union[str, int, type, TypeAliasType]
 GraphConfigParam = Union[str, type, TypeAliasType]
 
-NodeIgnoreConfig = Union[NodeConfigParam, Iterable[NodeConfigParam]]
-GraphIgnoreConfig = Union[GraphConfigParam, Iterable[GraphConfigParam]]
+NodeIgnoreConfig = Union[NodeConfigParam, NodeIgnore]
+GraphIgnoreConfig = Union[GraphConfigParam, GraphIgnore]
 
 Resource = Generator[T, None, None]
 AsyncResource = AsyncGenerator[T, None]
@@ -77,23 +75,23 @@ class TDecor(Protocol):
     def __call__(self, factory: INode[P, T]) -> INode[P, T]: ...
 
 
-class INodeConfig(TypedDict, total=False):
-    """
-    reuse: bool
-    ---
-    whether the resolved instance should be reused if it already exists in the graph.
+# class INodeConfig(TypedDict, total=False):
+#     """
+#     reuse: bool
+#     ---
+#     whether the resolved instance should be reused if it already exists in the graph.
 
-    partial
-    ---
-    whether to ignore bulitin types when statically resolve
+#     partial
+#     ---
+#     whether to ignore bulitin types when statically resolve
 
-    ignore
-    ---
-    types or names to ignore
-    """
+#     ignore
+#     ---
+#     types or names to ignore
+#     """
 
-    ignore: NodeIgnoreConfig
-    reuse: bool
+#     ignore: NodeIgnoreConfig
+#     reuse: bool
 
 
 class EntryFunc(Protocol[P, C]):

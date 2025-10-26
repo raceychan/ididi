@@ -2,7 +2,7 @@ from typing import Annotated
 
 import pytest
 
-from ididi import DependentNode, NodeConfig
+from ididi import DependentNode
 
 
 class A:
@@ -80,7 +80,7 @@ def test_varidc_keyword_args():
 def test_node_config_frozen():
     node = DependentNode.from_node(Service)
     with pytest.raises(AttributeError):
-        node.config.reuse = False
+        node.reuse = False
 
 
 def test_node_from_annotated():
@@ -91,13 +91,4 @@ def test_node_from_annotated():
     assert node.dependent is str
 
 
-def test_node_config_equality():
-    config1 = NodeConfig()
-    config2 = NodeConfig()
 
-    assert config1 == config2
-
-    
-    config3 = NodeConfig(reuse=True)
-
-    assert config1 != config3
