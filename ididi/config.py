@@ -38,32 +38,6 @@ class FrozenSlot:
         return hash(attrs)
 
 
-# class NodeConfig(FrozenSlot):
-#     __slots__ = ("reuse", "ignore")
-
-#     ignore: NodeIgnore
-#     reuse: bool
-
-#     def __init__(
-#         self,
-#         *,
-#         reuse: bool = DEFAULT_REUSABILITY,
-#         ignore: NodeIgnoreConfig = EmptyIgnore,
-#     ):
-
-#         if not isinstance(ignore, tuple):
-#             if isinstance(ignore, Iterable):
-#                 if isinstance(ignore, str):
-#                     ignore = tuple((ignore,))
-#                 else:
-#                     ignore = tuple(ignore)
-#             else:
-#                 ignore = (ignore,)
-
-#         object.__setattr__(self, "ignore", ignore)
-#         object.__setattr__(self, "reuse", reuse)
-
-
 class GraphConfig(FrozenSlot):
     __slots__ = ("self_inject", "ignore")
 

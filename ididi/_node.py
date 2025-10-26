@@ -55,6 +55,7 @@ from .interfaces import (
     INode,
     INodeAnyFactory,
     INodeFactory,
+    NodeIgnore,
     NodeIgnoreConfig,
 )
 from .utils.param_utils import MISSING, Maybe, is_provided
@@ -343,7 +344,7 @@ class DependentNode:
         function_dependent: bool = False,
         dependencies: Dependencies,
         reuse: bool, 
-        ignore: NodeIgnoreConfig, 
+        ignore: NodeIgnore, 
         
     ):
         self.dependent = dependent
@@ -413,7 +414,7 @@ class DependentNode:
         factory_type: FactoryType,
         signature: Signature,
         reuse: bool, 
-        ignore: NodeIgnoreConfig,
+        ignore: NodeIgnore,
     ) -> "DependentNode":
 
         dependencies = Dependencies.from_signature(
@@ -437,7 +438,7 @@ class DependentNode:
         signature: Signature,
         factory_type: FactoryType,
         reuse: bool,
-        ignore: NodeIgnoreConfig,
+        ignore: NodeIgnore,
     ):
         deps = Dependencies.from_signature(function=function, signature=signature)
         node = DependentNode(
@@ -457,7 +458,7 @@ class DependentNode:
         *,
         factory: INodeFactory[P, T],
         reuse: bool,
-        ignore: NodeIgnoreConfig
+        ignore: NodeIgnore
     ) -> "DependentNode":
 
         f = factory
@@ -508,7 +509,7 @@ class DependentNode:
         return node
 
     @classmethod
-    def _from_class(cls, *, dependent: type[T], reuse: bool, ignore: NodeIgnoreConfig) -> "DependentNode":
+    def _from_class(cls, *, dependent: type[T], reuse: bool, ignore: NodeIgnore) -> "DependentNode":
         if is_class_with_empty_init(dependent):
             signature = EMPTY_SIGNATURE
         else:
@@ -546,13 +547,17 @@ class DependentNode:
             - async / factory function of the class
         """
         if not is_provided(ignore):
-            ignore = tuple[Any, ...]()
+            validated_ignore: NodeIgnore = tuple[Any, ...]()
+        elif not isinstance(ignore, tuple):
+            validated_ignore: NodeIgnore = (ignore,)
+        else:
+            validated_ignore = ignore
 
         if is_class(factory_or_class):
             dependent = cast(type, factory_or_class)
-            return cls._from_class(dependent=dependent, reuse=reuse,ignore=ignore)
+            return cls._from_class(dependent=dependent, reuse=reuse,ignore=validated_ignore)
         elif isinstance(factory_or_class, (FunctionType, MethodType)):
             factory = cast(INodeFactory[P, T], factory_or_class)
-            return cls._from_function(factory=factory, reuse=reuse, ignore=ignore)
+            return cls._from_function(factory=factory, reuse=reuse, ignore=validated_ignore)
         else:
             raise TypeError(f"Invalid dependent type {factory_or_class}")
