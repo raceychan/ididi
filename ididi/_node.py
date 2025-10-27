@@ -46,6 +46,7 @@ from .errors import (
     ABCNotImplementedError,
     DeprecatedError,
     MissingAnnotationError,
+    NotSupportedError,
     ProtocolFacotryNotProvidedError,
 )
 from .interfaces import (
@@ -459,10 +460,11 @@ class DependentNode:
         return node
 
     @classmethod
+    @lru_cache(CacheMax)
     def _from_function(
         cls,
-        *,
         factory: INodeFactory[P, T],
+        *,
         reuse: bool,
         ignore: NodeIgnore
     ) -> "DependentNode":
@@ -470,7 +472,7 @@ class DependentNode:
         f = factory
         factory_type: FactoryType
         if isasyncgenfunction(factory):
-            f = asynccontextmanager(factory)
+            f = asynccontextmanager(func=factory)
             factory_type = "aresource"
         elif isgeneratorfunction(factory):
             f = contextmanager(factory)
@@ -481,9 +483,9 @@ class DependentNode:
             factory_type = "afunction"
         else:
             factory_type = "function"
+
         signature = get_typed_signature(f, check_return=True)
         dependent: type[T] = resolve_annotation(signature.return_annotation)
-
 
         if get_origin(dependent) is Annotated:
             metas = flatten_annotated(dependent)
@@ -515,7 +517,8 @@ class DependentNode:
         return node
 
     @classmethod
-    def _from_class(cls, *, dependent: type[T], reuse: bool, ignore: NodeIgnore) -> "DependentNode":
+    @lru_cache(CacheMax)
+    def _from_class(cls, dependent: type[T], *, reuse: bool, ignore: NodeIgnore) -> "DependentNode":
         if is_class_with_empty_init(dependent):
             signature = EMPTY_SIGNATURE
         else:
@@ -538,7 +541,6 @@ class DependentNode:
         )
 
     @classmethod
-    @lru_cache(CacheMax)
     def from_node(
         cls,
         factory_or_class: INode[P, T],
@@ -561,9 +563,9 @@ class DependentNode:
 
         if is_class(factory_or_class):
             dependent = cast(type, factory_or_class)
-            return cls._from_class(dependent=dependent, reuse=reuse,ignore=validated_ignore)
+            return cls._from_class(dependent, reuse=reuse,ignore=validated_ignore)
         elif isinstance(factory_or_class, (FunctionType, MethodType)):
             factory = cast(INodeFactory[P, T], factory_or_class)
-            return cls._from_function(factory=factory, reuse=reuse, ignore=validated_ignore)
+            return cls._from_function(factory, reuse=reuse, ignore=validated_ignore)
         else:
-            raise TypeError(f"Invalid dependent type {factory_or_class}")
+            raise NotSupportedError(f"Invalid dependent type {factory_or_class}")

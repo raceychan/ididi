@@ -3,6 +3,7 @@ from typing import Annotated
 import pytest
 
 from ididi import DependentNode
+from ididi.errors import NotSupportedError
 
 
 class A:
@@ -90,5 +91,9 @@ def test_node_from_annotated():
     node = DependentNode.from_node(hello)
     assert node.dependent is str
 
+
+def test_node_with_not_supported_type():
+    with pytest.raises(NotSupportedError):
+        DependentNode.from_node(dict(a=1, b=2))
 
 
