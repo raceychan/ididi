@@ -150,7 +150,6 @@ def resolve_type_from_meta(annt: Any) -> IDependent[Any]:
 # ======================= Signature =====================================
 
 
-# TODO: make this a cython struct
 class Dependency:
     """'dpram' for short
     Represents a parameter and its corresponding dependency node
@@ -226,79 +225,88 @@ def unpack_to_deps(
 
 # TODO: make this an immutable dict that is faster to access
 # all mutation only happens at analyze time, this will boost resolve.
-class Dependencies(dict[str, Dependency]):
-    __slots__ = "_deps"
 
-    def __repr__(self):
-        deps_repr = ", ".join(
-            f"{name}: {dep.type_repr}={dep.default_!r}" for name, dep in self.items()
-        )
-        return f"Depenencies({deps_repr})"
+def build_dependencies(
+    function: INodeFactory[P, T],
+    signature: Signature,
+) -> "dict[str, Dependency]":
+    params = tuple(signature.parameters.values())
 
-    @classmethod
-    def from_signature(
-        cls,
-        function: INodeFactory[P, T],
-        signature: Signature,
-    ) -> "Dependencies":
-        params = tuple(signature.parameters.values())
-
-        if isinstance(function, type):
+    if isinstance(function, type):
+        params = params[1:]  # skip 'self', 'cls'
+    elif isinstance(function, MethodType):
+        owner = function.__self__
+        _ = getattr(owner, function.__name__)
+        if not isinstance(owner, type):
             params = params[1:]  # skip 'self', 'cls'
-        elif isinstance(function, MethodType):
-            owner = function.__self__
-            _ = getattr(owner, function.__name__)
-            if not isinstance(owner, type):
-                params = params[1:]  # skip 'self', 'cls'
 
-        dependencies: dict[str, Dependency] = {}
+    dependencies: dict[str, Dependency] = {}
 
-        for param in params:
-            param_annotation = param.annotation
-            if param_annotation is INSPECT_EMPTY:
-                e = MissingAnnotationError(
-                    dependent_type=function,
-                    param_name=param.name,
-                    param_type=param_annotation,
-                )
-                e.add_context(function, param.name, type(MISSING))
-                raise e
-
-            param_default = param.default
-
-            if param_default == INSPECT_EMPTY:
-                default = MISSING
-            else:
-                default = param.default
-
-            param_type = resolve_annotation(param_annotation)
-
-            if get_origin(default) is Annotated:
-                if resolve_use(default):
-                    raise DeprecatedError(f"Using default value `{param}` for `use` is no longer supported")
-
-            if get_origin(param_type) is Annotated:
-                param_type = resolve_type_from_meta(param_type)
-
-            if param_type is Unpack:
-                dependencies.update(unpack_to_deps(param_annotation))
-                continue
-
-            if param.kind in (ParameterKind.VAR_POSITIONAL, ParameterKind.VAR_KEYWORD):
-                continue
-
-            dep_param = Dependency(
-                name=param.name,
-                param_type=param_type,
-                default=default,
+    for param in params:
+        param_annotation = param.annotation
+        if param_annotation is INSPECT_EMPTY:
+            e = MissingAnnotationError(
+                dependent_type=function,
+                param_name=param.name,
+                param_type=param_annotation,
             )
-            dependencies[param.name] = dep_param
+            e.add_context(function, param.name, type(MISSING))
+            raise e
 
-        return cls(dependencies)
+        param_default = param.default
+
+        if param_default == INSPECT_EMPTY:
+            default = MISSING
+        else:
+            default = param.default
+
+        param_type = resolve_annotation(param_annotation)
+
+        if get_origin(default) is Annotated:
+            if resolve_use(default):
+                raise DeprecatedError(f"Using default value `{param}` for `use` is no longer supported")
+
+        if get_origin(param_type) is Annotated:
+            param_type = resolve_type_from_meta(param_type)
+
+        if param_type is Unpack:
+            dependencies.update(unpack_to_deps(param_annotation))
+            continue
+
+        if param.kind in (ParameterKind.VAR_POSITIONAL, ParameterKind.VAR_KEYWORD):
+            continue
+
+        dep_param = Dependency(
+            name=param.name,
+            param_type=param_type,
+            default=default,
+        )
+        dependencies[param.name] = dep_param
+
+    return dependencies
 
 
 # ======================= Node =====================================
 
+"""
+TODO:
+1. remove class Dependencies, just use plain dict
+2. move DependentNode.reuse to Dependency
+3. Rename Dependency to Edge
+4. Virtual Edge Vs mature edge
+
+class EdgeBase:
+    name: str
+    reuse: bool
+
+class VirtualEdge(EdgeBase):
+    type: type | ForwardRef
+
+
+class MatureEdge(EdgeBase):
+    type: DependentNode
+
+"""
 
 class DependentNode:
     """
@@ -342,7 +350,7 @@ class DependentNode:
         factory: INodeAnyFactory[T],
         factory_type: FactoryType,
         function_dependent: bool = False,
-        dependencies: Dependencies,
+        signature: Maybe[Signature] = MISSING,
         reuse: bool, 
         ignore: NodeIgnore, 
         
@@ -351,7 +359,10 @@ class DependentNode:
         self.factory = factory
         self.factory_type: FactoryType = factory_type
         self.function_dependent = function_dependent
-        self.dependencies = dependencies
+        if not is_provided(signature):
+            self.dependencies = {}
+        else:
+            self.dependencies = build_dependencies(factory, signature=signature)
         self._reuse = reuse
         self._ignore = ignore
 
@@ -416,15 +427,11 @@ class DependentNode:
         reuse: bool, 
         ignore: NodeIgnore,
     ) -> "DependentNode":
-
-        dependencies = Dependencies.from_signature(
-            function=factory, signature=signature
-        )
         node = DependentNode(
             dependent=resolve_annotation(dependent),
             factory=factory,
+            signature=signature,
             factory_type=factory_type,
-            dependencies=dependencies,
             reuse=reuse,
             ignore=ignore
         )
@@ -440,13 +447,12 @@ class DependentNode:
         reuse: bool,
         ignore: NodeIgnore,
     ):
-        deps = Dependencies.from_signature(function=function, signature=signature)
         node = DependentNode(
             dependent=function,
             factory=function,
+            signature=signature,
             factory_type=factory_type,
             function_dependent=True,
-            dependencies=deps,
             reuse=reuse,
             ignore=ignore
         )

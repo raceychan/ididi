@@ -26,13 +26,7 @@ from typing import (
 from typing_extensions import Self, Unpack
 
 from ._ds import GraphNodes, GraphNodesView, ResolvedSingletons, TypeRegistry, Visitor
-from ._node import (
-    IGNORE_PARAM_MARK,
-    Dependencies,
-    DependentNode,
-    resolve_use,
-    should_override,
-)
+from ._node import IGNORE_PARAM_MARK, DependentNode, resolve_use, should_override
 from ._type_resolve import (
     flatten_annotated,
     get_bases,
@@ -49,13 +43,13 @@ from .errors import (
     AsyncResourceInSyncError,
     CircularDependencyDetectedError,
     ConfigConflictError,
+    DeprecatedError,
     MergeWithScopeStartedError,
     NotSupportedError,
     OutOfScopeError,
     PositionalOverrideError,
     ResourceOutsideScopeError,
     ReusabilityConflictError,
-    DeprecatedError,
     TopLevelBulitinTypeError,
     UnsolvableNodeError,
 )
@@ -282,7 +276,7 @@ class Resolver:
         concrete_node.check_for_implementations()
         return concrete_node
 
-    def _analyze_dep(self, dependent: INode[P, T], reuse: bool, ignore: NodeIgnoreConfig) -> INode[P, T]:
+    def _analyze_dep(self, dependent: INode[P, T], reuse: Maybe[bool], ignore: NodeIgnoreConfig) -> INode[P, T]:
         if isinstance(dependent, MethodType):
             dep_method = dependent
             bound_obj = dep_method.__self__
@@ -540,13 +534,13 @@ class Resolver:
         """
         Used solely in `entry`
         """
-        deps = Dependencies.from_signature(
-            signature=get_typed_signature(ufunc), function=ufunc
-        )
+        sig = get_typed_signature(ufunc)
+        node = DependentNode.create(dependent=ufunc, factory=ufunc, factory_type="function", signature=sig, reuse=reuse, ignore=ignore)
+
         depends_on_resource: bool = False
         unresolved: list[tuple[str, IDependent[Any]]] = []
 
-        for i, (name, param) in enumerate(deps.items()):
+        for i, (name, param) in enumerate(node.dependencies.items()):
             param_type = param.param_type
             use_meta = resolve_use(param.param_type)
             if not use_meta:
@@ -587,7 +581,6 @@ class Resolver:
             dependent=dependent_type,
             factory=dependent_type,
             factory_type="function",
-            dependencies=Dependencies(),
             reuse=True,
             ignore=EmptyIgnore,
         )

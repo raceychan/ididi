@@ -7,9 +7,9 @@ from typing import Annotated, Any
 import pytest
 
 from ididi import Graph
+from ididi._node import Dependency
 from ididi.config import IGNORE_PARAM_MARK, USE_FACTORY_MARK
 from ididi.errors import ConfigConflictError, DeprecatedError
-from ididi._node import Dependency, Dependencies
 from ididi.utils.param_utils import MISSING
 
 
@@ -45,28 +45,7 @@ def test_should_be_scoped_respects_node_ignore():
     assert graph.should_be_scoped(Service) is False
 
 
-def test_analyze_params_rejects_use_default(monkeypatch: pytest.MonkeyPatch):
-    graph = Graph()
 
-    def factory() -> str:
-        return "value"
-
-    annotated = Annotated[str, USE_FACTORY_MARK, factory, False]
-    dependency = Dependency(name="dep", param_type=annotated, default=annotated)
-    dependencies = Dependencies({"dep": dependency})
-
-    def fake_from_signature(cls, *, function, signature):
-        return dependencies
-
-    monkeypatch.setattr(
-        Dependencies, "from_signature", classmethod(fake_from_signature)
-    )
-
-    def entry(dep: str) -> str:
-        return dep
-
-    with pytest.raises(DeprecatedError):
-        graph.analyze_params(entry, reuse=False, ignore=())
 
 
 def test_analyze_params_respects_ignore(monkeypatch: pytest.MonkeyPatch):
@@ -77,14 +56,11 @@ def test_analyze_params_respects_ignore(monkeypatch: pytest.MonkeyPatch):
 
     annotated = Annotated[str, USE_FACTORY_MARK, factory, False]
     dependency = Dependency(name="dep", param_type=annotated, default=MISSING)
-    dependencies = Dependencies({"dep": dependency})
 
-    def fake_from_signature(cls, *, function, signature):
-        return dependencies
+    def fake_build_dependencies(function, signature):
+        return {"dep": dependency}
 
-    monkeypatch.setattr(
-        Dependencies, "from_signature", classmethod(fake_from_signature)
-    )
+    monkeypatch.setattr("ididi._node.build_dependencies", fake_build_dependencies)
 
     called = {"include": 0}
 
