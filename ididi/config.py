@@ -57,18 +57,16 @@ class GraphConfig(FrozenSlot):
         object.__setattr__(self, "self_inject", self_inject)
         object.__setattr__(self, "ignore", ignore)
 
-
-# DefaultConfig: Final[NodeConfig] = NodeConfig()
-CacheMax: Final[int] = 1024
-ExtraUnsolvableTypes: Final[set[Any]] = {Any, Literal, Signature.empty}
-DefaultScopeName: Final[str] = "__ididi_default_scope__"
-
 try:
     from typing import TypeAliasType  # type: ignore
 except ImportError:
     from typing_extensions import TypeAliasType
 
-ExtraUnsolvableTypes.add(TypeAliasType)
+
+# DefaultConfig: Final[NodeConfig] = NodeConfig()
+CacheMax: Final[int] = 1024
+ExtraUnsolvableTypes: Final[tuple[Any, ...]] = (Any, Literal, Signature.empty, TypeAliasType)
+DefaultScopeName: Final[str] = "__ididi_default_scope__"
 
 # ================== Marks ==================
 USE_FACTORY_MARK = "__ididi_use_factory__"

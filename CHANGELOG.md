@@ -1519,9 +1519,9 @@ def test_graph_analyze_reuse_dependentcy():
     with pytest.raises(ConfigConflictError):
         dg.analyze(user_manager_factory)
 
+```
+
 ## version 1.7.3
-
-
 - support using `Annotated[T, use(..., factory)]` syntax in node
 - Added a deprecation warning when `Graph.add_nodes` receives `(node, config)` tuples; this form will be removed in 1.8.0 and callers should migrate to `Graph.add_nodes(use(...))`.
   ```python
@@ -1531,9 +1531,9 @@ def test_graph_analyze_reuse_dependentcy():
 
   graph = Graph()
 
-  # Deprecated style (warns)
+  # Deprecated style 
   graph.add_nodes((Service, {"reuse": True, "ignore": [1, 2, 3]}))
 
   # Preferred replacement
-  graph.add_nodes(use(Service, reuse=True, ignore=[1, 2, 3]))
+  graph.add_nodes(use(Service, reuse=True))
   ```

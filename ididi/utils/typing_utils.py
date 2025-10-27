@@ -19,11 +19,11 @@ BuiltinSingleton = type[None]
 
 
 def is_builtin_primitive(t: Any) -> TypeGuard[PrimitiveBuiltins]:
-    return t in {int, float, complex, str, bool, bytes, bytearray, type}
+    return t in (int, float, complex, str, bool, bytes, bytearray, type)
 
 
 def is_builtin_container(t: Any) -> TypeGuard[ContainerBuiltins[Any]]:
-    return t in {list, tuple, dict, set, frozenset}
+    return t in (list, tuple, dict, set, frozenset)
 
 
 def is_builtin_singleton(t: Any) -> TypeGuard[BuiltinSingleton]:
