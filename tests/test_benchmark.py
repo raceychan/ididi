@@ -133,7 +133,7 @@ def test_entry(dg: Graph, dependents: list[type]):
     )
 
     create_user = dg.entry(reuse=False)(create_user)
-    assert dg.nodes[UserService].config.reuse is False
+    assert dg.nodes[UserService].reuse is False
 
     entry_total = 0
     for _ in range(rounds):

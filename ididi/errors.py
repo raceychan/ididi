@@ -117,7 +117,6 @@ class ConfigConflictError(UnsolvableNodeError):
     Raised when two nodes with same resolve order 
     but different config
     """
-    
 
 
 class ForwardReferenceNotFoundError(UnsolvableParameterError):

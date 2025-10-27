@@ -816,7 +816,7 @@ def test_analyze_classmethod():
     node = dg.nodes[Book]
     assert node.factory_type == "function"
     assert node.factory.__func__ is Book.from_article.__func__  # type: ignore
-    assert node.dependencies and node.dependencies["a"]
+    assert node.dependencies and any(param.name == "a" for param in node.dependencies)
 
 
 def test_resolve_classmethod():
@@ -1073,3 +1073,27 @@ def test_node_from_use():
 
     dg.add_nodes(Annotated[Service, "hello"])
     assert dg.nodes[Service]
+
+
+def test_ignore_param_and_should_be_ignored():
+    dg = Graph()
+
+    class User: ...
+
+    @dg.node(ignore=("name", int))
+    def test(name: Ignore[str], age: int) -> User:
+        ...
+
+    dg.should_be_scoped(test)
+
+    
+def test_entry_with_default_use():
+    
+    dg = Graph()
+
+    class Service: ...
+
+    with pytest.raises(DeprecatedError):
+        @dg.entry
+        def test(service: Service = use(Service)):
+            ...

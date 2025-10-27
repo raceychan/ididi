@@ -105,7 +105,8 @@ def _resolve_dfs(
     params = {}
     pnode = nodes.get(ptype) or resolver.analyze(ptype)
 
-    for name, param in pnode.dependencies.items():
+    for param in pnode.dependencies:
+        name = param.name
         if (val := overrides.get(name, MISSING)) is not MISSING:
             params[name] = val
         elif param.should_be_ignored:
@@ -142,7 +143,8 @@ async def _aresolve_dfs(
     params = {}
     pnode = nodes.get(ptype) or resolver.analyze(ptype)
 
-    for name, param in pnode.dependencies.items():
+    for param in pnode.dependencies:
+        name = param.name
         if (val := overrides.get(name, MISSING)) is not MISSING:
             params[name] = val
         elif param.should_be_ignored:
@@ -195,7 +197,7 @@ class Resolver:
     def __init__(
         self,
         name: Maybe[Hashable],
-        resolved_singletons: ResolvedSingletons[Any],
+        resolved_singletons: ResolvedSingletons,
         registered_singletons: set[IDependent[Any]],
         **args: Unpack[SharedData],
     ):
@@ -232,7 +234,7 @@ class Resolver:
         return MappingProxyType(self._nodes)
 
     @property
-    def resolution_registry(self) -> ResolvedSingletons[Any]:
+    def resolution_registry(self) -> ResolvedSingletons:
         return self._resolved_singletons
 
     @property
@@ -410,7 +412,8 @@ class Resolver:
             return True
 
         ignore_params = resolved_node.ignore
-        for pname, param in resolved_node.dependencies.items():
+        for param in resolved_node.dependencies:
+            pname = param.name
             ptype = param.param_type
 
             if pname in ignore_params or ptype in ignore_params:
@@ -501,15 +504,15 @@ class Resolver:
                     if inode.reuse != is_reuse:
                         raise ConfigConflictError(f"Dependency {param.name!r} from {node.factory.__qualname__} has reuse={is_reuse} which differs from reuse={inode.reuse} of {inode.factory.__qualname__}")
 
-                    node.dependencies[param.name] = param.replace_type(
-                        inode.dependent
+                    node.update_param(
+                        param.name, inode.dependent
                     )
                     self.analyze(inode.factory, ignore=node_graph_ignore)
                     continue
                 elif is_function(param_type):
                     fnode = DependentNode.from_node(param_type, reuse=reuse, ignore=ignore)
                     self._nodes[fnode.dependent] = fnode
-                    node.dependencies[param.name] = param.replace_type(fnode.dependent)
+                    node.update_param(param.name, fnode.dependent)
                     self.analyze(fnode.factory, ignore=node_graph_ignore)
                     continue
 
@@ -541,7 +544,8 @@ class Resolver:
         depends_on_resource: bool = False
         unresolved: list[tuple[str, IDependent[Any]]] = []
 
-        for i, (name, param) in enumerate(node.dependencies.items()):
+        for i, param in enumerate(node.dependencies):
+            name = param.name
             param_type = param.param_type
             use_meta = resolve_use(param.param_type)
             if not use_meta:
@@ -914,7 +918,7 @@ class SyncScope(ResolveScope):
     def __init__(
         self,
         *,
-        resolved_singletons: ResolvedSingletons[Any],
+        resolved_singletons: ResolvedSingletons,
         registered_singletons: set[IDependent[Any]],
         name: Maybe[Hashable] = MISSING,
         pre: Maybe[Union["SyncScope", "AsyncScope"]] = MISSING,
@@ -975,7 +979,7 @@ class AsyncScope(ResolveScope):
     def __init__(
         self,
         *,
-        resolved_singletons: ResolvedSingletons[Any],
+        resolved_singletons: ResolvedSingletons,
         registered_singletons: set[IDependent[Any]],
         name: Maybe[Hashable] = MISSING,
         pre: Maybe[Union["SyncScope", "AsyncScope"]] = MISSING,
@@ -1069,7 +1073,7 @@ class Graph(Resolver):
     _nodes: GraphNodes
     _analyzed_nodes: dict[Hashable, DependentNode]
     _type_registry: TypeRegistry
-    _resolved_singletons: ResolvedSingletons[Any]
+    _resolved_singletons: ResolvedSingletons
     _registered_singletons: set[type]
 
     def __init__(

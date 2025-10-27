@@ -187,13 +187,13 @@ class Dependency:
             param_type
         )
 
+    def __repr__(self) -> str:
+        return f"Dependency({self.name}: {self.type_repr}={self.default_!r})"
+
     def should_ignore(self, param_type: IDependent[T]) -> bool:
         return get_origin(
             param_type
         ) is Annotated and IGNORE_PARAM_MARK in flatten_annotated(param_type)
-
-    def __repr__(self) -> str:
-        return f"Dependency({self.name}: {self.type_repr}={self.default_!r})"
 
     @property
     def type_repr(self):
@@ -230,7 +230,7 @@ def unpack_to_deps(
 def build_dependencies(
     function: INodeFactory[P, T],
     signature: Signature,
-) -> "dict[str, Dependency]":
+) -> list[Dependency]:
     params = tuple(signature.parameters.values())
 
     if isinstance(function, type):
@@ -284,7 +284,7 @@ def build_dependencies(
         )
         dependencies[param.name] = dep_param
 
-    return dependencies
+    return list(dependencies.values())
 
 
 # ======================= Node =====================================
@@ -306,7 +306,6 @@ class VirtualEdge(EdgeBase):
 
 class MatureEdge(EdgeBase):
     type: DependentNode
-
 """
 
 class DependentNode:
@@ -344,6 +343,8 @@ class DependentNode:
     whether this node is reusable, default is True
     """
 
+    dependencies: list[Dependency]
+
     def __init__(
         self,
         *,
@@ -361,9 +362,10 @@ class DependentNode:
         self.factory_type: FactoryType = factory_type
         self.function_dependent = function_dependent
         if not is_provided(signature):
-            self.dependencies = {}
+            self.dependencies = []
         else:
             self.dependencies = build_dependencies(factory, signature=signature)
+
         self._reuse = reuse
         self._ignore = ignore
 
@@ -374,6 +376,12 @@ class DependentNode:
     @property
     def ignore(self):
         return self._ignore
+
+    def get_param(self, name: str) -> Dependency:
+        for p in self.dependencies:
+            if p.name == name:
+                return p
+        raise AttributeError(f"{name} not found")
 
     def __repr__(self) -> str:
         str_repr = f"{self.__class__.__name__}(type: {self.dependent}"
@@ -387,13 +395,21 @@ class DependentNode:
     def is_resource(self) -> bool:
         return self.factory_type in ("resource", "aresource")
 
+    def update_param(self, name: str, new_type: IDependent[Any])->None:
+        for i, param in enumerate(self.dependencies):
+            if param.name != name:
+                continue
+            new_param = param.replace_type(new_type)
+            self.dependencies[i] = new_param
+
     def analyze_unsolved_params(
         self, ignore: tuple[Any, ...] = EmptyIgnore
     ) -> Generator[Dependency, None, None]:
         "params that needs to be statically resolved"
         ignore += self._ignore # type: ignore
 
-        for i, (name, param) in enumerate(self.dependencies.items()):
+        for i, param in enumerate(self.dependencies):
+            name = param.name
             if i in ignore or name in ignore:
                 continue
             param_type = cast(Union[IDependent[object], ForwardRef], param.param_type)
@@ -404,7 +420,7 @@ class DependentNode:
                 param = param.replace_type(new_type)
             yield param
             if param.param_type != param_type:
-                self.dependencies[name] = param
+                self.dependencies[i] = param
 
     def check_for_implementations(self) -> None:
         if isinstance(self.factory, type):

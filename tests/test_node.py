@@ -51,7 +51,7 @@ def test_typed_annotation():
             self.nums = nums
 
     node = DependentNode.from_node(ServiceA)
-    ser_dep = node.dependencies["nums"]
+    ser_dep = node.get_param("nums")
     print(ser_dep)
 
 

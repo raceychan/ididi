@@ -3,7 +3,7 @@ from time import perf_counter
 
 import pytest
 
-from ididi import Graph
+from ididi import Graph, use
 
 
 @dataclass
@@ -227,7 +227,7 @@ async def test_create_root():
     }
 
     for c in classes.values():
-        dg.node(c, reuse=False)
+        dg.node(c)
 
     start = perf_counter()
     for _ in range(n):
@@ -261,11 +261,11 @@ async def test_create_root_reuse():
     }
 
     for c in classes.values():
-        dg.node(c, reuse=True)
+        dg.node(use(c, reuse=True))
 
     dg.remove_dependent(RootService)
-    dg.node(RootService, reuse=False)
-    assert dg.nodes[RootService].config.reuse is False
+    dg.node(RootService)
+    assert dg.nodes[RootService].reuse is False
 
     start = perf_counter()
     for _ in range(n):

@@ -32,12 +32,11 @@ def test_should_be_scoped_respects_node_ignore():
     class Service:
         ...
 
-    dep = Dependency(name="ignored", param_type=int, default=MISSING)
     node = SimpleNamespace(
         dependent=Service,
         is_resource=False,
         ignore=("ignored",),
-        dependencies={"ignored": dep},
+        dependencies=(Dependency(name="ignored", param_type=int, default=MISSING), ),
         reuse=False,
     )
     graph._analyzed_nodes[Service] = node  # type: ignore[attr-defined]

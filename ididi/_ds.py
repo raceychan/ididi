@@ -17,7 +17,7 @@ GraphNodesView = MappingProxyType[IDependent[Any], DependentNode]
 ### a readonly view of GraphNodes
 """
 
-ResolvedSingletons = dict[IDependent[T], T]
+ResolvedSingletons = dict[Any, Any]
 """
 mapping a type to its resolved instance, only instances of reusable node will be added here.
 """
@@ -76,7 +76,7 @@ class Visitor:
             node = self._nodes[node_type]
             return [
                 p.param_type
-                for p in node.dependencies.values()
+                for p in node.dependencies
                 if p.param_type in self._nodes
             ]
 
@@ -102,7 +102,7 @@ class Visitor:
 
         def collect_dependent(node_type: IDependent[Any]):
             node = self._nodes[node_type]
-            if any(p.param_type is dependency for p in node.dependencies.values()):
+            if any(p.param_type is dependency for p in node.dependencies):
                 dependents.append(node_type)
 
         self._visit(list(self._nodes), pre_visit=collect_dependent)
@@ -112,7 +112,7 @@ class Visitor:
         self, dependent: IDependent[Any], recursive: bool = False
     ) -> list[IDependent[Any]]:
         if not recursive:
-            return [p.param_type for p in self._nodes[dependent].dependencies.values()]
+            return [p.param_type for p in self._nodes[dependent].dependencies]
 
         def collect_dependencies(t: IDependent[Any]):
             if t != dependent:
