@@ -17,6 +17,5 @@ def main(user_service: Annotated[UserService, use(UserService)]):
     return user_service
 
 
-@pytest.mark.debug
 def test_ididi_entry():
     assert isinstance(ididi.entry(main)(), UserService)

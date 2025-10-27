@@ -47,6 +47,7 @@ def test_should_be_scoped_respects_node_ignore():
 
 
 
+@pytest.mark.debug
 def test_analyze_params_respects_ignore(monkeypatch: pytest.MonkeyPatch):
     graph = Graph()
 
@@ -57,7 +58,7 @@ def test_analyze_params_respects_ignore(monkeypatch: pytest.MonkeyPatch):
     dependency = Dependency(name="dep", param_type=annotated, default=MISSING)
 
     def fake_build_dependencies(function, signature):
-        return {"dep": dependency}
+        return [dependency]
 
     monkeypatch.setattr("ididi._node.build_dependencies", fake_build_dependencies)
 
@@ -78,6 +79,7 @@ def test_analyze_params_respects_ignore(monkeypatch: pytest.MonkeyPatch):
             graph,
         ),
     )
+
 
     requires_scope, unresolved = graph.analyze_params(
         lambda dep: None, reuse=False, ignore=("ignored_type",)

@@ -263,9 +263,8 @@ def build_dependencies(
 
         param_type = resolve_annotation(param_annotation)
 
-        if get_origin(default) is Annotated:
-            if resolve_use(default):
-                raise DeprecatedError(f"Using default value `{param}` for `use` is no longer supported")
+        if resolve_use(default):
+            raise DeprecatedError(f"Using default value `{param}` for `use` is no longer supported")
 
         if get_origin(param_type) is Annotated:
             param_type = resolve_type_from_meta(param_type)
@@ -284,7 +283,8 @@ def build_dependencies(
         )
         dependencies[param.name] = dep_param
 
-    return list(dependencies.values())
+    dep_values = list(dependencies.values())
+    return dep_values
 
 
 # ======================= Node =====================================
@@ -364,7 +364,13 @@ class DependentNode:
         if not is_provided(signature):
             self.dependencies = []
         else:
-            self.dependencies = build_dependencies(factory, signature=signature)
+            deps = build_dependencies(factory, signature=signature)
+            if not isinstance(deps, list):
+                breakpoint()
+            self.dependencies = deps
+
+
+
 
         self._reuse = reuse
         self._ignore = ignore

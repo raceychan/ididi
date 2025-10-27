@@ -1034,7 +1034,6 @@ def test_graph_analyze_reuse_dependent():
     assert dg.resolve(user_factory) is dg.resolve(user_factory)
 
 
-@pytest.mark.debug
 def test_graph_analyze_reuse_dependentcy():
     dg = Graph()
 
@@ -1094,6 +1093,7 @@ def test_entry_with_default_use():
     class Service: ...
 
     with pytest.raises(DeprecatedError):
+
         @dg.entry
         def test(service: Service = use(Service)):
             ...
