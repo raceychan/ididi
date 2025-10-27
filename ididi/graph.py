@@ -61,6 +61,7 @@ from .interfaces import (  # INodeConfig,
     IDependent,
     IFactory,
     INode,
+    NodeIgnore,
     NodeIgnoreConfig,
     TDecor,
     TEntryDecor,
@@ -458,7 +459,7 @@ class Resolver:
         dependent: IDependent[Any],
         *,
         reuse: Maybe[bool] = MISSING,
-        ignore: NodeIgnoreConfig = EmptyIgnore,
+        ignore: NodeIgnore = EmptyIgnore,
     ) -> DependentNode:
         if node := self._analyzed_nodes.get(dependent):
             return node
@@ -529,7 +530,7 @@ class Resolver:
         return dfs(dependent_type)
 
     def analyze_params(
-        self, ufunc: IFactory[P, T], reuse: bool, ignore: NodeIgnoreConfig,
+        self, ufunc: IFactory[P, T], reuse: bool, ignore: NodeIgnore,
     ) -> tuple[bool, list[tuple[str, IDependent[Any]]]]:
         """
         Used solely in `entry`

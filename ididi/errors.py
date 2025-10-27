@@ -199,7 +199,7 @@ class ReusabilityConflictError(GraphResolveError):
     def __init__(self, path: list[Callable[..., Any]], nonreuse: Any):
         conflict_str = " -> ".join(t.__name__ for t in path)
         msg = f"""Transient dependency `{nonreuse.__name__}` with reuse dependents \
-        \n make sure each of {conflict_str} is configured as `reuse=False` \
+        \n make sure each of its dependents {conflict_str} is configured as `reuse=False` \
         """
         super().__init__(msg)
 
