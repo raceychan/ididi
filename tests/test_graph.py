@@ -991,6 +991,7 @@ async def test_dependent_conflicts():
     g = Graph("g1")
 
     
+    @g.node(reuse=True)
     class Test:
         ...
 
@@ -1002,19 +1003,16 @@ async def test_dependent_conflicts():
         def __init__(self, t: Test):
             self.t = t
     
-    #@g.node
-    #def get_b(t: Annotated[Test, use(Test, reuse=False)]) -> B:
-    #    return B(t)
+    if not g.nodes[Test].reuse:
+        breakpoint()
 
     @g.node
     def get_c(t: Annotated[Test, use(reuse=True)]) -> C:
         return C(t)
 
 
-
     g.analyze_nodes()
     assert g.nodes[Test].reuse
-    # t_node = g.nodes[Test]
 
     t1 = g.resolve(get_c).t
     t2 = g.resolve(get_c).t
@@ -1048,10 +1046,11 @@ def test_graph_analyze_reuse_dependentcy():
             self.user = user
 
 
+    assert dg.nodes[User].reuse
+
     @dg.node
     def user_manager_factory(user: Annotated[User, use(user_factory, reuse=False)]) -> UserManager:
         return UserManager(user)
-
 
 
     with pytest.raises(ConfigConflictError):

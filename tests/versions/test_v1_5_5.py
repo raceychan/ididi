@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import pytest
 from typing import Annotated
 
 from ididi import Graph, Ignore, use
@@ -23,6 +24,7 @@ class EP:
     def __init__(self, user: Annotated[User, use(get_user, reuse=False)]): ...
 
 
+@pytest.mark.debug
 async def test_resolve_func():
     dg = Graph()
 

@@ -2,12 +2,12 @@ from functools import partial
 from typing import Any, Awaitable, Callable, Union, cast, overload
 
 from .graph import Graph as Graph
-from .interfaces import IDependent, NodeIgnoreConfig, TEntryDecor
+from .interfaces import IDependent, NodeIgnoreConfig, TEntryDecor, Maybe, MISSING
 from .utils.typing_utils import P, T
 
 
 @overload
-def entry(*, reuse:bool = False, ignore: NodeIgnoreConfig = ()) -> TEntryDecor: ...
+def entry(*, reuse: Maybe[bool] = MISSING, ignore: NodeIgnoreConfig = ()) -> TEntryDecor: ...
 
 
 @overload
@@ -17,7 +17,7 @@ def entry(
     func: Union[Callable[P, T], None] = None,
     /,
     *,
-    reuse: bool = False, 
+    reuse: Maybe[bool] = MISSING, 
     ignore: NodeIgnoreConfig = (),
 ) -> Union[Callable[..., Union[T, Awaitable[T]]], TEntryDecor]:
     if not func:

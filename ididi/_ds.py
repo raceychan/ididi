@@ -44,7 +44,6 @@ class TypeRegistry(dict[Hashable, list[IDependent[Any]]]):
     def remove(self, dependent_type: IDependent[T]) -> None:
         for base in get_bases(dependent_type):
             self[base].remove(dependent_type)
-
         del self[dependent_type]
 
 

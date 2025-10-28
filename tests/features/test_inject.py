@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 from typing import Annotated, NewType
 
+import pytest
+
 from ididi import Graph, entry, use
 from tests.test_data import UserService
 
@@ -106,10 +108,10 @@ def test_nested_inject():
 def test_self_inject():
     dg = Graph()
 
-    def user_factory(dg: Graph) -> Graph:
+    def graph_factory(dg: Graph) -> Graph:
         return dg
 
-    g = dg.resolve(user_factory)
+    g = dg.resolve(graph_factory)
     assert g is dg
 
     dg.remove_singleton(Graph)

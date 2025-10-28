@@ -10,6 +10,7 @@ from typing import (
     Any,
     AsyncContextManager,
     Awaitable,
+    Callable,
     ContextManager,
     Final,
     Hashable,
@@ -61,6 +62,7 @@ from .interfaces import (  # INodeConfig,
     IDependent,
     IFactory,
     INode,
+    INodeFactory,
     NodeIgnore,
     NodeIgnoreConfig,
     TDecor,
@@ -500,9 +502,7 @@ class Resolver:
                 self.check_param_conflict(param_type, current_path)
                 if use_meta := resolve_use(param_type):
                     ufactory, is_reuse = use_meta
-                    inode = self.include_node(ufactory, is_reuse)
-                    if inode.reuse != is_reuse:
-                        raise ConfigConflictError(f"Dependency {param.name!r} from {node.factory.__qualname__} has reuse={is_reuse} which differs from reuse={inode.reuse} of {inode.factory.__qualname__}")
+                    inode = self.include_node(dependent=ufactory, reuse=is_reuse)
 
                     node.update_param(
                         param.name, inode.dependent
@@ -533,7 +533,7 @@ class Resolver:
         return dfs(dependent_type)
 
     def analyze_params(
-        self, ufunc: IFactory[P, T], reuse: bool, ignore: NodeIgnore,
+        self, ufunc: IFactory[P, T], reuse: Maybe[bool], ignore: NodeIgnore,
     ) -> tuple[bool, list[tuple[str, IDependent[Any]]]]:
         """
         Used solely in `entry`
@@ -585,7 +585,7 @@ class Resolver:
         self._nodes[dependent_type] = DependentNode(
             dependent=dependent_type,
             factory=dependent_type,
-            factory_type="function",
+            factory_type="default",
             reuse=True,
             ignore=EmptyIgnore,
         )
@@ -695,14 +695,15 @@ class Resolver:
         self, dependent: INode[P, T], reuse: Maybe[bool] = MISSING, ignore: NodeIgnoreConfig=EmptyIgnore
     ) -> DependentNode:
         merged_ignore: NodeIgnoreConfig = self._ignore + ignore # type: ignore
-        if not is_provided(reuse):
-            reuse = False
-
         node = DependentNode.from_node(dependent, reuse=reuse, ignore=merged_ignore)
         if ori_node := self._nodes.get(node.dependent):
+
             if should_override(node, ori_node):
-                self._remove_node(ori_node)
+                if not ori_node.dependent in self._registered_singletons:
+                    self._remove_node(ori_node)
             else:
+                if ori_node.reuse != node.reuse:                                                     
+                    raise ConfigConflictError(f"{ori_node.reuse=}, {node.reuse=}")                   
                 return node
         self._register_node(node)
         return node
@@ -735,16 +736,17 @@ class Resolver:
         return scope
 
     @overload
-    def entry(self, *, reuse: bool, ignore: NodeIgnoreConfig) -> TEntryDecor: ...
+    def entry(self, *, reuse: Maybe[bool]=MISSING, ignore: NodeIgnoreConfig=EmptyIgnore) -> TEntryDecor: ...
     @overload
     def entry(
-        self, func: IFactory[P, T], *, reuse: bool, ignore: NodeIgnoreConfig
+        self, func: IFactory[P, T], *, reuse: Maybe[bool]=MISSING, ignore: NodeIgnoreConfig=EmptyIgnore
     ) -> EntryFunc[P, T]: ...
+
     def entry(
         self,
         func: Union[IFactory[P, T], IAsyncFactory[P, T], None] = None,
         *,
-        reuse: bool=False,
+        reuse: Maybe[bool] = MISSING,
         ignore: NodeIgnoreConfig = EmptyIgnore
     ) -> Union[EntryFunc[P, T], TEntryDecor]:
         if not func:
@@ -828,29 +830,28 @@ class Resolver:
         setattr(f, replace.__name__, replace)
         return f
 
+
     @overload
-    def node(self, dependent: type[T],*, ignore: NodeIgnoreConfig = EmptyIgnore) -> type[T]: ...
+    def node(self, dependent: INodeFactory[P, T], *,  reuse: Maybe[bool]=MISSING, ignore: NodeIgnoreConfig=EmptyIgnore) -> INodeFactory[P, T]: ...
+
     @overload
-    def node(
-        self, dependent: INode[P, T], *, ignore: NodeIgnoreConfig=EmptyIgnore
-    ) -> INode[P, T]: ...
-    @overload
-    def node(self, *, ignore: NodeIgnoreConfig) -> TDecor: ...
+    def node(self, *, reuse: Maybe[bool]=MISSING, ignore: NodeIgnoreConfig=EmptyIgnore) -> Callable[[T], T]: ...
 
     def node(
         self,
-        dependent: Union[INode[P, T], None] = None,
+        dependent:  Union[INode[P, T], None] = None,
         *,
+        reuse: Maybe[bool] = MISSING, 
         ignore: NodeIgnoreConfig = EmptyIgnore,
     ) -> Union[INode[P, T], TDecor]:
         if not dependent:
-            configured = partial(self.node, ignore=ignore)
+            configured = partial(self.node, reuse=reuse, ignore=ignore)
             return configured  # type: ignore
 
         if get_origin(dependent) is Annotated:
             use_meta = resolve_use(dependent)
             if use_meta:
-                self.include_node(*use_meta)
+                self.include_node(dependent=use_meta[0], reuse=use_meta[1])
                 return dependent
             else:
                 dependent = get_args(dependent)[0]
@@ -860,7 +861,7 @@ class Resolver:
 
         if not isinstance(ignore, tuple):
             ignore = (ignore, )
-        self.include_node(dependent, ignore=ignore)
+        self.include_node(dependent, reuse=reuse, ignore=ignore)
         return dependent
 
     def add_nodes(

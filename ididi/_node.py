@@ -35,6 +35,7 @@ from ._type_resolve import (
     resolve_forwardref,
 )
 from .config import (
+    DEFAULT_REUSABILITY,
     IGNORE_PARAM_MARK,
     USE_FACTORY_MARK,
     CacheMax,
@@ -76,9 +77,9 @@ Scoped = Annotated[Union[Generator[T, None, None], AsyncGenerator[T, None]], "sc
 def use(*, reuse: bool) -> Any: ...
 
 @overload
-def use(func: Maybe[INode[P, T]], /, *, reuse: bool = False) -> T: ...
+def use(func: Maybe[INode[P, T]], /, *, reuse: bool = DEFAULT_REUSABILITY) -> T: ...
 
-def use(func: Maybe[INode[P, T]] = MISSING, /, *,  reuse: bool = False) -> T:
+def use(func: Maybe[INode[P, T]] = MISSING, /, *,  reuse: bool = DEFAULT_REUSABILITY) -> T:
     """
     An annotation to let ididi knows what factory method to use
     without explicitly register it.
@@ -364,14 +365,7 @@ class DependentNode:
         if not is_provided(signature):
             self.dependencies = []
         else:
-            deps = build_dependencies(factory, signature=signature)
-            if not isinstance(deps, list):
-                breakpoint()
-            self.dependencies = deps
-
-
-
-
+            self.dependencies = build_dependencies(factory, signature=signature)
         self._reuse = reuse
         self._ignore = ignore
 
@@ -447,7 +441,7 @@ class DependentNode:
         factory: INodeFactory[P, T],
         factory_type: FactoryType,
         signature: Signature,
-        reuse: bool, 
+        reuse: Maybe[bool], 
         ignore: NodeIgnore,
     ) -> "DependentNode":
         node = DependentNode(
@@ -455,7 +449,7 @@ class DependentNode:
             factory=factory,
             signature=signature,
             factory_type=factory_type,
-            reuse=reuse,
+            reuse=DEFAULT_REUSABILITY if not is_provided(reuse) else reuse,
             ignore=ignore
         )
         return node
@@ -467,7 +461,7 @@ class DependentNode:
         *,
         signature: Signature,
         factory_type: FactoryType,
-        reuse: bool,
+        reuse: Maybe[bool],
         ignore: NodeIgnore,
     ):
         node = DependentNode(
@@ -476,7 +470,7 @@ class DependentNode:
             signature=signature,
             factory_type=factory_type,
             function_dependent=True,
-            reuse=reuse,
+            reuse=DEFAULT_REUSABILITY if not is_provided(reuse) else reuse,
             ignore=ignore
         )
         return node
@@ -487,7 +481,7 @@ class DependentNode:
         cls,
         factory: INodeFactory[P, T],
         *,
-        reuse: bool,
+        reuse: Maybe[bool],
         ignore: NodeIgnore
     ) -> "DependentNode":
 
@@ -509,6 +503,7 @@ class DependentNode:
         signature = get_typed_signature(f, check_return=True)
         dependent: type[T] = resolve_annotation(signature.return_annotation)
 
+
         if get_origin(dependent) is Annotated:
             metas = flatten_annotated(dependent)
             if IGNORE_PARAM_MARK in metas:
@@ -519,10 +514,12 @@ class DependentNode:
 
             base_dependent, *_ = get_args(dependent)
             use_meta = resolve_use(dependent)
+
             if use_meta:
                 use_factory, use_reuse = use_meta
-                if use_reuse:
-                    reuse = True
+                if not is_provided(reuse):
+                    reuse = use_reuse
+
                 if use_factory not in (base_dependent, factory):
                     return cls.from_node(use_factory, reuse=reuse, ignore=ignore)
 
@@ -540,7 +537,7 @@ class DependentNode:
 
     @classmethod
     @lru_cache(CacheMax)
-    def _from_class(cls, dependent: type[T], *, reuse: bool, ignore: NodeIgnore) -> "DependentNode":
+    def _from_class(cls, dependent: type[T], *, reuse: Maybe[bool], ignore: NodeIgnore) -> "DependentNode":
         if is_class_with_empty_init(dependent):
             signature = EMPTY_SIGNATURE
         else:
@@ -567,7 +564,7 @@ class DependentNode:
         cls,
         factory_or_class: INode[P, T],
         *,
-        reuse: bool = False,
+        reuse: Maybe[bool] = MISSING,
         ignore: NodeIgnoreConfig = EmptyIgnore,
     ) -> "DependentNode":
         """

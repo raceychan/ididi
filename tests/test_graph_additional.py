@@ -47,7 +47,6 @@ def test_should_be_scoped_respects_node_ignore():
 
 
 
-@pytest.mark.debug
 def test_analyze_params_respects_ignore(monkeypatch: pytest.MonkeyPatch):
     graph = Graph()
 
