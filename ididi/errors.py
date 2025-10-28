@@ -118,6 +118,9 @@ class ConfigConflictError(UnsolvableNodeError):
     but different config
     """
 
+class ParamReusabilityConflictError(UnsolvableNodeError):
+    ...
+
 
 class ForwardReferenceNotFoundError(UnsolvableParameterError):
     """

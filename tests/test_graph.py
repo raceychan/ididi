@@ -18,6 +18,7 @@ from ididi.errors import (
     MergeWithScopeStartedError,
     MissingAnnotationError,
     NotSupportedError,
+    ParamReusabilityConflictError,
     PositionalOverrideError,
     TopLevelBulitinTypeError,
 )
@@ -1053,10 +1054,10 @@ def test_graph_analyze_reuse_dependentcy():
         return UserManager(user)
 
 
-    with pytest.raises(ConfigConflictError):
+    with pytest.raises(ParamReusabilityConflictError):
         dg.analyze(user_manager_factory)
 
-    with pytest.raises(ConfigConflictError):
+    with pytest.raises(ParamReusabilityConflictError):
         dg.resolve(user_manager_factory)
 
 
@@ -1096,3 +1097,21 @@ def test_entry_with_default_use():
         @dg.entry
         def test(service: Service = use(Service)):
             ...
+
+def test_param_error_message():
+    
+    dg = Graph()
+    @dg.node
+    class Test:
+        ...
+
+        
+    class UserService: ...
+
+    @dg.node
+    def user_service(t: Annotated[Test, use(reuse=True)]) -> UserService:
+        return UserService()
+
+
+    with pytest.raises(ParamReusabilityConflictError):
+        dg.analyze(user_service)

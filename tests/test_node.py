@@ -96,4 +96,3 @@ def test_node_with_not_supported_type():
     with pytest.raises(NotSupportedError):
         DependentNode.from_node(dict(a=1, b=2))
 
-

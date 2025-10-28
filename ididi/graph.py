@@ -48,6 +48,7 @@ from .errors import (
     MergeWithScopeStartedError,
     NotSupportedError,
     OutOfScopeError,
+    ParamReusabilityConflictError,
     PositionalOverrideError,
     ResourceOutsideScopeError,
     ReusabilityConflictError,
@@ -62,7 +63,6 @@ from .interfaces import (  # INodeConfig,
     IDependent,
     IFactory,
     INode,
-    INodeFactory,
     NodeIgnore,
     NodeIgnoreConfig,
     TDecor,
@@ -502,7 +502,10 @@ class Resolver:
                 self.check_param_conflict(param_type, current_path)
                 if use_meta := resolve_use(param_type):
                     ufactory, is_reuse = use_meta
-                    inode = self.include_node(dependent=ufactory, reuse=is_reuse)
+                    try:
+                        inode = self.include_node(dependent=ufactory, reuse=is_reuse)
+                    except ConfigConflictError as cce:
+                        raise ParamReusabilityConflictError(f"\n{node.factory.__name__}(Param[{param.name}: {param.param_type}]) has param conflict: \n \t{str(cce)}")
 
                     node.update_param(
                         param.name, inode.dependent
@@ -553,9 +556,12 @@ class Resolver:
             if resolve_use(param.default_):
                 raise DeprecatedError(f"Using default value {param} for `use` is not longer supported")
 
-            use_node = self.include_node(*use_meta)
-            param_type = use_node.dependent
+            try:
+                use_node = self.include_node(*use_meta)
+            except ConfigConflictError as cce:
+                raise ParamReusabilityConflictError(f"\n{node.factory.__name__}(Param[{param.name}: {param.param_type}]) has param conflict: \n \t{str(cce)}")
 
+            param_type = use_node.dependent
             if any(x in ignore for x in (i, name, param_type)):
                 continue
 
@@ -697,13 +703,12 @@ class Resolver:
         merged_ignore: NodeIgnoreConfig = self._ignore + ignore # type: ignore
         node = DependentNode.from_node(dependent, reuse=reuse, ignore=merged_ignore)
         if ori_node := self._nodes.get(node.dependent):
-
             if should_override(node, ori_node):
                 if not ori_node.dependent in self._registered_singletons:
                     self._remove_node(ori_node)
             else:
                 if ori_node.reuse != node.reuse:                                                     
-                    raise ConfigConflictError(f"{ori_node.reuse=}, {node.reuse=}")                   
+                    raise ConfigConflictError(f"Existing node {ori_node} has config conflicts with {node}")                   
                 return node
         self._register_node(node)
         return node
@@ -832,7 +837,11 @@ class Resolver:
 
 
     @overload
-    def node(self, dependent: INodeFactory[P, T], *,  reuse: Maybe[bool]=MISSING, ignore: NodeIgnoreConfig=EmptyIgnore) -> INodeFactory[P, T]: ...
+    def node(self, dependent: type[T], *,  reuse: Maybe[bool]=MISSING, ignore: NodeIgnoreConfig=EmptyIgnore) -> type[T]: ...
+
+
+    @overload
+    def node(self, dependent: Callable[P, T], *,  reuse: Maybe[bool]=MISSING, ignore: NodeIgnoreConfig=EmptyIgnore) -> Callable[P, T]: ...
 
     @overload
     def node(self, *, reuse: Maybe[bool]=MISSING, ignore: NodeIgnoreConfig=EmptyIgnore) -> Callable[[T], T]: ...
