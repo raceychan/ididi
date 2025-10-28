@@ -1537,3 +1537,62 @@ def test_graph_analyze_reuse_dependentcy():
   # Preferred replacement
   graph.add_nodes(use(Service, reuse=True))
   ```
+
+## version 1.7.4
+
+### Highlights
+- `Graph.node` now accepts `reuse` directly and honours `use(..., reuse=True)` hints end-to-end, so reusable services stay cached even when the dependency is registered via a decorator.
+- Reuse configuration conflicts now raise `ConfigConflictError` during analysis, resolution, and graph merges instead of silently overriding the previous node.
+- `Graph.entry` keeps the reuse semantics expressed in annotations, letting entry handlers participate in the same caching rules as the rest of the graph.
+
+### Details
+- **Decorator-specified reuse** (`tests/test_graph.py::test_dependent_conflicts`):
+  ```python
+  @g.node(reuse=True)
+  class Service: ...
+
+  @g.node
+  def handler(dep: Annotated[Service, use(reuse=True)]) -> Handler:
+      return Handler(dep)
+
+  g.analyze_nodes()
+  assert g.resolve(handler).dep is g.resolve(handler).dep
+  ```
+  The `reuse=True` flag survives both the class registration and the annotated dependency, ensuring downstream factories receive the cached singleton.
+
+- **Fail-fast reuse conflicts** (`tests/test_graph.py::test_graph_analyze_reuse_dependentcy`, `tests/test_graph_additional.py::test_merge_nodes_reuse_conflict`):
+  ```python
+  @dg.node
+  def user_factory() -> Annotated[User, use(reuse=True)]:
+      return User()
+
+  @dg.node
+  def manager(user: Annotated[User, use(user_factory, reuse=False)]) -> Manager:
+      return Manager(user)
+
+  with pytest.raises(ConfigConflictError):
+      dg.resolve(manager)
+  ```
+  Conflicting `reuse` settings on the same dependency now abort analysis/merge instead of picking an arbitrary winner.
+
+- **Entry wrappers respect reuse hints** (`tests/features/test_entry.py::test_entry_with_default_use`):
+  ```python
+  async def main(service: Annotated[Service, use(reuse=True)]) -> None:
+      ...
+
+  wrapped = graph.entry(main)
+  await wrapped()
+  ```
+  Decorating an entry no longer forces `reuse=False`; annotations decide whether the dependency is cached.
+
+- **Async scopes keep singleton callbacks** (`tests/test_graph_additional.py::test_async_scope_registers_reuse_singleton`):
+  ```python
+  scope = graph._create_ascope("async")
+  await scope.__aenter__()
+
+  instance = Service()
+  await scope.aresolve_callback(instance, Service, "function", True)
+
+  assert scope._resolved_singletons[Service] is instance
+  ```
+  Async scope resolution now records reusable instances the same way the synchronous scope already did.
