@@ -32,7 +32,7 @@ from .interfaces import AsyncResource as AsyncResource
 from .interfaces import INode as INode
 from .interfaces import Resource as Resource
 
-VERSION="1.7.3"
+VERSION="1.7.4"
 
 try:
     import graphviz as graphviz  # type: ignore
