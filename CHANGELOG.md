@@ -1596,3 +1596,66 @@ def test_graph_analyze_reuse_dependentcy():
   assert scope._resolved_singletons[Service] is instance
   ```
   Async scope resolution now records reusable instances the same way the synchronous scope already did.
+
+## version 1.7.6
+
+### Highlights
+- Node reuse now starts as "unspecified", giving decorator registration and `use()` hints a chance to agree before conflicts are raised.
+- Parameter-level reuse clashes now surface as `ParamReusabilityConflictError`, pointing directly at the factory parameter that introduced the mismatch.
+- `use()` return annotations propagate reuse flags to their nodes, so factory overrides can mark themselves reusable without extra bookkeeping.
+
+### Details
+- **Missing-as-default reuse** (`tests/versions/test_v1_7_6.py:22`): analyzing a dependency that uses `use(get_user, reuse=False)` flips the previously unspecified node to non-reusable, and a conflicting `reuse=True` hint now fails fast with `ParamReusabilityConflictError`.
+- **Return annotations drive node config** (`tests/versions/test_v1_7_6.py:35`): factories that return `Annotated[T, use(reuse=True)]` mark the target reusable immediately; later attempts to re-register them with `reuse=False` raise `ConfigConflictError`.
+- **Explicit overrides stay authoritative** (`tests/versions/test_v1_7_6.py:50`, `tests/versions/test_v1_7_6.py:66`): decorator-specified reuse continues to win, and any subsequent override that disagrees is rejected with `ConfigConflictError`.
+- **Public `is_provided` helper** (`ididi/__init__.py:34`): expose `is_provided` so callers can tell whether a node's reuse flag has been set before deciding on overrides.
+
+### Behavior Change
+
+Nodes now keep their reuse flag unset until code explicitly opts in, because `_reuse` starts as the sentinel `MISSING` during node construction (`ididi/_node.py:349`-`ididi/_node.py:392`). When the same dependent is included again we run through `DependentNode.update_reusability`; any side that still has `_reuse` equal to `MISSING` simply adopts the provided value, so `ConfigConflictError` only fires when both registrations made an explicit, conflicting choice (`ididi/graph.py:700`-`ididi/graph.py:708`). `use(...)` markers participate in the same flow: they publish their reuse preference while analysis walks the parameter graph, and we only escalate to `ParamReusabilityConflictError` when an earlier declaration disagrees (`ididi/graph.py:551`-`ididi/graph.py:563`, `tests/versions/test_v1_7_6.py:22`-`tests/versions/test_v1_7_6.py:47`). The public `is_provided` helper lets applications check whether a node already committed to a reuse value before attempting overrides (`ididi/__init__.py:34`, `tests/versions/test_v1_7_6.py:26`, `tests/versions/test_v1_7_6.py:72`).
+
+```python
+from typing import Annotated
+import pytest
+
+from ididi import Graph, use, is_provided
+from ididi.errors import ConfigConflictError, ParamReusabilityConflictError
+
+graph = Graph()
+
+class User: ...
+
+# First registration – leaves reuse as the sentinel MISSING
+graph.node(User)
+assert not is_provided(graph.nodes[User].reuse)
+
+# A handler pins the dependency to reuse=False; this now succeeds
+class LoginHandler:
+    def __init__(self, user: Annotated[User, use(reuse=False)]):
+        self.user = user
+
+graph.analyze(LoginHandler)
+assert graph.nodes[User].reuse is False  # value captured only now
+
+# A conflicting handler tries to demand reuse=True; we now get a targeted error
+class ProfileHandler:
+    def __init__(self, user: Annotated[User, use(reuse=True)]):
+        self.user = user
+
+with pytest.raises(ParamReusabilityConflictError):
+    graph.analyze(ProfileHandler)
+
+# Direct overrides behave the same way: once reuse is explicit, any opposite
+# declaration fails fast with ConfigConflictError.
+with pytest.raises(ConfigConflictError):
+    graph.node(User, reuse=True)
+
+# If you really need an opposite policy, supply it before anyone else fixes reuse:
+graph2 = Graph()
+graph2.node(User, reuse=True)          # explicit upfront
+class AuditHandler:
+    def __init__(self, user: User): ...
+graph2.analyze(AuditHandler)           # fine, reuse already decided
+```
+
+Previously `graph.node(User)` defaulted to a boolean reuse flag, so any later `use(reuse=True)`/`use(reuse=False)` annotation collided instantly. The sentinel-driven workflow leaves the decision open until a caller makes an explicit choice, keeping decorator registration, annotations, and overrides in sync and ensuring conflicts only occur when two intentional policies disagree.
