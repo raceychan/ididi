@@ -118,8 +118,22 @@ class ConfigConflictError(UnsolvableNodeError):
     but different config
     """
 
+    def __init__(self, current_factory: Any, current_reuse: bool, incoming_factory: Any, incoming_reuse: bool):
+        self.curren_factory = current_factory
+        self.current_reuse = current_reuse
+        self.incoming_factory = incoming_factory
+        self.incoming_reuse = incoming_reuse
+
+        msg = f"""
+        Dependent has conflict in reusability, current factory {self.curren_factory} is set to reuse={self.current_reuse}, \n\t whereas incoming factory{self.incoming_factory} is set to reuse={self.incoming_reuse}
+        """.strip()
+        super().__init__(msg)
+
 class ParamReusabilityConflictError(UnsolvableNodeError):
-    ...
+    def __init__(self, dependent_qualname: str, param_name: str, cce: ConfigConflictError):
+        msg = f"""\n\t Dependent {dependent_qualname!r} has conflict in param: \n\t {param_name!r} with current factory {cce.curren_factory} is set to reuse={cce.current_reuse}, \n\t whereas incoming factory {cce.incoming_factory} is set to reuse={cce.incoming_reuse}
+        """.lstrip()
+        super().__init__(msg)
 
 
 class ForwardReferenceNotFoundError(UnsolvableParameterError):

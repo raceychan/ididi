@@ -1,8 +1,10 @@
 from dataclasses import dataclass
-import pytest
 from typing import Annotated
 
-from ididi import Graph, Ignore, use
+import pytest
+
+from ididi import Graph, Ignore, is_provided, use
+from ididi.errors import ParamReusabilityConflictError, ConfigConflictError
 
 
 @dataclass
@@ -23,12 +25,53 @@ async def get_user() -> Ignore[User]:
 class EP:
     def __init__(self, user: Annotated[User, use(get_user, reuse=False)]): ...
 
+class PP:
+    def __init__(self, user: Annotated[User, use(get_user, reuse=True)]): ...
+    
 
-@pytest.mark.debug
 async def test_resolve_func():
     dg = Graph()
 
     dg.node(get_user)
+    assert not is_provided(dg.nodes[get_user].reuse)
+    dg.analyze(EP)
     assert dg.nodes[get_user].reuse is False
-    dg.analyze(get_user)
-    assert dg.nodes[get_user].reuse is False
+
+    with pytest.raises(ParamReusabilityConflictError):
+        dg.analyze(PP)
+
+
+async def test_resolve_dep_with_return():
+    dg = Graph()
+
+    class Manager: ...
+
+    def get_manager() -> Annotated[Manager, use(reuse=True)]: ...
+
+    
+    dg.analyze(get_manager)
+    assert dg.nodes[Manager].reuse
+
+    with pytest.raises(ConfigConflictError):
+        dg.node(Manager, reuse=False)
+
+
+async def test_override_with_reusability():
+    dg = Graph()
+
+    @dg.node(reuse=False)
+    class Manager: ...
+
+    dg.analyze_nodes()
+    assert not dg.nodes[Manager].reuse
+
+    def get_manager() -> Annotated[Manager, use(reuse=True)]: ...
+    dg.node(get_manager)
+    dg.analyze_nodes()
+    assert dg.nodes[Manager].reuse
+
+
+
+
+
+

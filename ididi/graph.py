@@ -505,7 +505,7 @@ class Resolver:
                     try:
                         inode = self.include_node(dependent=ufactory, reuse=is_reuse)
                     except ConfigConflictError as cce:
-                        raise ParamReusabilityConflictError(f"\n{node.factory.__name__}(Param[{param.name}: {param.param_type}]) has param conflict: \n \t{str(cce)}")
+                        raise ParamReusabilityConflictError(node.factory.__qualname__, param.name, cce)
 
                     node.update_param(
                         param.name, inode.dependent
@@ -559,7 +559,7 @@ class Resolver:
             try:
                 use_node = self.include_node(*use_meta)
             except ConfigConflictError as cce:
-                raise ParamReusabilityConflictError(f"\n{node.factory.__name__}(Param[{param.name}: {param.param_type}]) has param conflict: \n \t{str(cce)}")
+                raise ParamReusabilityConflictError(node.factory.__qualname__, param.name, cce)
 
             param_type = use_node.dependent
             if any(x in ignore for x in (i, name, param_type)):
@@ -603,7 +603,7 @@ class Resolver:
         resolved: T,
         dependent: IDependent[T],
         factory_type: FactoryType,
-        is_reuse: bool,
+        is_reuse: Maybe[bool],
     ) -> T:
         if factory_type in ("resource", "aresource"):
             raise ResourceOutsideScopeError(dependent)
@@ -617,7 +617,7 @@ class Resolver:
         resolved: Any,
         dependent: IDependent[T],
         factory_type: FactoryType,
-        is_reuse: bool,
+        is_reuse: Maybe[bool],
     ) -> T:
         if factory_type in ("resource", "aresource"):
             raise ResourceOutsideScopeError(dependent)
@@ -703,13 +703,11 @@ class Resolver:
         merged_ignore: NodeIgnoreConfig = self._ignore + ignore # type: ignore
         node = DependentNode.from_node(dependent, reuse=reuse, ignore=merged_ignore)
         if ori_node := self._nodes.get(node.dependent):
-            if should_override(node, ori_node):
-                if not ori_node.dependent in self._registered_singletons:
-                    self._remove_node(ori_node)
-            else:
-                if ori_node.reuse != node.reuse:                                                     
-                    raise ConfigConflictError(f"Existing node {ori_node} has config conflicts with {node}")                   
+            if not should_override(node, ori_node):
+                ori_node.update_reusability(node)
                 return node
+            if not ori_node.dependent in self._registered_singletons:
+                self._remove_node(ori_node)
         self._register_node(node)
         return node
 
@@ -881,7 +879,7 @@ class Resolver:
                 raise DeprecatedError(
                         "Passing (node, config) tuples to Graph.add_nodes is no longer supported,"
                         "Use idid.use instead, e.g. "
-                        "add_nodes(use(Service, reuse=True, ignore=[1, 2, 3]))."
+                        "add_nodes(use(Service, reuse=True))."
                 )
             self.node(node)
 
@@ -915,7 +913,7 @@ class ResolveScope(Resolver):
         ptr = self
         while is_provided(ptr._pre):
             if ptr._pre._name == name:
-                return ptr._pre
+                return ptr._pre # type: ignore
             ptr = ptr._pre
         else:
             raise OutOfScopeError(name)
@@ -963,7 +961,7 @@ class SyncScope(ResolveScope):
         resolved: ContextManager[T],
         dependent: IDependent[T],
         factory_type: FactoryType,
-        is_reuse: bool,
+        is_reuse: Maybe[bool],
     ) -> T:
         if factory_type in ("default", "function"):
             if is_reuse:
@@ -1050,7 +1048,7 @@ class AsyncScope(ResolveScope):
         resolved: Union[ContextManager[T], AsyncContextManager[T]],
         dependent: IDependent[T],
         factory_type: FactoryType,
-        is_reuse: bool,
+        is_reuse: Maybe[bool],
     ) -> T:
         if factory_type in ("default", "function", "afunction"):
             fac = cast(Union[T, Awaitable[T]], resolved)
@@ -1125,8 +1123,7 @@ class Graph(Resolver):
                     self._analyzed_nodes[dep_type] = other_resolved
                 continue
 
-            if other_node.reuse != current_node.reuse:
-                raise ConfigConflictError(f"{other}[{other_node.factory}, {other_node.reuse}] has the same resolve order as {self}[{current_node.factory}, {current_node.reuse}], but differs in configuration")
+            current_node.update_reusability(other_node)
 
             if not current_resolved and other_resolved:
                 self._analyzed_nodes[dep_type] = other_resolved

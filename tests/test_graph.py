@@ -1,7 +1,6 @@
 import inspect
 import sys
 import typing as ty
-import warnings
 from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Annotated, Optional
@@ -22,6 +21,7 @@ from ididi.errors import (
     PositionalOverrideError,
     TopLevelBulitinTypeError,
 )
+from ididi.interfaces import MISSING
 
 T = ty.TypeVar("T")
 
@@ -610,7 +610,7 @@ def test_node_config_non_transitive(dg: Graph):
     dg.node(use(Sub, reuse=True))
     dg.analyze(Sub)
 
-    assert dg.nodes[Base].reuse == False
+    assert dg.nodes[Base].reuse == MISSING
 
 
 def test_partial_node(dg: Graph):
@@ -1113,5 +1113,4 @@ def test_param_error_message():
         return UserService()
 
 
-    with pytest.raises(ParamReusabilityConflictError):
-        dg.analyze(user_service)
+    dg.analyze(user_service)

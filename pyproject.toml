@@ -77,6 +77,7 @@ test = { features = ["test"], solve-group = "default" }
 [tool.pixi.dependencies]
 python = "==3.9"
 typing_extensions = ">=4.12.2,<5"
+black = "*"
 
 [tool.pixi.feature.dev.dependencies]
 jupyter = ">=1.1.1,<2"

@@ -53,6 +53,20 @@ ididi has strong support to `typing` module, includes:
 
 Check out `tests/features/test_typing_support.py` for examples.
 
+## Development Docker Services
+
+Spin up Postgres and Redis locally with Docker Compose:
+
+```bash
+docker compose up -d
+```
+
+Postgres is exposed on `localhost:5432` with database `ididi`, user `ididi`, and password `ididi`. Redis listens on `localhost:6379`. Tear everything down when you are done:
+
+```bash
+docker compose down
+```
+
 ## Usage
 
 ### Quick Start

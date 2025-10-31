@@ -35,7 +35,6 @@ from ._type_resolve import (
     resolve_forwardref,
 )
 from .config import (
-    DEFAULT_REUSABILITY,
     IGNORE_PARAM_MARK,
     USE_FACTORY_MARK,
     CacheMax,
@@ -49,6 +48,7 @@ from .errors import (
     MissingAnnotationError,
     NotSupportedError,
     ProtocolFacotryNotProvidedError,
+    ConfigConflictError,
 )
 from .interfaces import (
     EMPTY_SIGNATURE,
@@ -74,12 +74,12 @@ Scoped = Annotated[Union[Generator[T, None, None], AsyncGenerator[T, None]], "sc
 # ========== NotImplemented =======
 
 @overload
-def use(*, reuse: bool) -> Any: ...
+def use(*, reuse: Maybe[bool]) -> Any: ...
 
 @overload
-def use(func: Maybe[INode[P, T]], /, *, reuse: bool = DEFAULT_REUSABILITY) -> T: ...
+def use(func: Maybe[INode[P, T]], /, *, reuse: Maybe[bool] = MISSING) -> T: ...
 
-def use(func: Maybe[INode[P, T]] = MISSING, /, *,  reuse: bool = DEFAULT_REUSABILITY) -> T:
+def use(func: Maybe[INode[P, T]] = MISSING, /, *,  reuse: Maybe[bool] = MISSING) -> T:
     """
     An annotation to let ididi knows what factory method to use
     without explicitly register it.
@@ -98,7 +98,7 @@ def use(func: Maybe[INode[P, T]] = MISSING, /, *,  reuse: bool = DEFAULT_REUSABI
 # ============== Ididi marks ===========
 
 
-def _search_meta(meta: list[Any]) -> Union[tuple[IDependent[Any], bool], None]:
+def _search_meta(meta: list[Any]) -> Union[tuple[IDependent[Any], Maybe[bool]], None]:
     for i, v in enumerate(meta):
         if v == USE_FACTORY_MARK:
             func, reuse = meta[i + 1], meta[i + 2]
@@ -106,7 +106,7 @@ def _search_meta(meta: list[Any]) -> Union[tuple[IDependent[Any], bool], None]:
     return None
 
 
-def resolve_use(annotation: Any) -> Union[tuple[Union[IDependent[Any], None], bool], None]:
+def resolve_use(annotation: Any) -> Union[tuple[Union[IDependent[Any], None], Maybe[bool]], None]:
     if get_origin(annotation) is not Annotated:
         return
 
@@ -354,9 +354,8 @@ class DependentNode:
         factory_type: FactoryType,
         function_dependent: bool = False,
         signature: Maybe[Signature] = MISSING,
-        reuse: bool, 
-        ignore: NodeIgnore, 
-        
+        reuse: Maybe[bool] = MISSING, 
+        ignore: NodeIgnore
     ):
         self.dependent = dependent
         self.factory = factory
@@ -370,7 +369,7 @@ class DependentNode:
         self._ignore = ignore
 
     @property
-    def reuse(self):
+    def reuse(self) -> Maybe[bool]:
         return self._reuse
 
     @property
@@ -382,6 +381,17 @@ class DependentNode:
             if p.name == name:
                 return p
         raise AttributeError(f"{name} not found")
+
+    def update_reusability(self, other: "DependentNode") -> None:
+        if not is_provided(other._reuse):
+            return 
+
+        if not is_provided(self._reuse):
+            self._reuse = other._reuse
+        elif other._reuse != self._reuse:
+            raise ConfigConflictError(self.factory, self._reuse, other.factory, other._reuse)
+
+
 
     def __repr__(self) -> str:
         str_repr = f"{self.__class__.__name__}(type: {self.dependent}"
@@ -449,7 +459,7 @@ class DependentNode:
             factory=factory,
             signature=signature,
             factory_type=factory_type,
-            reuse=DEFAULT_REUSABILITY if not is_provided(reuse) else reuse,
+            reuse=reuse,
             ignore=ignore
         )
         return node
@@ -470,7 +480,7 @@ class DependentNode:
             signature=signature,
             factory_type=factory_type,
             function_dependent=True,
-            reuse=DEFAULT_REUSABILITY if not is_provided(reuse) else reuse,
+            reuse=reuse,
             ignore=ignore
         )
         return node

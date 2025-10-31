@@ -31,6 +31,7 @@ from .graph import SyncScope as SyncScope
 from .interfaces import AsyncResource as AsyncResource
 from .interfaces import INode as INode
 from .interfaces import Resource as Resource
+from .utils.param_utils import is_provided as is_provided
 
 VERSION="1.7.5"
 

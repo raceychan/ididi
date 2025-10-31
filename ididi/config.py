@@ -5,7 +5,7 @@ from typing import Any, Final, Iterable, Literal
 from .interfaces import GraphIgnore, GraphIgnoreConfig
 
 EmptyIgnore: Final[tuple[Any]] = tuple()
-DEFAULT_REUSABILITY: bool = False
+# DEFAULT_REUSABILITY: bool = False
 
 
 class FrozenSlot:
