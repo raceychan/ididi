@@ -9,7 +9,7 @@ import pytest
 from ididi import Graph
 from ididi._node import Dependency
 from ididi.config import IGNORE_PARAM_MARK, USE_FACTORY_MARK
-from ididi.errors import ConfigConflictError, DeprecatedError
+from ididi.errors import ConfigConflictError
 from ididi.utils.param_utils import MISSING
 
 
@@ -36,7 +36,7 @@ def test_should_be_scoped_respects_node_ignore():
         dependent=Service,
         is_resource=False,
         ignore=("ignored",),
-        dependencies=(Dependency(name="ignored", param_type=int, default=MISSING), ),
+        dependencies=(Dependency(name="ignored", param_type=int, annotation=int, default=MISSING), ),
         reuse=False,
     )
     graph._analyzed_nodes[Service] = node  # type: ignore[attr-defined]
@@ -54,7 +54,7 @@ def test_analyze_params_respects_ignore(monkeypatch: pytest.MonkeyPatch):
         return "value"
 
     annotated = Annotated[str, USE_FACTORY_MARK, factory, False]
-    dependency = Dependency(name="dep", param_type=annotated, default=MISSING)
+    dependency = Dependency(name="dep", param_type=annotated, annotation=annotated, default=MISSING)
 
     def fake_build_dependencies(function, signature):
         return [dependency]

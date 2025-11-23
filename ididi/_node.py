@@ -44,11 +44,11 @@ from .config import (
 )
 from .errors import (
     ABCNotImplementedError,
+    ConfigConflictError,
     DeprecatedError,
     MissingAnnotationError,
     NotSupportedError,
     ProtocolFacotryNotProvidedError,
-    ConfigConflictError,
 )
 from .interfaces import (
     EMPTY_SIGNATURE,
@@ -170,19 +170,18 @@ class Dependency:
     default: the default value of the param, 5, in this case.
     """
 
-    name: str
-    param_type: "IDependent[Any]"  # resolved_type
-    default_: "Maybe[Any]"
-    should_be_ignored: bool
+    __slots__ = ("name", "param_type", "annotation", "default_", "should_be_ignored")
 
     def __init__(
         self,
         name: str,
         param_type: IDependent[T],
+        annotation: Any,
         default: Maybe[T],
     ) -> None:
         self.name = name
         self.param_type = param_type
+        self.annotation = annotation
         self.default_ = default
         self.should_be_ignored = self.should_ignore(param_type) or is_unsolvable_type(
             param_type
@@ -204,6 +203,7 @@ class Dependency:
         return Dependency(
             name=self.name,
             param_type=param_type,
+            annotation=self.annotation,
             default=self.default_,
         )
 
@@ -219,6 +219,7 @@ def unpack_to_deps(
         dep_param = Dependency(
             name=name,
             param_type=resolve_annotation(ftype),
+            annotation=ftype,
             default=MISSING,
         )
         dependencies[name] = dep_param
@@ -280,6 +281,7 @@ def build_dependencies(
         dep_param = Dependency(
             name=param.name,
             param_type=param_type,
+            annotation=param_annotation,
             default=default,
         )
         dependencies[param.name] = dep_param
@@ -343,6 +345,16 @@ class DependentNode:
     ---
     whether this node is reusable, default is True
     """
+
+    __slots__ = (
+        "dependent",
+        "factory",
+        "factory_type",
+        "function_dependent",
+        "dependencies",
+        "_reuse",
+        "_ignore",
+    )
 
     dependencies: list[Dependency]
 
