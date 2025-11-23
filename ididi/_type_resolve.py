@@ -156,7 +156,10 @@ def is_unsolvable_type(t: Any) -> bool:
     Examples:
     - builtin types
     """
-
+    if t_origin := get_origin(t):
+        if t_origin in UNION_META:
+            return all(is_unsolvable_type(union_type) for union_type in get_args(t))
+        return is_unsolvable_type(t_origin)
     return is_builtin_type(t) or isinstance(t, TypeVar) or t in ExtraUnsolvableTypes
 
 
