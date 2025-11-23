@@ -33,3 +33,19 @@ def test_meta_annotation():
 
     with pytest.raises(AttributeError):
         node.__dict__
+
+def test_class_annotation():
+    @dataclass
+    class User:
+        id: Annotated[int, meta("user_id", "v1")]
+        name: str
+
+    @dataclass
+    class Post:
+        user: User
+
+    graph = Graph()
+    graph.node(Post)
+    node = graph.analyze(Post)
+    field = node.dependencies[0]
+    assert field.name == "user"

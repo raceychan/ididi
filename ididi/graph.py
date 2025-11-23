@@ -405,7 +405,11 @@ class Resolver:
             if IGNORE_PARAM_MARK in metas:
                 return False
         if not (resolved_node := self._analyzed_nodes.get(dep_type)):
-            resolved_node = self.analyze(dep_type)
+            try:
+                resolved_node = self.analyze(dep_type)
+            except TopLevelBulitinTypeError as tle:
+                raise UnsolvableNodeError(f"Failed to parse dependency {dep_type}, {tle.message}") from tle
+                
 
         if self.is_registered_singleton(resolved_node.dependent):
             return False
@@ -424,8 +428,13 @@ class Resolver:
             if param.should_be_ignored:
                 continue
 
-            if self.should_be_scoped(ptype):
-                return True
+            try:
+                if self.should_be_scoped(ptype):
+                    return True
+            except UnsolvableNodeError as une:
+                une.add_context(resolved_node.dependent, pname, ptype)
+                raise une
+
         return False
 
     def check_param_conflict(
