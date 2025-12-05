@@ -1,7 +1,7 @@
-from ididi._type_resolve import is_unsolvable_type
 from typing import Union
 
-import pytest
+from ididi._type_resolve import is_unsolvable_type
+
 
 class User:
     id: int

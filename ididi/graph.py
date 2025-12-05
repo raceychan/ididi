@@ -29,7 +29,6 @@ from typing_extensions import Self, Unpack
 from ._ds import GraphNodes, GraphNodesView, ResolvedSingletons, TypeRegistry, Visitor
 from ._node import IGNORE_PARAM_MARK, DependentNode, resolve_use, should_override
 from ._type_resolve import (
-    flatten_annotated,
     get_bases,
     get_typed_signature,
     is_function,
@@ -69,7 +68,7 @@ from .interfaces import (  # INodeConfig,
     TEntryDecor,
 )
 from .utils.param_utils import MISSING, Maybe, is_provided
-from .utils.typing_utils import P, T
+from .utils.typing_utils import P, T, flatten_annotated
 
 AnyScope = Union["SyncScope", "AsyncScope"]
 ScopeToken = Token[AnyScope]

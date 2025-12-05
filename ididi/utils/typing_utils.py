@@ -1,6 +1,6 @@
-from typing import Any, ForwardRef, Hashable, Mapping, TypeVar, Union
+from typing import Annotated, Any, ForwardRef, Hashable, Mapping, TypeVar, Union
 from typing import _eval_type as ty_eval_type  # type: ignore
-from typing import cast
+from typing import cast, get_args, get_origin
 
 from typing_extensions import ParamSpec, TypeGuard
 
@@ -88,3 +88,15 @@ def actualize_strforward(annotation: Any, gvars: dict[str, Any]) -> Any:
         annotation = ForwardRef(annotation, is_argument=False)
         annotation = eval_type(annotation, gvars, gvars, lenient=True)
     return annotation
+
+def flatten_annotated(typ: Annotated[Any, Any]) -> list[Any]:
+    "Annotated[Annotated[T, Ann1, Ann2], Ann3] -> [T, Ann1, Ann2, Ann3]"
+    flattened_metadata: list[Any] = []
+    _, *metadata = get_args(typ)
+
+    for item in metadata:
+        if get_origin(item) is Annotated:
+            flattened_metadata.extend(flatten_annotated(item))
+        else:
+            flattened_metadata.append(item)
+    return flattened_metadata

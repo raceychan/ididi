@@ -20,7 +20,6 @@ from typing import (
 from typing_extensions import Unpack
 
 from ._type_resolve import (
-    flatten_annotated,
     get_args,
     get_factory_sig_from_cls,
     get_typed_signature,
@@ -34,6 +33,7 @@ from ._type_resolve import (
     resolve_annotation,
     resolve_forwardref,
 )
+from .utils.typing_utils import flatten_annotated
 from .config import (
     IGNORE_PARAM_MARK,
     USE_FACTORY_MARK,
@@ -74,7 +74,7 @@ Scoped = Annotated[Union[Generator[T, None, None], AsyncGenerator[T, None]], "sc
 # ========== NotImplemented =======
 
 @overload
-def use(*, reuse: Maybe[bool]) -> Any: ...
+def use(*, reuse: Maybe[bool]=MISSING) -> Any: ...
 
 @overload
 def use(func: Maybe[INode[P, T]], /, *, reuse: Maybe[bool] = MISSING) -> T: ...

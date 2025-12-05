@@ -30,7 +30,12 @@ from typing_extensions import TypeAliasType, TypeGuard, Unpack
 from .config import CacheMax, ExtraUnsolvableTypes
 from .errors import ForwardReferenceNotFoundError, UnsolvableReturnTypeError
 from .interfaces import IDependent, INode, P, T
-from .utils.typing_utils import T, actualize_strforward, eval_type, is_builtin_type
+from .utils.typing_utils import (
+    T,
+    actualize_strforward,
+    eval_type,
+    is_builtin_type,
+)
 
 if sys.version_info >= (3, 10):
     from types import UnionType
@@ -248,17 +253,7 @@ def is_new_type(annotation: Any) -> bool:
     return hasattr(annotation, "__supertype__")
 
 
-def flatten_annotated(typ: Annotated[Any, Any]) -> list[Any]:
-    "Annotated[Annotated[T, Ann1, Ann2], Ann3] -> [T, Ann1, Ann2, Ann3]"
-    flattened_metadata: list[Any] = []
-    _, *metadata = get_args(typ)
 
-    for item in metadata:
-        if get_origin(item) is Annotated:
-            flattened_metadata.extend(flatten_annotated(item))
-        else:
-            flattened_metadata.append(item)
-    return flattened_metadata
 
 
 @lru_cache(CacheMax)
