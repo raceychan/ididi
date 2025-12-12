@@ -75,18 +75,19 @@ class Agent:
         self.llm = llm
 
 MathAgent = NewType("MathAgent", Agent)
+EnglishAgent = NewType("EnglishAgent", Agent)
 
 def math_agent_factory(llm: LLMService) -> MathAgent:
     return MathAgent(Agent(prompt="Solve math problems", llm=llm))
 
-def english_agent_factory(llm: LLMService) -> Agent:
-    return Agent(prompt="Assist with English tasks", llm=llm)
+def english_agent_factory(llm: LLMService) -> EnglishAgent:
+    return EnglishAgent(Agent(prompt="Assist with English tasks", llm=llm))
 
 dg = Graph()
 math_agent = dg.resolve(math_agent_factory)
-assert math_agent.prompt == "Solve math problems"
+assert isinstance(math_agent, Agent) and math_agent.prompt == "Solve math problems"
 english_agent = dg.resolve(english_agent_factory)
-assert english_agent.prompt == "Assist with English tasks"
+assert isinstance(english_agent, Agent) and english_agent.prompt == "Assist with English tasks"
 ```
 
 See `tests/features/test_typing_support.py::test_solve_agent_new_types` for the full test case.
