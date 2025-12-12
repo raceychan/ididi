@@ -91,20 +91,6 @@ assert english_agent.prompt == "Assist with English tasks"
 
 See `tests/features/test_typing_support.py::test_solve_agent_new_types` for the full test case.
 
-## Development Docker Services
-
-Spin up Postgres and Redis locally with Docker Compose:
-
-```bash
-docker compose up -d
-```
-
-Postgres is exposed on `localhost:5432` with database `ididi`, user `ididi`, and password `ididi`. Redis listens on `localhost:6379`. Tear everything down when you are done:
-
-```bash
-docker compose down
-```
-
 ## Usage
 
 ### Quick Start
