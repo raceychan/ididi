@@ -53,6 +53,44 @@ ididi has strong support to `typing` module, includes:
 
 Check out `tests/features/test_typing_support.py` for examples.
 
+#### Choosing reuse strategy for typed dependencies
+
+- Dependency type used as singleton → `reuse=True`
+- Dependency type with limited instances → wrap the target with `typing.NewType`
+- Dependency used as transient → `reuse=False`
+
+#### Example: solving limited agent types with `NewType`
+
+When only a handful of instances of the same type should be resolvable, wrap each variant in a distinct `NewType`. This keeps the factories strongly typed without turning everything into a singleton.
+
+```python
+from typing import NewType
+from ididi import Graph
+
+class LLMService: ...
+
+class Agent:
+    def __init__(self, prompt: str, llm: LLMService):
+        self.prompt = prompt
+        self.llm = llm
+
+MathAgent = NewType("MathAgent", Agent)
+
+def math_agent_factory(llm: LLMService) -> MathAgent:
+    return MathAgent(Agent(prompt="Solve math problems", llm=llm))
+
+def english_agent_factory(llm: LLMService) -> Agent:
+    return Agent(prompt="Assist with English tasks", llm=llm)
+
+dg = Graph()
+math_agent = dg.resolve(math_agent_factory)
+assert math_agent.prompt == "Solve math problems"
+english_agent = dg.resolve(english_agent_factory)
+assert english_agent.prompt == "Assist with English tasks"
+```
+
+See `tests/features/test_typing_support.py::test_solve_agent_new_types` for the full test case.
+
 ## Development Docker Services
 
 Spin up Postgres and Redis locally with Docker Compose:
