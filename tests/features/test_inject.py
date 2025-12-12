@@ -1,7 +1,6 @@
 from datetime import datetime, timezone
 from typing import Annotated, NewType
 
-import pytest
 
 from ididi import Graph, entry, use
 from tests.test_data import UserService
