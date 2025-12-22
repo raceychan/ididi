@@ -1,9 +1,14 @@
+import inspect
+from types import MethodType
 from typing import Annotated
 
 import pytest
 
 from ididi import DependentNode
+from ididi._node import NodeMeta, build_dependencies
+from ididi.config import EmptyIgnore
 from ididi.errors import NotSupportedError
+from ididi.utils.param_utils import MISSING
 
 
 class A:
@@ -96,3 +101,39 @@ def test_node_with_not_supported_type():
     with pytest.raises(NotSupportedError):
         DependentNode.from_node(dict(a=1, b=2))
 
+
+def test_node_meta_rejects_reuse_and_ignore():
+    with pytest.raises(NotSupportedError):
+        NodeMeta(reuse=True, ignore=True)
+
+
+def test_build_dependencies_skips_bound_instance_self():
+    class Builder:
+        def method(self, value: int) -> int:
+            return value
+
+    bound = MethodType(Builder.method, Builder())
+    deps = build_dependencies(bound, inspect.signature(bound))
+    assert deps == []
+
+
+def test_get_param_missing_raises():
+    class NeedsConfig:
+        def __init__(self, config: Config):
+            self.config = config
+
+    node = DependentNode._from_class(NeedsConfig, reuse=MISSING, ignore=EmptyIgnore)
+    with pytest.raises(AttributeError):
+        node.get_param("unknown")
+
+
+def test_from_node_normalizes_ignore_configs():
+    class Sample:
+        def __init__(self, name: str):
+            self.name = name
+
+    default_ignore = DependentNode.from_node(Sample, ignore=MISSING)
+    assert default_ignore.ignore == tuple()
+
+    with_string = DependentNode.from_node(Sample, ignore="name")
+    assert with_string.ignore == ("name",)

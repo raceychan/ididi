@@ -2,7 +2,6 @@
 This module separates the type resolution logic between utils.typing_utils and the core logic, where this module wraps functions in utils.typing_utils with specific domain logic.
 """
 
-import sys
 from collections.abc import AsyncGenerator, Generator
 from functools import lru_cache
 from inspect import Parameter, Signature
@@ -37,12 +36,15 @@ from .utils.typing_utils import (
     is_builtin_type,
 )
 
-if sys.version_info >= (3, 10):
-    from types import UnionType
+try:
+    from types import UnionType as _UnionType
+except ImportError:
+    _UnionType = None  # type: ignore[assignment]
 
-    UNION_META = (Union, UnionType)
-else:
+if _UnionType is None:
     UNION_META = (Union,)
+else:  # pragma: no cover - executed on Python 3.10+
+    UNION_META = (Union, _UnionType)
 
 
 SyncResource = Union[ContextManager[Any]]

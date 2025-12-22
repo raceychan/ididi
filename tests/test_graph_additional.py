@@ -2,14 +2,29 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager, contextmanager
 from types import MethodType, SimpleNamespace
-from typing import Annotated, Any
+from typing import Annotated, Any, Protocol
 
 import pytest
 
 from ididi import Graph, Ignore, use
 from ididi._node import Dependency
-from ididi.errors import ConfigConflictError
+from ididi.config import EmptyIgnore
+from ididi.errors import (
+    ConfigConflictError,
+    DeprecatedError,
+    ParamReusabilityConflictError,
+    UnsolvableNodeError,
+)
 from ididi.utils.param_utils import MISSING
+
+
+class EntryService:
+    ...
+
+
+class ProtocolDependency(Protocol):
+    def ping(self) -> None:
+        ...
 
 
 def test_resolver_name_property():
@@ -86,6 +101,50 @@ def test_analyze_params_respects_ignore(monkeypatch: pytest.MonkeyPatch):
     assert requires_scope is False
     assert unresolved == []
     assert called["include"] == 1
+
+
+def test_should_be_scoped_builtin_type_raises_unsolvable():
+    graph = Graph()
+    with pytest.raises(UnsolvableNodeError):
+        graph.should_be_scoped(int)
+
+
+def test_should_be_scoped_adds_context_on_failure():
+    graph = Graph()
+
+    class NeedsProtocol:
+        def __init__(self, dependency: ProtocolDependency):
+            self.dependency = dependency
+
+    with pytest.raises(UnsolvableNodeError) as excinfo:
+        graph.should_be_scoped(NeedsProtocol)
+
+    notes = "".join(getattr(excinfo.value, "__notes__", ()))
+    assert "NeedsProtocol" in notes and "dependency" in notes
+
+
+def test_analyze_params_rejects_use_defaults():
+    graph = Graph()
+
+    def entry(
+        service: Annotated[EntryService, use(EntryService)] = use(EntryService),
+    ) -> EntryService:
+        return service
+
+    with pytest.raises(DeprecatedError):
+        graph.analyze_params(entry, reuse=MISSING, ignore=EmptyIgnore)
+
+
+def test_analyze_params_reports_reuse_conflicts():
+    graph = Graph()
+
+    graph.node(EntryService, reuse=False)
+
+    def entry(service: Annotated[EntryService, use(EntryService, reuse=True)]) -> EntryService:
+        return service
+
+    with pytest.raises(ParamReusabilityConflictError):
+        graph.analyze_params(entry, reuse=MISSING, ignore=EmptyIgnore)
 
 
 @pytest.mark.asyncio
