@@ -102,12 +102,13 @@ def test_solve_agent_new_types():
             self.llm = llm
 
     MathAgent = NewType("MathAgent", Agent)
+    EnglishAgent = NewType("EnglishAgent", Agent)
 
     def math_agent_factory(llm: LLMService) -> MathAgent:
         return MathAgent(Agent(prompt="Solve math problems", llm=llm))
 
-    def english_agent_factory(llm: LLMService) -> Agent:
-        return Agent(prompt="Assist with English tasks", llm=llm)
+    def english_agent_factory(llm: LLMService) -> EnglishAgent:
+        return EnglishAgent(Agent(prompt="Assist with English tasks", llm=llm))
 
     dg = Graph()
     math_agent = dg.resolve(math_agent_factory)

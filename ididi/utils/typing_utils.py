@@ -46,7 +46,7 @@ def is_builtin_type(
 
 
 def eval_type(
-    value: ForwardRef,
+    value: Union[ForwardRef, str],
     globalns: Union[dict[str, Any], None] = None,
     localns: Union[Mapping[str, Any], None] = None,
     *,
@@ -63,6 +63,8 @@ def eval_type(
         globalns: The local namespace to use during annotation evaluation.
         lenient: Whether to keep unresolvable annotations as is or re-raise the `NameError` exception. Default: re-raise.
     """
+    if isinstance(value, str):
+        value = ForwardRef(value, is_argument=False)
 
     try:
         return cast(type[Any], ty_eval_type(value, globalns, localns))
@@ -84,9 +86,8 @@ def actualize_strforward(annotation: Any, gvars: dict[str, Any]) -> Any:
     Here "UserService" is a string not `typing.ForwardRef`
     """
 
-    if isinstance(annotation, str):
-        annotation = ForwardRef(annotation, is_argument=False)
-        annotation = eval_type(annotation, gvars, gvars, lenient=True)
+
+    annotation = eval_type(annotation, gvars, gvars, lenient=True)
     return annotation
 
 def flatten_annotated(typ: Annotated[Any, Any]) -> list[Any]:

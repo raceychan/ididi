@@ -160,7 +160,7 @@ class Repository:
 
 #### `Ignore`
 
-ididi takes a "resolve by default" approach, for dependencies you would like ididi to ignore, you can config ididi to ignore them.
+For dependencies you would like ididi to ignore, you can config ididi to ignore them.
 
 - Ignore at Graph level
 
