@@ -37,7 +37,6 @@ class FrozenSlot:
         attrs = tuple(getattr(self, attr) for attr in self.__slots__)
         return hash(attrs)
 
-
 class GraphConfig(FrozenSlot):
     __slots__ = ("self_inject", "ignore")
 
@@ -67,12 +66,6 @@ except ImportError:
 CacheMax: Final[int] = 1024
 ExtraUnsolvableTypes: Final[tuple[Any, ...]] = (Any, Literal, Signature.empty, TypeAliasType)
 DefaultScopeName: Final[str] = "__ididi_default_scope__"
-
-# ================== Marks ==================
-USE_FACTORY_MARK = "__ididi_use_factory__"
-"""
-`typing.Annotated[T, USE_FACTORY_MARK, Callable[..., T], NodeConfig]`
-"""
 
 IGNORE_PARAM_MARK = "__ididi_ignore_param__"
 """

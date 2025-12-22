@@ -6,9 +6,9 @@ from typing import Annotated, Any
 
 import pytest
 
-from ididi import Graph
+from ididi import Graph, use
 from ididi._node import Dependency
-from ididi.config import IGNORE_PARAM_MARK, USE_FACTORY_MARK
+from ididi.config import IGNORE_PARAM_MARK
 from ididi.errors import ConfigConflictError
 from ididi.utils.param_utils import MISSING
 
@@ -53,7 +53,7 @@ def test_analyze_params_respects_ignore(monkeypatch: pytest.MonkeyPatch):
     def factory() -> str:
         return "value"
 
-    annotated = Annotated[str, USE_FACTORY_MARK, factory, False]
+    annotated = Annotated[str, use(factory, reuse=False)]
     dependency = Dependency(name="dep", param_type=annotated, annotation=annotated, default=MISSING)
 
     def fake_build_dependencies(function, signature):

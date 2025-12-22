@@ -305,8 +305,8 @@ class Resolver:
             annt_dep = resolved_type
 
         if annt_dep:
-            if use_meta := resolve_use(annt_dep):
-                self.include_node(*use_meta)
+            if node_meta := resolve_use(annt_dep):
+                self.include_node(dependent=node_meta.factory, reuse=node_meta.reuse)
 
             if is_function(dependent):
                 # if dependent in nodes just reuse
@@ -508,10 +508,9 @@ class Resolver:
                 if (param_type := param.param_type) in self._analyzed_nodes:
                     continue
                 self.check_param_conflict(param_type, current_path)
-                if use_meta := resolve_use(param_type):
-                    ufactory, is_reuse = use_meta
+                if node_meta := resolve_use(param_type):
                     try:
-                        inode = self.include_node(dependent=ufactory, reuse=is_reuse)
+                        inode = self.include_node(dependent=node_meta.factory, reuse=node_meta.reuse)
                     except ConfigConflictError as cce:
                         raise ParamReusabilityConflictError(node.factory.__qualname__, param.name, cce)
 
@@ -558,14 +557,14 @@ class Resolver:
         for i, param in enumerate(node.dependencies):
             name = param.name
             param_type = param.param_type
-            use_meta = resolve_use(param.param_type)
-            if not use_meta:
+            if not (node_meta := resolve_use(param.param_type)):
                 continue
+
             if resolve_use(param.default_):
                 raise DeprecatedError(f"Using default value {param} for `use` is not longer supported")
 
             try:
-                use_node = self.include_node(*use_meta)
+                use_node = self.include_node(dependent=node_meta.factory, reuse=node_meta.reuse)
             except ConfigConflictError as cce:
                 raise ParamReusabilityConflictError(node.factory.__qualname__, param.name, cce)
 
@@ -864,9 +863,8 @@ class Resolver:
             return configured  # type: ignore
 
         if get_origin(dependent) is Annotated:
-            use_meta = resolve_use(dependent)
-            if use_meta:
-                self.include_node(dependent=use_meta[0], reuse=use_meta[1])
+            if node_meta := resolve_use(dependent) :
+                self.include_node(dependent=node_meta.factory, reuse=node_meta.reuse)
                 return dependent
             else:
                 dependent = get_args(dependent)[0]

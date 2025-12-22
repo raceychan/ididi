@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+pytest.importorskip("graphviz")
+
 from ididi.graph import Graph
 from ididi.visual import Visualizer
 

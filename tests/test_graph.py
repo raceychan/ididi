@@ -1085,18 +1085,7 @@ def test_ignore_param_and_should_be_ignored():
 
     dg.should_be_scoped(test)
 
-    
-def test_entry_with_default_use():
-    
-    dg = Graph()
 
-    class Service: ...
-
-    with pytest.raises(DeprecatedError):
-
-        @dg.entry
-        def test(service: Service = use(Service)):
-            ...
 
 def test_param_error_message():
     

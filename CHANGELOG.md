@@ -543,7 +543,9 @@ def get_conn(url: Annotated[str, IGNORE_PARAM_MARK]):
 ```
 
 ```python
-def get_repo(conn: Annotated[Connection, USE_FACTORY_MARK, get_conn, NodeConfig]):
+from ididi import use
+
+def get_repo(conn: Annotated[Connection, use(get_conn)]):
     ...
 ```
 

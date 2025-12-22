@@ -1,5 +1,6 @@
 from abc import ABC
 from contextlib import asynccontextmanager, contextmanager
+from dataclasses import dataclass
 from functools import lru_cache
 from inspect import Signature
 from inspect import _ParameterKind as ParameterKind  # type: ignore
@@ -9,8 +10,10 @@ from typing import (
     Annotated,
     Any,
     AsyncGenerator,
+    Callable,
     ForwardRef,
     Generator,
+    Generic,
     Union,
     cast,
     get_origin,
@@ -33,19 +36,10 @@ from ._type_resolve import (
     resolve_annotation,
     resolve_forwardref,
 )
-from .utils.typing_utils import flatten_annotated
-from .config import (
-    IGNORE_PARAM_MARK,
-    USE_FACTORY_MARK,
-    CacheMax,
-    EmptyIgnore,
-    FactoryType,
-    ResolveOrder,
-)
+from .config import IGNORE_PARAM_MARK, CacheMax, EmptyIgnore, FactoryType, ResolveOrder
 from .errors import (
     ABCNotImplementedError,
     ConfigConflictError,
-    DeprecatedError,
     MissingAnnotationError,
     NotSupportedError,
     ProtocolFacotryNotProvidedError,
@@ -61,25 +55,29 @@ from .interfaces import (
     NodeIgnoreConfig,
 )
 from .utils.param_utils import MISSING, Maybe, is_provided
-from .utils.typing_utils import P, R, T
+from .utils.typing_utils import P, R, T, flatten_annotated
 
 # ============== Ididi marks ===========
 
 Ignore = Annotated[R, IGNORE_PARAM_MARK]
 
-# ========== NotImplemented =======
-
 Scoped = Annotated[Union[Generator[T, None, None], AsyncGenerator[T, None]], "scoped"]
 
-# ========== NotImplemented =======
+
+@dataclass(frozen=True)
+class NodeMeta(Generic[T]):
+    factory: Maybe[Callable[..., T]]
+    reuse: Maybe[bool]
+
+
 
 @overload
 def use(*, reuse: Maybe[bool]=MISSING) -> Any: ...
 
 @overload
-def use(func: Maybe[INode[P, T]], /, *, reuse: Maybe[bool] = MISSING) -> T: ...
+def use(factory: Maybe[INode[P, T]], /, *, reuse: Maybe[bool] = MISSING) -> T: ...
 
-def use(func: Maybe[INode[P, T]] = MISSING, /, *,  reuse: Maybe[bool] = MISSING) -> T:
+def use(factory: Maybe[INode[P, T]] = MISSING, /, *,  reuse: Maybe[bool] = MISSING) -> T:
     """
     An annotation to let ididi knows what factory method to use
     without explicitly register it.
@@ -87,10 +85,11 @@ def use(func: Maybe[INode[P, T]] = MISSING, /, *,  reuse: Maybe[bool] = MISSING)
     These two are equivalent
     ```
     def func(service: Annotated[UserService, use(factory)]): ...
+    def func(service: Annotated[UserService, use()]): ...
     ```
     """
 
-    annt = Annotated[T, USE_FACTORY_MARK, func, reuse]
+    annt = Annotated[T, NodeMeta(factory=factory, reuse=reuse)]
     return cast(T, annt)
 
 
@@ -98,27 +97,23 @@ def use(func: Maybe[INode[P, T]] = MISSING, /, *,  reuse: Maybe[bool] = MISSING)
 # ============== Ididi marks ===========
 
 
-def _search_meta(meta: list[Any]) -> Union[tuple[IDependent[Any], Maybe[bool]], None]:
-    for i, v in enumerate(meta):
-        if v == USE_FACTORY_MARK:
-            func, reuse = meta[i + 1], meta[i + 2]
-            return func, reuse
-    return None
 
 
-def resolve_use(annotation: Any) -> Union[tuple[Union[IDependent[Any], None], Maybe[bool]], None]:
+def resolve_use(annotation: Any) -> Union[NodeMeta[Any], None]:
     if get_origin(annotation) is not Annotated:
         return
 
     metas: list[Any] = flatten_annotated(annotation)
-    use_meta = _search_meta(metas)
-    if use_meta is None:
-        return None
-    
-    factory, reuse = use_meta
-    if not is_provided(factory):
-        factory = get_args(annotation)[0]
-    return factory, reuse
+
+    for v in metas:
+        if isinstance(v, NodeMeta):
+            if not is_provided(v.factory):
+                factory = get_args(annotation)[0]
+                return NodeMeta(factory=factory, reuse=v.reuse)
+            return v
+    return None
+
+
 
 
 def should_override(other_node: "DependentNode", current_node: "DependentNode") -> bool:
@@ -144,7 +139,7 @@ def resolve_type_from_meta(annt: Any) -> IDependent[Any]:
 
     if IGNORE_PARAM_MARK in annotate_meta:
         return annt
-    if USE_FACTORY_MARK in annotate_meta:
+    if any(isinstance(meta, NodeMeta) for meta in annotate_meta):
         return annt
     return get_args(annt)[0]
 
@@ -264,9 +259,6 @@ def build_dependencies(
             default = param.default
 
         param_type = resolve_annotation(param_annotation)
-
-        if resolve_use(default):
-            raise DeprecatedError(f"Using default value `{param}` for `use` is no longer supported")
 
         if get_origin(param_type) is Annotated:
             param_type = resolve_type_from_meta(param_type)
@@ -535,15 +527,12 @@ class DependentNode:
                 return node
 
             base_dependent, *_ = get_args(dependent)
-            use_meta = resolve_use(dependent)
-
-            if use_meta:
-                use_factory, use_reuse = use_meta
+            if node_meta := resolve_use(dependent):
                 if not is_provided(reuse):
-                    reuse = use_reuse
+                    reuse = node_meta.reuse
 
-                if use_factory not in (base_dependent, factory):
-                    return cls.from_node(use_factory, reuse=reuse, ignore=ignore)
+                if node_meta.factory not in (base_dependent, factory):
+                    return cls.from_node(node_meta.factory, reuse=reuse, ignore=ignore)
 
             dependent = base_dependent
 
