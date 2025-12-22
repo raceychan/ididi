@@ -14,6 +14,7 @@ from typing import (
     ForwardRef,
     Generator,
     Generic,
+    Iterable,
     Union,
     cast,
     get_origin,
@@ -36,7 +37,7 @@ from ._type_resolve import (
     resolve_annotation,
     resolve_forwardref,
 )
-from .config import IGNORE_PARAM_MARK, CacheMax, EmptyIgnore, FactoryType, ResolveOrder
+from .config import CacheMax, EmptyIgnore, FactoryType, ResolveOrder
 from .errors import (
     ABCNotImplementedError,
     ConfigConflictError,
@@ -59,15 +60,20 @@ from .utils.typing_utils import P, R, T, flatten_annotated
 
 # ============== Ididi marks ===========
 
-Ignore = Annotated[R, IGNORE_PARAM_MARK]
-
 Scoped = Annotated[Union[Generator[T, None, None], AsyncGenerator[T, None]], "scoped"]
 
 
 @dataclass(frozen=True)
 class NodeMeta(Generic[T]):
-    factory: Maybe[Callable[..., T]]
-    reuse: Maybe[bool]
+    factory: Maybe[Callable[..., T]] = MISSING
+    reuse: Maybe[bool] = MISSING
+    ignore: Maybe[bool] = MISSING
+
+    def __post_init__(self):
+        if is_provided(self.reuse) and is_provided(self.ignore):
+            raise NotSupportedError(f"reuse and config can't be both set")
+
+Ignore = Annotated[R, NodeMeta(ignore=True)]
 
 
 
@@ -107,13 +113,23 @@ def resolve_use(annotation: Any) -> Union[NodeMeta[Any], None]:
 
     for v in metas:
         if isinstance(v, NodeMeta):
-            if not is_provided(v.factory):
+            if v.ignore is True:
+                continue
+            factory = v.factory
+            if not is_provided(factory):
                 factory = get_args(annotation)[0]
-                return NodeMeta(factory=factory, reuse=v.reuse)
-            return v
+            return NodeMeta(factory=factory, reuse=v.reuse)
     return None
 
 
+def contains_ignore_meta(metadata: Iterable[Any]) -> bool:
+    return any(isinstance(meta, NodeMeta) and meta.ignore is True for meta in metadata)
+
+
+def has_ignore_meta(annotation: Any) -> bool:
+    if get_origin(annotation) is not Annotated:
+        return False
+    return contains_ignore_meta(flatten_annotated(annotation))
 
 
 def should_override(other_node: "DependentNode", current_node: "DependentNode") -> bool:
@@ -137,7 +153,7 @@ def resolve_type_from_meta(annt: Any) -> IDependent[Any]:
     """
     annotate_meta = flatten_annotated(annt)
 
-    if IGNORE_PARAM_MARK in annotate_meta:
+    if contains_ignore_meta(annotate_meta):
         return annt
     if any(isinstance(meta, NodeMeta) for meta in annotate_meta):
         return annt
@@ -186,9 +202,7 @@ class Dependency:
         return f"Dependency({self.name}: {self.type_repr}={self.default_!r})"
 
     def should_ignore(self, param_type: IDependent[T]) -> bool:
-        return get_origin(
-            param_type
-        ) is Annotated and IGNORE_PARAM_MARK in flatten_annotated(param_type)
+        return has_ignore_meta(param_type)
 
     @property
     def type_repr(self):
@@ -520,7 +534,7 @@ class DependentNode:
 
         if get_origin(dependent) is Annotated:
             metas = flatten_annotated(dependent)
-            if IGNORE_PARAM_MARK in metas:
+            if contains_ignore_meta(metas):
                 node = cls._from_function_dep(
                     f, signature=signature, factory_type=factory_type, reuse=reuse, ignore=ignore
                 )

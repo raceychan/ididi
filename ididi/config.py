@@ -67,12 +67,6 @@ CacheMax: Final[int] = 1024
 ExtraUnsolvableTypes: Final[tuple[Any, ...]] = (Any, Literal, Signature.empty, TypeAliasType)
 DefaultScopeName: Final[str] = "__ididi_default_scope__"
 
-IGNORE_PARAM_MARK = "__ididi_ignore_param__"
-"""
-`typing.Annotated[T, IGNORE_PARAM_MARK]`
-"""
-# ================== Marks ==================
-
 DEFAULT_FACTORY = "default"
 FUNCTION_FACTORY = "function"
 AFUNCTION_FACTORY = "afunction"

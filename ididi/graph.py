@@ -27,7 +27,7 @@ from typing import (
 from typing_extensions import Self, Unpack
 
 from ._ds import GraphNodes, GraphNodesView, ResolvedSingletons, TypeRegistry, Visitor
-from ._node import IGNORE_PARAM_MARK, DependentNode, resolve_use, should_override
+from ._node import DependentNode, has_ignore_meta, resolve_use, should_override
 from ._type_resolve import (
     get_bases,
     get_typed_signature,
@@ -68,7 +68,7 @@ from .interfaces import (  # INodeConfig,
     TEntryDecor,
 )
 from .utils.param_utils import MISSING, Maybe, is_provided
-from .utils.typing_utils import P, T, flatten_annotated
+from .utils.typing_utils import P, T
 
 AnyScope = Union["SyncScope", "AsyncScope"]
 ScopeToken = Token[AnyScope]
@@ -399,16 +399,13 @@ class Resolver:
 
     @lru_cache(CacheMax)
     def should_be_scoped(self, dep_type: IDependent[Any]) -> bool:
-        if get_origin(dep_type) is Annotated:
-            metas = flatten_annotated(dep_type)
-            if IGNORE_PARAM_MARK in metas:
-                return False
+        if has_ignore_meta(dep_type):
+            return False
         if not (resolved_node := self._analyzed_nodes.get(dep_type)):
             try:
                 resolved_node = self.analyze(dep_type)
             except TopLevelBulitinTypeError as tle:
                 raise UnsolvableNodeError(f"Failed to parse dependency {dep_type}, {tle.message}") from tle
-                
 
         if self.is_registered_singleton(resolved_node.dependent):
             return False

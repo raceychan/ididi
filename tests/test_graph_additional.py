@@ -6,9 +6,8 @@ from typing import Annotated, Any
 
 import pytest
 
-from ididi import Graph, use
+from ididi import Graph, Ignore, use
 from ididi._node import Dependency
-from ididi.config import IGNORE_PARAM_MARK
 from ididi.errors import ConfigConflictError
 from ididi.utils.param_utils import MISSING
 
@@ -21,7 +20,7 @@ def test_resolver_name_property():
 
 def test_should_be_scoped_annotated_ignore_returns_false():
     graph = Graph()
-    ignored_type = Annotated[int, IGNORE_PARAM_MARK]
+    ignored_type = Ignore[int]
 
     assert graph.should_be_scoped(ignored_type) is False
 

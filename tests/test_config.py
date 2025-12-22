@@ -2,7 +2,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from ididi.config import GraphConfig, IGNORE_PARAM_MARK
+from ididi.config import GraphConfig
 
 
 def test_graph_config_equality_and_hash():
@@ -28,7 +28,3 @@ def test_graph_config_is_frozen():
 
     with pytest.raises(FrozenInstanceError):
         cfg.self_inject = False
-
-
-def test_ignore_param_mark_constant():
-    assert IGNORE_PARAM_MARK == "__ididi_ignore_param__"

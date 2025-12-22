@@ -3,7 +3,6 @@ from typing import Annotated
 import pytest
 
 from ididi import Graph, Ignore, Scoped, use
-from ididi.config import IGNORE_PARAM_MARK
 
 
 class User:
@@ -26,7 +25,7 @@ def test_class_method():
 
 
 class Config:
-    def __init__(self, url: Annotated[str, IGNORE_PARAM_MARK]):
+    def __init__(self, url: Ignore[str]):
         self.url = url
 
 

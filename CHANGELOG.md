@@ -1,5 +1,23 @@
 # Changelog
 
+## version 1.8.1
+
+### Highlights
+
+- `Ignore[...]` is now implemented via `NodeMeta(ignore=True)`, so the legacy `IGNORE_PARAM_MARK`
+  sentinel is gone. Any `typing.Annotated` blocks that previously used the constant can switch to
+  `ididi.Ignore` (or embed their own `NodeMeta(ignore=True)` marker) with no behavioral change.
+- `NodeMeta` gained the new `ignore` flag, and all `use(...)` helpers / graph analysis logic now honor
+  it when deciding whether a parameter should participate in dependency resolution.
+
+### Details
+
+- Removed `IGNORE_PARAM_MARK` from the public config surface and runtime checks.
+- Updated `Ignore` helper to expand to `Annotated[T, NodeMeta(ignore=True)]`.
+- `resolve_type_from_meta`, `Dependency.should_ignore`, and `_from_function` now look for the new
+  metadata instead of literal sentinels, so nested `Annotated` stacks keep functioning.
+- Tests and documentation were refreshed to showcase the new marker form.
+
 ## version 1.7.7
 
 ### Highlights
@@ -532,13 +550,12 @@ def test_resolve_classmethod():
 
 - [x] make `Mark` public, user can use it with `typing.Annotated`
 
-```python
-Ignore = Annotated[T, IGNORE_PARAM_MARK]
-```
-so this works:
+You can rely on the bundled `Ignore[...]` helper:
 
 ```python
-def get_conn(url: Annotated[str, IGNORE_PARAM_MARK]):
+from ididi import Ignore
+
+def get_conn(url: Ignore[str]):
     ...
 ```
 
