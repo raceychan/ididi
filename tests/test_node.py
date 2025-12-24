@@ -4,11 +4,12 @@ from typing import Annotated
 
 import pytest
 
-from ididi import DependentNode
+from ididi import DependentNode, resolve_use, use
 from ididi._node import NodeMeta, build_dependencies
 from ididi.config import EmptyIgnore
 from ididi.errors import NotSupportedError
 from ididi.utils.param_utils import MISSING
+from ididi.utils.typing_utils import flatten_annotated
 
 
 class A:
@@ -105,6 +106,29 @@ def test_node_with_not_supported_type():
 def test_node_meta_rejects_reuse_and_ignore():
     with pytest.raises(NotSupportedError):
         NodeMeta(reuse=True, ignore=True)
+
+
+def test_resolve_use_accepts_flattened_metadata_list_with_factory():
+    def factory() -> str:
+        return "value"
+
+    annotation = Annotated[str, use(factory, reuse=True)]
+    flattened = flatten_annotated(annotation)
+    node_meta = resolve_use(flattened)
+
+    assert isinstance(node_meta, NodeMeta)
+    assert node_meta.factory is factory
+    assert node_meta.reuse is True
+
+
+def test_resolve_use_accepts_flattened_metadata_list_without_factory():
+    annotation = Annotated[str, use()]
+    flattened = flatten_annotated(annotation)
+    node_meta = resolve_use(flattened)
+
+    assert isinstance(node_meta, NodeMeta)
+    assert node_meta.factory is MISSING
+    assert node_meta.reuse is MISSING
 
 
 def test_build_dependencies_skips_bound_instance_self():

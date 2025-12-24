@@ -106,18 +106,24 @@ def use(factory: Maybe[INode[P, T]] = MISSING, /, *,  reuse: Maybe[bool] = MISSI
 
 
 def resolve_use(annotation: Any) -> Union[NodeMeta[Any], None]:
-    if get_origin(annotation) is not Annotated:
+    "Accept any type hint or a list of elements"
+    if isinstance(annotation, list):
+        metas: list[Any] = annotation
+        annt_args = None
+    elif get_origin(annotation) is not Annotated:
         return
-
-    metas: list[Any] = flatten_annotated(annotation)
+    else:
+        metas: list[Any] = flatten_annotated(annotation)
+        annt_args = get_args(annotation)
 
     for v in metas:
         if isinstance(v, NodeMeta):
             if v.ignore is True:
                 continue
             factory = v.factory
-            if not is_provided(factory):
-                factory = get_args(annotation)[0]
+            if not is_provided(factory) and annt_args:
+                # handle case like Annotated[Service, use()], use Service as the default factory.
+                factory = annt_args[0]
             return NodeMeta(factory=factory, reuse=v.reuse)
     return None
 
