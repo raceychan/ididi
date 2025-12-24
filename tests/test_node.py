@@ -4,7 +4,7 @@ from typing import Annotated
 
 import pytest
 
-from ididi import DependentNode, resolve_use, use
+from ididi import DependentNode, resolve_meta, use
 from ididi._node import NodeMeta, build_dependencies
 from ididi.config import EmptyIgnore
 from ididi.errors import NotSupportedError
@@ -114,7 +114,7 @@ def test_resolve_use_accepts_flattened_metadata_list_with_factory():
 
     annotation = Annotated[str, use(factory, reuse=True)]
     flattened = flatten_annotated(annotation)
-    node_meta = resolve_use(flattened)
+    node_meta = resolve_meta(flattened)
 
     assert isinstance(node_meta, NodeMeta)
     assert node_meta.factory is factory
@@ -124,7 +124,7 @@ def test_resolve_use_accepts_flattened_metadata_list_with_factory():
 def test_resolve_use_accepts_flattened_metadata_list_without_factory():
     annotation = Annotated[str, use()]
     flattened = flatten_annotated(annotation)
-    node_meta = resolve_use(flattened)
+    node_meta = resolve_meta(flattened)
 
     assert isinstance(node_meta, NodeMeta)
     assert node_meta.factory is MISSING

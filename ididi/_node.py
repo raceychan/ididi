@@ -14,7 +14,6 @@ from typing import (
     ForwardRef,
     Generator,
     Generic,
-    Iterable,
     Union,
     cast,
     get_origin,
@@ -67,11 +66,11 @@ Scoped = Annotated[Union[Generator[T, None, None], AsyncGenerator[T, None]], "sc
 class NodeMeta(Generic[T]):
     factory: Maybe[Callable[..., T]] = MISSING
     reuse: Maybe[bool] = MISSING
-    ignore: Maybe[bool] = MISSING
+    ignore: bool = False
 
     def __post_init__(self):
-        if is_provided(self.reuse) and is_provided(self.ignore):
-            raise NotSupportedError(f"reuse and config can't be both set")
+        if is_provided(self.reuse) and (self.reuse and self.ignore):
+            raise NotSupportedError(f"A node can't be both reused and ignored")
 
 Ignore = Annotated[R, NodeMeta(ignore=True)]
 
@@ -105,7 +104,7 @@ def use(factory: Maybe[INode[P, T]] = MISSING, /, *,  reuse: Maybe[bool] = MISSI
 
 
 
-def resolve_use(annotation: Any) -> Union[NodeMeta[Any], None]:
+def resolve_meta(annotation: Any) -> Union[NodeMeta[Any], None]:
     "Accept any type hint or a list of elements"
     if isinstance(annotation, list):
         metas: list[Any] = annotation
@@ -118,24 +117,15 @@ def resolve_use(annotation: Any) -> Union[NodeMeta[Any], None]:
 
     for v in metas:
         if isinstance(v, NodeMeta):
-            if v.ignore is True:
-                continue
+            # if v.ignore is True:
+            #     continue
             factory = v.factory
             if not is_provided(factory) and annt_args:
                 # handle case like Annotated[Service, use()], use Service as the default factory.
                 factory = annt_args[0]
-            return NodeMeta(factory=factory, reuse=v.reuse)
+            return NodeMeta(factory=factory, reuse=v.reuse, ignore=v.ignore)
     return None
 
-
-def contains_ignore_meta(metadata: Iterable[Any]) -> bool:
-    return any(isinstance(meta, NodeMeta) and meta.ignore is True for meta in metadata)
-
-
-def has_ignore_meta(annotation: Any) -> bool:
-    if get_origin(annotation) is not Annotated:
-        return False
-    return contains_ignore_meta(flatten_annotated(annotation))
 
 
 def should_override(other_node: "DependentNode", current_node: "DependentNode") -> bool:
@@ -159,8 +149,6 @@ def resolve_type_from_meta(annt: Any) -> IDependent[Any]:
     """
     annotate_meta = flatten_annotated(annt)
 
-    if contains_ignore_meta(annotate_meta):
-        return annt
     if any(isinstance(meta, NodeMeta) for meta in annotate_meta):
         return annt
     return get_args(annt)[0]
@@ -208,7 +196,10 @@ class Dependency:
         return f"Dependency({self.name}: {self.type_repr}={self.default_!r})"
 
     def should_ignore(self, param_type: IDependent[T]) -> bool:
-        return has_ignore_meta(param_type)
+        meta = resolve_meta(param_type)
+        if not is_provided(meta) or meta is None:
+            return False
+        return meta.ignore
 
     @property
     def type_repr(self):
@@ -539,15 +530,15 @@ class DependentNode:
 
 
         if get_origin(dependent) is Annotated:
-            metas = flatten_annotated(dependent)
-            if contains_ignore_meta(metas):
+            node_meta = resolve_meta(dependent)
+            if node_meta and node_meta.ignore:
                 node = cls._from_function_dep(
                     f, signature=signature, factory_type=factory_type, reuse=reuse, ignore=ignore
                 )
                 return node
 
             base_dependent, *_ = get_args(dependent)
-            if node_meta := resolve_use(dependent):
+            if node_meta := resolve_meta(dependent):
                 if not is_provided(reuse):
                     reuse = node_meta.reuse
 

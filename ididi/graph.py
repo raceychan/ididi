@@ -27,7 +27,7 @@ from typing import (
 from typing_extensions import Self, Unpack
 
 from ._ds import GraphNodes, GraphNodesView, ResolvedSingletons, TypeRegistry, Visitor
-from ._node import DependentNode, has_ignore_meta, resolve_use, should_override
+from ._node import DependentNode, resolve_meta, should_override
 from ._type_resolve import (
     get_bases,
     get_typed_signature,
@@ -305,7 +305,7 @@ class Resolver:
             annt_dep = resolved_type
 
         if annt_dep:
-            if node_meta := resolve_use(annt_dep):
+            if node_meta := resolve_meta(annt_dep):
                 self.include_node(dependent=node_meta.factory, reuse=node_meta.reuse)
 
             if is_function(dependent):
@@ -399,7 +399,7 @@ class Resolver:
 
     @lru_cache(CacheMax)
     def should_be_scoped(self, dep_type: IDependent[Any]) -> bool:
-        if has_ignore_meta(dep_type):
+        if (meta := resolve_meta(dep_type)) and meta.ignore:
             return False
         if not (resolved_node := self._analyzed_nodes.get(dep_type)):
             try:
@@ -505,7 +505,9 @@ class Resolver:
                 if (param_type := param.param_type) in self._analyzed_nodes:
                     continue
                 self.check_param_conflict(param_type, current_path)
-                if node_meta := resolve_use(param_type):
+                if node_meta := resolve_meta(param_type):
+                    if node_meta.ignore:
+                        continue
                     try:
                         inode = self.include_node(dependent=node_meta.factory, reuse=node_meta.reuse)
                     except ConfigConflictError as cce:
@@ -554,10 +556,10 @@ class Resolver:
         for i, param in enumerate(node.dependencies):
             name = param.name
             param_type = param.param_type
-            if not (node_meta := resolve_use(param.param_type)):
+            if not (node_meta := resolve_meta(param.param_type)) or node_meta.ignore:
                 continue
 
-            if resolve_use(param.default_):
+            if resolve_meta(param.default_):
                 raise DeprecatedError(f"Using default value {param} for `use` is not longer supported")
 
             try:
@@ -860,7 +862,7 @@ class Resolver:
             return configured  # type: ignore
 
         if get_origin(dependent) is Annotated:
-            if node_meta := resolve_use(dependent) :
+            if node_meta := resolve_meta(dependent) :
                 self.include_node(dependent=node_meta.factory, reuse=node_meta.reuse)
                 return dependent
             else:

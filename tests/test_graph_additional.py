@@ -123,6 +123,20 @@ def test_should_be_scoped_adds_context_on_failure():
     assert "NeedsProtocol" in notes and "dependency" in notes
 
 
+def test_should_be_scoped_adds_context_when_dependency_skipped_in_analyze():
+    graph = Graph()
+
+    class Service:
+        def __init__(self, dependency: ProtocolDependency = None):
+            self.dependency = dependency
+
+    with pytest.raises(UnsolvableNodeError) as excinfo:
+        graph.should_be_scoped(Service)
+
+    notes = "".join(getattr(excinfo.value, "__notes__", ()))
+    assert "Service" in notes and "dependency" in notes and "ProtocolDependency" in notes
+
+
 def test_analyze_params_rejects_use_defaults():
     graph = Graph()
 
