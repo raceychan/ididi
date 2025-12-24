@@ -18,6 +18,7 @@ from typing import Annotated as Annotated
 
 from ._node import DependentNode as DependentNode
 from ._node import Ignore as Ignore
+from ._node import NodeMeta as NodeMeta
 from ._node import Scoped as Scoped
 from ._node import use as use
 from .api import entry as entry
