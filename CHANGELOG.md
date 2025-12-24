@@ -1,5 +1,18 @@
 # Changelog
 
+## version 1.8.2
+
+### Highlights
+
+- `NodeMeta` and `use` are now public exports, so applications can declare factories or metadata without reaching into private modules.
+- `resolve_meta` now preserves `ignore` flags and infers factories from `Annotated[Service, use()]`, keeping ignored dependencies and default factories consistent during analysis and scope checks.
+
+### Details
+
+- `ididi.__init__` re-exports `NodeMeta` and `use` alongside other public helpers.
+- `Graph` analysis and `should_be_scoped` respect `NodeMeta(ignore=True)` in nested `Annotated` metadata, so ignored parameters stay skipped and `UnsolvableNodeError.__notes__` still include dependent/parameter context when resolution fails.
+- `use()` markers without explicit factories now default to the annotated type, matching earlier behavior while keeping the new metadata path intact.
+
 ## version 1.8.1
 
 ### Highlights

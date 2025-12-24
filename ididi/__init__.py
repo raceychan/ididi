@@ -33,7 +33,7 @@ from .interfaces import INode as INode
 from .interfaces import Resource as Resource
 from .utils.param_utils import is_provided as is_provided
 
-VERSION="1.8.1"
+VERSION="1.8.2"
 
 try:
     import graphviz as graphviz  # type: ignore
