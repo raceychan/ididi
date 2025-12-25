@@ -299,25 +299,18 @@ class Resolver:
         else:
             resolved_type = resolve_annotation(dependent)
 
-        annt_dep = None
 
         if get_origin(resolved_type) is Annotated:
-            annt_dep = resolved_type
-
-        if annt_dep:
-            if node_meta := resolve_meta(annt_dep):
+            if (node_meta := resolve_meta(resolved_type)) and node_meta.factory:
                 self.include_node(dependent=node_meta.factory, reuse=node_meta.reuse)
-
-            if is_function(dependent):
-                # if dependent in nodes just reuse
+            elif is_function(dependent):
                 if node := self._nodes.get(dependent):
                     return dependent
-
                 node = DependentNode.from_node(dependent, reuse=reuse, ignore=ignore)
                 self._nodes[dependent] = node
                 return dependent
 
-            resolved_type, *_ = get_args(annt_dep)
+            resolved_type, *_ = get_args(resolved_type)
         return resolved_type
 
     def _create_scope(
@@ -505,9 +498,7 @@ class Resolver:
                 if (param_type := param.param_type) in self._analyzed_nodes:
                     continue
                 self.check_param_conflict(param_type, current_path)
-                if node_meta := resolve_meta(param_type):
-                    if node_meta.ignore:
-                        continue
+                if (node_meta := resolve_meta(param_type)) and node_meta.factory:
                     try:
                         inode = self.include_node(dependent=node_meta.factory, reuse=node_meta.reuse)
                     except ConfigConflictError as cce:

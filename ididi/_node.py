@@ -69,8 +69,8 @@ class NodeMeta(Generic[T]):
     ignore: bool = False
 
     def __post_init__(self):
-        if is_provided(self.reuse) and (self.reuse and self.ignore):
-            raise NotSupportedError(f"A node can't be both reused and ignored")
+        if self.ignore and (self.factory or self.reuse):
+            raise NotSupportedError(f"Ignored node can't have factory or being reused")
 
 Ignore = Annotated[R, NodeMeta(ignore=True)]
 
@@ -117,12 +117,9 @@ def resolve_meta(annotation: Any) -> Union[NodeMeta[Any], None]:
 
     for v in metas:
         if isinstance(v, NodeMeta):
-            # if v.ignore is True:
-            #     continue
-            factory = v.factory
-            if not is_provided(factory) and annt_args:
-                # handle case like Annotated[Service, use()], use Service as the default factory.
-                factory = annt_args[0]
+            if v.ignore is True: # we should not care about its factory if its ignored
+                return v
+            factory = annt_args[0] if (not is_provided(v.factory) and annt_args) else v.factory
             return NodeMeta(factory=factory, reuse=v.reuse, ignore=v.ignore)
     return None
 
