@@ -351,9 +351,13 @@ class Resolver:
         )
         return scope
 
+
     @contextmanager
     def scope(self, name: Hashable = ""):
-        previous_scope = _SCOPE_CONTEXT.get()
+        try:
+            previous_scope = _SCOPE_CONTEXT.get()
+        except LookupError as le:
+            previous_scope = MISSING
         scope = self._create_scope(name, previous_scope)
         token = _SCOPE_CONTEXT.set(scope)
 
@@ -370,7 +374,10 @@ class Resolver:
 
     @asynccontextmanager
     async def ascope(self, name: Hashable = ""):
-        previous_scope = _SCOPE_CONTEXT.get()
+        try:
+            previous_scope = _SCOPE_CONTEXT.get()
+        except LookupError as le:
+            previous_scope = MISSING
         ascope = self._create_ascope(name, previous_scope)
         token = _SCOPE_CONTEXT.set(ascope)
 
