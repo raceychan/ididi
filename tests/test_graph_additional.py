@@ -12,6 +12,7 @@ from ididi.config import EmptyIgnore
 from ididi.errors import (
     ConfigConflictError,
     DeprecatedError,
+    MissingAnnotationError,
     ParamReusabilityConflictError,
     UnsolvableNodeError,
 )
@@ -25,6 +26,26 @@ class EntryService:
 class ProtocolDependency(Protocol):
     def ping(self) -> None:
         ...
+
+
+def _leaf_service():
+    class Leaf:
+        def __init__(self, value):
+            self.value = value
+
+    class Service:
+        def __init__(self, leaf: Leaf):
+            self.leaf = leaf
+
+    Service.__init__.__annotations__["leaf"] = Leaf  # resolve ForwardRef from postponed evaluation
+    return Leaf, Service
+
+
+def _assert_leaf_notes(excinfo):
+    assert getattr(excinfo.value, "__notes__", ()) == [
+        "-> Leaf(value: _Missed)",
+        "-> Service(leaf: Leaf)",
+    ]
 
 
 def test_resolver_name_property():
@@ -135,6 +156,33 @@ def test_should_be_scoped_adds_context_when_dependency_skipped_in_analyze():
 
     notes = "".join(getattr(excinfo.value, "__notes__", ()))
     assert "Service" in notes and "dependency" in notes and "ProtocolDependency" in notes
+
+
+def test_resolve_adds_context_when_cached_analysis_skipped_dependency():
+    graph = Graph()
+
+    Leaf, Service = _leaf_service()
+
+    graph.resolve(Service, leaf=object())
+
+    with pytest.raises(MissingAnnotationError) as excinfo:
+        graph.resolve(Service)
+
+    _assert_leaf_notes(excinfo)
+
+
+@pytest.mark.asyncio
+async def test_aresolve_adds_context_when_cached_analysis_skipped_dependency():
+    graph = Graph()
+
+    Leaf, Service = _leaf_service()
+
+    await graph.aresolve(Service, leaf=object())
+
+    with pytest.raises(MissingAnnotationError) as excinfo:
+        await graph.aresolve(Service)
+
+    _assert_leaf_notes(excinfo)
 
 
 def test_analyze_params_rejects_use_defaults():

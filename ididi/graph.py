@@ -113,9 +113,13 @@ def _resolve_dfs(
         elif param.should_be_ignored:
             continue
         else:
-            params[name] = _resolve_dfs(
+            try:
+                params[name] = _resolve_dfs(
                 resolver, nodes, cache, param.param_type, overrides
             )
+            except UnsolvableNodeError as une:
+                une.add_context(pnode.dependent, name, param.param_type)
+                raise une
 
     try:
         instance = pnode.factory(**params)
@@ -151,9 +155,14 @@ async def _aresolve_dfs(
         elif param.should_be_ignored:
             continue
         else:
-            params[name] = await _aresolve_dfs(
+            try:
+                params[name] = await _aresolve_dfs(
                 resolver, nodes, cache, param.param_type, overrides
             )
+            except UnsolvableNodeError as une:
+                une.add_context(pnode.dependent, name, param.param_type)
+                raise une
+
 
     instance = pnode.factory(**params)
     resolved = await resolver.aresolve_callback(
@@ -354,10 +363,7 @@ class Resolver:
 
     @contextmanager
     def scope(self, name: Hashable = ""):
-        try:
-            previous_scope = _SCOPE_CONTEXT.get()
-        except LookupError as le:
-            previous_scope = MISSING
+        previous_scope = _SCOPE_CONTEXT.get(MISSING)
         scope = self._create_scope(name, previous_scope)
         token = _SCOPE_CONTEXT.set(scope)
 
@@ -374,10 +380,7 @@ class Resolver:
 
     @asynccontextmanager
     async def ascope(self, name: Hashable = ""):
-        try:
-            previous_scope = _SCOPE_CONTEXT.get()
-        except LookupError as le:
-            previous_scope = MISSING
+        previous_scope = _SCOPE_CONTEXT.get(MISSING)
         ascope = self._create_ascope(name, previous_scope)
         token = _SCOPE_CONTEXT.set(ascope)
 
@@ -906,7 +909,6 @@ class ResolveScope(Resolver):
             f"nodes={len(self._nodes)}, "
             f"resolved={len(self._resolved_singletons)})"
         )
-
 
 
     def get_scope(self, name: Hashable) -> "Self":
