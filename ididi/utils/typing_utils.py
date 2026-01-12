@@ -48,6 +48,23 @@ def is_builtin_type(
 
 if sys.version_info >= (3, 14):
     from typing import evaluate_forward_ref as eval_type
+elif sys.version_info >= (3, 13):
+    def eval_type(
+        value: Union[ForwardRef, GenericAlias, str],
+        *,
+        globals: Union[dict[str, Any], None] = None,
+        locals: Union[Mapping[str, Any], None] = None,
+        lenient: bool = False,
+    ) -> Any:
+        if isinstance(value, str):
+            value = ForwardRef(value, is_argument=False)
+
+        try:
+            return cast(type[Any], ty_eval_type(value, globals, locals, type_params=tuple()))
+        except NameError:
+            if not lenient:
+                raise
+            return value
 else:
     def eval_type(
         value: Union[ForwardRef, GenericAlias, str],
