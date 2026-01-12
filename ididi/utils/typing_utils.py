@@ -1,5 +1,7 @@
+import sys
+from types import GenericAlias
 from typing import Annotated, Any, ForwardRef, Hashable, Mapping, TypeVar, Union
-from typing import _eval_type as ty_eval_type  # type: ignore
+from typing import _eval_type as ty_eval_type
 from typing import cast, get_args, get_origin
 
 from typing_extensions import ParamSpec, TypeGuard
@@ -44,34 +46,25 @@ def is_builtin_type(
     is_singleton = is_builtin_singleton(t)
     return is_primitive or is_container or is_singleton
 
+if sys.version_info >= (3, 14):
+    from typing import evaluate_forward_ref as eval_type
+else:
+    def eval_type(
+        value: Union[ForwardRef, GenericAlias, str],
+        *,
+        globals: Union[dict[str, Any], None] = None,
+        locals: Union[Mapping[str, Any], None] = None,
+        lenient: bool = False,
+    ) -> Any:
+        if isinstance(value, str):
+            value = ForwardRef(value, is_argument=False)
 
-def eval_type(
-    value: Union[ForwardRef, str],
-    globalns: Union[dict[str, Any], None] = None,
-    localns: Union[Mapping[str, Any], None] = None,
-    *,
-    lenient: bool = False,
-) -> Any:
-    """
-    # NOTE: copy from pydantic, credit to them.
-    Evaluate the annotation using the provided namespaces.
-
-    Args:
-        value: The value to evaluate. If `None`, it will be replaced by `type[None]`. If an instance
-            of `str`, it will be converted to a `ForwardRef`.
-        localns: The global namespace to use during annotation evaluation.
-        globalns: The local namespace to use during annotation evaluation.
-        lenient: Whether to keep unresolvable annotations as is or re-raise the `NameError` exception. Default: re-raise.
-    """
-    if isinstance(value, str):
-        value = ForwardRef(value, is_argument=False)
-
-    try:
-        return cast(type[Any], ty_eval_type(value, globalns, localns))
-    except NameError:
-        if not lenient:
-            raise
-        return value
+        try:
+            return cast(type[Any], ty_eval_type(value, globals, locals))
+        except NameError:
+            if not lenient:
+                raise
+            return value
 
 
 def actualize_strforward(annotation: Any, gvars: dict[str, Any]) -> Any:
@@ -87,7 +80,7 @@ def actualize_strforward(annotation: Any, gvars: dict[str, Any]) -> Any:
     """
 
 
-    annotation = eval_type(annotation, gvars, gvars, lenient=True)
+    annotation = eval_type(annotation, globals=gvars, locals=gvars, lenient=True)
     return annotation
 
 def flatten_annotated(typ: Annotated[Any, Any]) -> list[Any]:

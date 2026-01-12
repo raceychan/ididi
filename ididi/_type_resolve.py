@@ -29,12 +29,7 @@ from typing_extensions import TypeAliasType, TypeGuard, Unpack
 from .config import CacheMax, ExtraUnsolvableTypes
 from .errors import ForwardReferenceNotFoundError, UnsolvableReturnTypeError
 from .interfaces import IDependent, INode, P, T
-from .utils.typing_utils import (
-    T,
-    actualize_strforward,
-    eval_type,
-    is_builtin_type,
-)
+from .utils.typing_utils import T, actualize_strforward, eval_type, is_builtin_type
 
 try:
     from types import UnionType as _UnionType
@@ -217,7 +212,7 @@ def resolve_forwardref(
     globalvs = dependent.__init__.__globals__
 
     try:
-        return eval_type(ref, globalvs, globalvs)
+        return eval_type(ref, globals=globalvs, locals=globalvs)
     except NameError as e:
         raise ForwardReferenceNotFoundError(ref) from e
 
